@@ -15,10 +15,18 @@
 	},
 	"main": "dist/main.cjs",
 	"keywords": [
-		"semver",
-		"semantic-release",
 		"github",
-		"release-management"
+		"github-actions",
+		"code-coverage",
+		"test-reporter",
+		"reporting",
+		"summary",
+		"clover",
+		"cobertura",
+		"jacoco",
+		"lcov",
+		"junit",
+		"typescript"
 	],
 	"author": {
 		"name": "Mridang Agarwalla",
@@ -29,7 +37,7 @@
 		"dist"
 	],
 	"license": "Apache-2.0",
-	"description": "Runs semantic-release when code is pushed to a branch or tag. Automatically installs plugins for declarative configs and waits for all required GitHub checks to pass before publishing.",
+	"description": "A flexible GitHub Action that parses code coverage and test result files to generate beautiful, insightful summaries in your workflow.\n\n",
 	"private": false,
 	"engines": {
 		"node": ">=20.0.0"
@@ -43,7 +51,6 @@
 	"dependencies": {
 		"@actions/core": "^1.11.1",
 		"@actions/github": "^6.0.1",
-		"@semantic-release/error": "^4.0.0",
 		"xml2js": "^0.6.2"
 	},
 	"devDependencies": {

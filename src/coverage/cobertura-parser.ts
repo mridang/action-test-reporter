@@ -65,17 +65,17 @@ export class CoberturaParser extends BaseParser<CoberturaXml> {
     const coverage = xml.coverage;
     const overall: CoverageData['overall'] = {
       lines: {
-        total: Number(coverage.$['lines-valid']),
-        covered: Number(coverage.$['lines-covered']),
+        total: Number(coverage.$['lines-valid'] ?? 0),
+        covered: Number(coverage.$['lines-covered'] ?? 0),
       },
       branches: {
-        total: Number(coverage.$['branches-valid']),
-        covered: Number(coverage.$['branches-covered']),
+        total: Number(coverage.$['branches-valid'] ?? 0),
+        covered: Number(coverage.$['branches-covered'] ?? 0),
       },
       methods: { total: 0, covered: 0 },
       statements: {
-        total: Number(coverage.$['lines-valid']),
-        covered: Number(coverage.$['lines-covered']),
+        total: Number(coverage.$['lines-valid'] ?? 0),
+        covered: Number(coverage.$['lines-covered'] ?? 0),
       },
     };
 

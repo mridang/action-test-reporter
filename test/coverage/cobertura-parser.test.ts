@@ -16,8 +16,8 @@ describe('CoberturaParser', () => {
           covered: 315,
         },
         branches: {
-          total: null,
-          covered: null,
+          total: 0,
+          covered: 0,
         },
         methods: {
           total: 0,
