@@ -1,58 +1,72 @@
-# Semantic Release GitHub Action
+# Test Reporter GitHub Action
 
-A GitHub Action that runs [semantic-release](https://semantic-release.gitbook.io/semantic-release/) when code is pushed to a branch or tag. This action streamlines your release process by automating versioning and package publishing, ensuring consistency and adherence to semantic versioning principles.
+A GitHub Action that parses various code coverage report formats and generates a beautiful, insightful summary directly in your workflow. This action makes it easy to visualize your test coverage without leaving GitHub.
 
 ## Features
 
-- **Automated Plugin Installation**: Automatically installs `semantic-release` plugins defined in your declarative configuration files (e.g., `.json`, `.yaml`).
-- **Status Check Waiting**: Optionally waits for all required GitHub status checks to pass before executing `semantic-release`, preventing releases from being published prematurely.
-- **Flexible Configuration**: Supports various `semantic-release` configuration file formats and allows you to specify a working directory.
-- **Detailed Output**: Provides clear logs and a summary of the published release version.
+- **Multi-Format Support**: Natively parses the most popular coverage report formats: Clover (clover.xml), Cobertura (cobertura.xml), JaCoCo (jacoco.xml), and LCOV (lcov.info). Please note that many other formats (such as those from gcov or other language-specific tools) are not currently supported.
+- **Automatic Detection**: Intelligently determines the report format from the file content, so no configuration is needed.
+- **Interactive Summaries**: Generates a clean, hierarchical Markdown summary with progress bars for quick visual feedback.
+- **Deep Linking**: Creates links to each file and even to the specific uncovered lines within that file for the exact commit, making it easy to see where coverage is lacking.
+- **Zero-Dependency Reporting**: Provides immediate coverage insights without requiring third-party services or tools.
 
-### Why?
+## Why?
 
-- **Reusability**: This action is designed to be highly reusable across multiple projects, simplifying your CI/CD setup for semantic releases.
-- **Wait for Checks**: Unlike typical `semantic-release` workflows, this action allows you to explicitly wait for all other GitHub checks to complete before proceeding with the release. This ensures that releases are only published after all tests and quality gates have passed. **Note**: This feature does not wait for disabled workflows.
-- **Decoupled Workflow**: By waiting for other checks, this action can run independently of your main CI workflow (which might be triggered by pull requests and merges to `main`). This decoupling reduces the risk of exposing sensitive `semantic-release` tokens in contexts where they are not strictly necessary, a common security concern in open-source projects.
-- **Fast Execution**: The action optimizes for speed by caching dependencies, leading to quicker execution times for your release workflow.
-- **Simplified for Polyglot Repositories**: Abstracts away the Node.js ecosystem, enabling `semantic-release` usage in non-Node.js projects without requiring a `package.json` or various JavaScript/TypeScript configuration files within your repository.
+- **Immediate Feedback**: See your code coverage directly in the GitHub Actions summary for every push or pull request, without needing to navigate to an external service.
+- **Improved Developer Experience**: The clear, hierarchical report with direct links to uncovered lines helps developers quickly identify and address gaps in test coverage.
+- **Simplified CI/CD**: Avoids the complexity and potential security concerns of sending coverage data to third-party sites, making it a great solution for both open-source and private repositories.
+- **Self-Contained**: The action is entirely self-contained and does not require any external services to function, keeping your CI/CD pipeline simple and secure.
 
 ## Usage
 
-To use this action, add it to your workflow file (e.g., `.github/workflows/release.yml`).
+To use this action, add it to your workflow file after your testing and coverage generation steps (e.g., in `.github/workflows/ci.yml`).
 
 ```yaml
-name: Release
+name: Test
 
 on:
   push:
     branches:
-      - main # or your default branch
-      - next
-    tags:
-      - '*' # if you want to trigger on tags as well
+      - main
+  pull_request:
+    branches:
+      - main
 
 jobs:
-  release:
+  test:
     runs-on: ubuntu-latest
     steps:
       - name: Checkout code
         uses: actions/checkout@v4
-        with:
-          fetch-depth: 0 # Required for semantic-release to work correctly
 
-      - name: Semantic Release
+      # Your build, install, and test steps go here
+      # For example:
+      - name: Run tests and generate coverage
+        run: npm test -- --coverage
+
+      - name: Code Coverage Report
         uses: mridang/action-test-reporter@v1
-        env:
-          ADDITIONAL_SECRET: ${{ secrets.MY_SECRET }}
         with:
-          wait-for-checks: 'true' # Default is 'true'
-          working-directory: '.' # Default is '.'
           github-token: ${{ secrets.GITHUB_TOKEN }}
-          allow-force-install: 'true' # Default is 'false'
+          coverage-file: ./coverage/clover.xml # Path to your clover, cobertura, jacoco, or lcov file
+          working-directory: ./
 ```
 
 This workflow is now configured to trigger a release on any commit to `main` (or `next` or any tag), and then wait for all other checks on that specific push event to succeed before initiating the `semantic-release` process. This ensures that your release pipeline only proceeds when all other CI/CD checks (e.g., tests, linters, build steps) have passed successfully. This behavior can be disabled by setting the `wait-for-checks` input to `false`.
+
+### Configuring Code Coverage
+
+To use this action, your test suite must be configured to generate a supported coverage report. Here are links to documentation for common languages and testing frameworks:
+
+- **[Jest](https://jestjs.io/docs/configuration#collectcoverage-boolean)**: Enable the `collectCoverage` flag in your `jest.config.js` and use `coverageReporters` to specify clover or lcov.
+- **[nyc (Istanbul)](https://github.com/istanbuljs/nyc#readme)**: A popular tool that can wrap your test command (e.g., `nyc mocha`) and generate reports in various formats.
+- **[PHPUnit](https://docs.phpunit.de/en/10.5/code-coverage.html)**: Use the `--coverage-clover <file>` command-line option to generate a Clover XML report.
+- **[SimpleCov](https://github.com/simplecov-ruby/simplecov#readme)**: The standard for Ruby projects. It can be configured to produce reports in formats compatible with this action.
+- **[JaCoCo](https://www.jacoco.org/jacoco/trunk/doc/maven.html)**: The official documentation shows how to configure the JaCoCo plugin for both Maven and Gradle to generate the required `jacoco.xml` report.
+- **[Go Test](https://golang.org/doc/tutorial/add-a-test)**: Use the built-in `go test -cover` command to generate a coverage profile, which can then be converted to a supported format using other tools.
+- **[coverage.py](https://coverage.readthedocs.io/en/latest/)**: The standard Python coverage tool. Use it with pytest or unittest and then generate a Cobertura-compatible XML report with `coverage xml`.
+- **[cargo-tarpaulin](https://github.com/xd009642/tarpaulin#readme)**: A popular tool for Rust that can generate reports in various formats, including Cobertura and LCOV.
+- **[Coverlet](https://github.com/coverlet-coverage/coverlet#readme)**: The official Microsoft documentation details how to use Coverlet with `dotnet test` to generate Cobertura coverage reports.
 
 ### Inputs
 
@@ -61,73 +75,20 @@ This workflow is now configured to trigger a release on any commit to `main` (or
 - `working-directory` (optional, default: `'.'`) : The directory to search for `semantic-release` configuration files.
 - `allow-force-install` (optional, default: `'false'`): If `'true'`, allows the action to overwrite an existing package.json file and forces npm to install dependencies using the `--force` flag. This can be used to resolve conflicting peer dependency issues but should be used with caution as it may lead to a broken installation.
 
-## Outputs
+### Outputs
 
 None
 
-### Configuration
-
-This action uses `cosmiconfig` to find your `semantic-release` configuration. It supports the following file formats:
-
-- `.releaserc`
-- `release.config.js`
-- `release.config.cjs`
-- `release.config.mjs`
-- `release.config.ts`
-- `.releaserc.json`
-- `.releaserc.yaml`
-- `.releaserc.yml`
-- `package.json` (under the `release` key)
-
-### In Node.js (or related) projects
-
-For JavaScript/TypeScript projects, you typically use an imperative configuration file like `release.config.mjs` or `release.config.js`. When using such a file, all `semantic-release` plugins must be declared as development dependencies in your project's `package.json` file.
-
-**Example `release.config.mjs`:**
-
-```javascript
-export default {
-  branches: ['main', { name: 'beta', prerelease: true }],
-  plugins: [
-    '@semantic-release/commit-analyzer',
-    '@semantic-release/release-notes-generator',
-    '@semantic-release/npm',
-    '@semantic-release/github',
-  ],
-};
-```
-
-The action will automatically run `npm install` in your working directory to ensure all these declared dependencies are available for `semantic-release` to function correctly.
-
-### In non-Node projects
-
-For projects not based on Node.js, we recommend using a declarative configuration file such as `.releaserc.json`, `.releaserc.yaml`, or `.releaserc.yml`. With these formats, you can declare your `semantic-release` plugins directly within the configuration file, and the action will automatically install the necessary dependencies without requiring a `package.json` or any extra setup steps on your part.
-
-**Example `.releaserc.json`:**
-
-```json
-{
-  "branches": ["main", { "name": "beta", "prerelease": true }],
-  "plugins": [
-    "@semantic-release/commit-analyzer",
-    "@semantic-release/release-notes-generator",
-    "@semantic-release/github"
-  ]
-}
-```
-
-The action will detect the plugins listed in these declarative files, create a temporary `package.json` for them, and install them on the fly, making it very convenient for polyglot repositories.
-
 ## Known Issues
 
-- This action requires a deep checkout of the repository history (e.g., `fetch-depth: 0` in `actions/checkout`). This is necessary for `semantic-release` to properly analyze the commit history for versioning.
-- This action is designed to be triggered by `push` events (branches or tags) and will not work for custom workflows where you need to release using `workflow_dispatch`.
+- **Monorepos**: Support for monorepos can be limited, especially when trying to generate a single report for multiple sub-projects. The `working-directory` input can help, but a more comprehensive solution is planned.
+- **Multiple Reports**: The action currently only accepts a single path in the `coverage-file` input. It does not support merging multiple coverage reports from different test suites or formats into one summary.
+- **File Discovery**: The action does not support heuristics to figure out which file is the coverage file. For now, you must specify it explicitly using the `coverage-file` input.
 
-## Useful links
+## Useful Links
 
-- **[Semantic Release](https://semantic-release.gitbook.io/semantic-release/):** The automated versioning and package publishing tool this action runs.
-- **[Cosmiconfig](https://github.com/cosmiconfig/cosmiconfig):** The universal configuration loader used by this action to find `semantic-release` configurations.
-- **[Semantic Versioning (SemVer)](https://semver.org/):** A widely adopted standard for version numbering that your commit messages can help facilitate with automated tools.
+- [GitHub Actions Documentation](https://docs.github.com/en/actions): The official documentation for GitHub Actions.
+- [Code Coverage](https://en.wikipedia.org/wiki/Code_coverage): An explanation of the principles behind code coverage.
 
 ## Contributing
 

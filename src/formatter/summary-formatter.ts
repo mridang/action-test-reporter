@@ -276,7 +276,7 @@ export class SummaryFormatter implements CoverageFormatter {
     // Round percentage to the nearest 5 and ensure it's a three-digit string (e.g., '000', '005', '095', '100')
     const padded = String(Math.round(pct / 5) * 5).padStart(3, '0');
 
-    const url = `http://localhost:9494/progress-${color}-${padded}.svg`;
+    const url = `https://cdn.jsdelivr.net/gh/mridang/action-test-reporter@master/dist/res/progress-${color}-${padded}.svg`;
     return `![${pct}%](${url})`;
   }
 }
