@@ -29,7 +29,7 @@ export abstract class BaseParser<T> implements CoverageParser {
    * subclasses.
    * @protected
    * @abstract
-   * @param {T} xml - The strongly-typed parsed XML data.
+   * @param {T} xml - The strongly typed parsed XML data.
    * @returns {Promise<CoverageData>} A promise that resolves to file
    * coverage data.
    * @memberof BaseParser

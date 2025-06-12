@@ -1,6 +1,5 @@
 import { promises as fs } from 'fs';
 import path from 'path';
-import { CloverParser } from '../../src/coverage/clover-parser.js';
 import { SummaryFormatter } from '../../src/formatter/summary-formatter.js';
 import { JacocoParser } from '../../src/coverage/jacoco-parser.js';
 

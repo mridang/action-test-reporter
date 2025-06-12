@@ -1,3 +1,4 @@
+/* eslint-disable testing-library/no-debugging-utils */
 import {
   getInput,
   setFailed as actionFailed,
@@ -5,11 +6,13 @@ import {
   startGroup,
   endGroup,
   summary,
+  debug,
 } from '@actions/core';
 import { Context } from '@actions/github/lib/context.js';
 import { promises as fs } from 'fs';
 import { getParserForFile } from './coverage/index.js';
 import { SummaryFormatter } from './formatter/summary-formatter.js';
+import { execSync } from 'node:child_process';
 
 /**
  * Retrieves the working directory from the action's 'working-directory' input.
@@ -75,6 +78,36 @@ export async function run(ghCtx: Context = new Context()): Promise<void> {
 
     const workDir: string = getWorkingDirectory();
     const coveragePath: string = getCoveragePath();
+
+    try {
+      await fs.stat(coveragePath);
+    } catch (error: unknown) {
+      if (
+        error instanceof Error &&
+        'code' in error &&
+        (error as { code?: string }).code === 'ENOENT'
+      ) {
+        debug(`Coverage file not found at path: ${coveragePath}`);
+        debug('Listing files in the current directory for debugging:');
+        try {
+          const findOutput = execSync('find . -maxdepth 3', {
+            encoding: 'utf8',
+          });
+          debug(findOutput);
+        } catch (execError: unknown) {
+          if (execError instanceof Error) {
+            debug(`'find' command failed: ${execError.message}`);
+          } else {
+            debug(`'find' command failed with an unknown error.`);
+          }
+        }
+        setFailed(`Coverage file not found: ${coveragePath}`);
+        return;
+      } else {
+        // noinspection ExceptionCaughtLocallyJS
+        throw error;
+      }
+    }
 
     startGroup('Parsing coverage file');
     const content: string = await fs.readFile(coveragePath, 'utf8');
