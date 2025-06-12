@@ -34736,7 +34736,7 @@ class SummaryFormatter {
     const pct = Math.round(percentage);
     const color = pct < 50 ? "red" : pct < 80 ? "yellow" : "green";
     const padded = String(Math.round(pct / 5) * 5).padStart(3, "0");
-    const url = `https://cdn.jsdelivr.net/gh/mridang/scratch@99x/dist/res/progress-${color}-${padded}.svg`;
+    const url = `https://raw.githubusercontent.com/mridang/scratch/refs/heads/master/dist/res/progress-${color}-${padded}.svg`;
     return `![${pct}%](${url})`;
   }
 }
