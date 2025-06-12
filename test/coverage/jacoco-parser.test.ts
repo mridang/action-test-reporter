@@ -1,7 +1,7 @@
 import { promises as fs } from 'fs';
 import path from 'path';
 import { JacocoParser } from '../../src/coverage/jacoco-parser.js';
-import { JestFormatter } from '../../src/formatter/jest-formatter.js';
+import { ConsoleFormatter } from '../../src/formatter/console-formatter.js';
 
 describe('JacocoParser', () => {
   it('should correctly parse a clover.xml file', async () => {
@@ -15,7 +15,7 @@ describe('JacocoParser', () => {
     expect(result.overall).toBeDefined();
     expect(result.details).toBeInstanceOf(Array);
 
-    const formatter = new JestFormatter();
+    const formatter = new ConsoleFormatter();
     const formattedOutput = formatter.format(result, {
       rootDir: '/Users/mridang/Code/zitadel/client-php/',
     });
