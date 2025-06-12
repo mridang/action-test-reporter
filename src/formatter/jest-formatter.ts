@@ -5,6 +5,7 @@ import {
   FileCoverageDetails,
   CoverageMetrics,
 } from '../coverage/coverage-parser.js';
+import { formatUncoveredLines } from './index.js';
 
 /**
  * @internal
@@ -156,7 +157,7 @@ export class JestFormatter implements CoverageFormatter {
   private renderTree(
     node: CoverageNode,
     fileWidth: number,
-    indent = 0,
+    indent: number = 0,
   ): string[] {
     const rows: string[] = [];
     const sortedKeys = [...node.children.keys()].sort();
@@ -187,7 +188,7 @@ export class JestFormatter implements CoverageFormatter {
     name: string,
     data: FileCoverageDetails | CoverageData['overall'],
     fileWidth: number,
-    indent = 0,
+    indent: number = 0,
   ): string {
     const { statements, branches, methods, lines } = data;
     const getPct = (m: CoverageMetrics) =>
@@ -205,7 +206,7 @@ export class JestFormatter implements CoverageFormatter {
     const nameIndented = ' '.repeat(indent) + name;
     const nameColor = colorize(pcts.lines, nameIndented);
     const uncovered =
-      'uncoveredLines' in data ? data.uncoveredLines.join(',') : '';
+      'uncoveredLines' in data ? formatUncoveredLines(data.uncoveredLines) : '';
 
     return [
       nameColor.padEnd(fileWidth + (nameColor.length - nameIndented.length)),
@@ -223,7 +224,10 @@ export class JestFormatter implements CoverageFormatter {
    * @param {number} fileWidth - The max width for the file column.
    * @returns {{ separator: string; header: string }} The header components.
    */
-  private buildHeader(fileWidth: number) {
+  private buildHeader(fileWidth: number): {
+    separator: string;
+    header: string;
+  } {
     const headers = [
       'File'.padEnd(fileWidth),
       '% Stmts'.padStart(8),
@@ -246,8 +250,8 @@ export class JestFormatter implements CoverageFormatter {
    */
   private calculateFileColumnWidth(
     node: CoverageNode,
-    indent = 0,
-    currentMax = 0,
+    indent: number = 0,
+    currentMax: number = 0,
   ): number {
     let max = currentMax;
     for (const [key, child] of node.children.entries()) {
