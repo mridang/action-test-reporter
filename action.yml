@@ -1,0 +1,43 @@
+name: Semantic Release
+
+description: |
+  Runs semantic-release when code is pushed to a branch or tag.
+  Automatically installs plugins for declarative configs and waits for
+  all required GitHub checks to pass before publishing.
+
+author: mridang
+branding:
+  color: blue
+
+inputs:
+  github-token:
+    description: >
+      GitHub token used to authenticate API requests. Required for
+      checking status checks and publishing releases. Use
+      `secrets.GITHUB_TOKEN` or a PAT with elevated scopes if needed.
+    required: true
+
+  wait-for-checks:
+    description: >
+      Whether to wait for all required status checks to pass before
+      running semantic-release.
+    required: false
+    default: 'true'
+
+  working-directory:
+    description: >
+      The directory to search for semantic-release configuration files.
+    required: false
+    default: '.'
+
+  allow-force-install:
+    description: >
+      If 'true', allows overwriting an existing package.json and forces
+      npm to install dependencies using '--force' to resolve conflicting
+      peer dependencies. Use with caution.
+    required: false
+    default: 'false'
+
+runs:
+  using: node20
+  main: dist/main.cjs
