@@ -63,3 +63,9 @@ jobs:
 
       - name: Run Jest
         run: npm run test
+
+      - name: Generate coverage report
+        uses: ./
+        with:
+          github-token: ${{ secrets.GITHUB_TOKEN }}
+          coverage-file: '.out/lcov.info'

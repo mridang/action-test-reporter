@@ -1,9 +1,9 @@
-name: Semantic Release
+name: Test Reporter
 
 description: |
-  Runs semantic-release when code is pushed to a branch or tag.
-  Automatically installs plugins for declarative configs and waits for
-  all required GitHub checks to pass before publishing.
+  Parses various code coverage report formats (Clover, Cobertura,
+  JaCoCo, LCOV) to generate a detailed summary with progress bars
+  and file-specific links directly in your GitHub Actions workflow.
 
 author: mridang
 branding:
@@ -17,26 +17,18 @@ inputs:
       `secrets.GITHUB_TOKEN` or a PAT with elevated scopes if needed.
     required: true
 
-  wait-for-checks:
-    description: >
-      Whether to wait for all required status checks to pass before
-      running semantic-release.
-    required: false
-    default: 'true'
-
   working-directory:
     description: >
-      The directory to search for semantic-release configuration files.
+      The directory where your project is located, used as the base for
+      making file paths in the report relative.
     required: false
     default: '.'
 
-  allow-force-install:
+  coverage-file:
     description: >
-      If 'true', allows overwriting an existing package.json and forces
-      npm to install dependencies using '--force' to resolve conflicting
-      peer dependencies. Use with caution.
-    required: false
-    default: 'false'
+      The path to the single code coverage report file you want to parse
+      (e.g., 'build/reports/clover.xml').
+    required: true
 
 runs:
   using: node20
