@@ -13,6 +13,7 @@ import { promises as fs } from 'fs';
 import { getParserForFile } from './coverage/index.js';
 import { SummaryFormatter } from './formatter/summary-formatter.js';
 import { execSync } from 'node:child_process';
+import { DefaultArtifactClient } from '@actions/artifact';
 
 /**
  * Retrieves the working directory from the action's 'working-directory' input.
@@ -45,6 +46,25 @@ function getCoveragePath(): string {
 }
 
 /**
+ * Retrieves the boolean value for the 'upload-coverage-report' input.
+ *
+ * @returns `true` if 'upload-coverage-report' is 'true' or empty, `false` if 'false'.
+ * @throws {Error} if the 'upload-coverage-report' input is an invalid value.
+ */
+function getUploadCoverageReport(): boolean {
+  const raw = getInput('upload-coverage-report').trim().toLowerCase();
+  if (raw === 'true' || raw === '') {
+    return true;
+  } else if (raw === 'false') {
+    return false;
+  } else {
+    throw new Error(
+      'Invalid value for "upload-coverage-report". Use "true" or "false".',
+    );
+  }
+}
+
+/**
  * Sets the action's failure status with a given message.
  * In a JEST test environment, it throws an error instead.
  *
@@ -62,7 +82,8 @@ function setFailed(message: string | Error): void {
   }
 }
 
-// --- Main Action Logic ---
+const artifact = new DefaultArtifactClient();
+const formatter = new SummaryFormatter();
 
 /**
  * The main entry point for the action.
@@ -117,7 +138,6 @@ export async function run(ghCtx: Context = new Context()): Promise<void> {
     endGroup();
 
     startGroup('Formatting summary');
-    const formatter = new SummaryFormatter();
     const report: string = formatter.format(coverageData, {
       repoUrl: `${serverUrl}/${repo.owner}/${repo.repo}`,
       sha,
@@ -127,6 +147,21 @@ export async function run(ghCtx: Context = new Context()): Promise<void> {
 
     await summary.addRaw(report).write();
     info('Successfully generated and wrote coverage summary.');
+
+    if (getUploadCoverageReport()) {
+      const { id, size } = await artifact.uploadArtifact(
+        'test-coverage',
+        [coveragePath],
+        workDir,
+        {
+          retentionDays: 90,
+          compressionLevel: 9,
+        },
+      );
+      info(`Uploaded ${size}B of coverage to artifact ${id}.`);
+    } else {
+      info(`Skipping artifact upload since it isn't required.`);
+    }
   } catch (err: unknown) {
     if (err instanceof Error) {
       setFailed(err);

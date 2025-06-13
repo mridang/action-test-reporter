@@ -116,6 +116,7 @@ describe('Coverage Action', () => {
           'coverage-file': coverageFilePath,
           'working-directory': tmp,
           'github-token': 'fake-token',
+          'upload-coverage-report': 'false',
         },
         {
           GITHUB_EVENT_NAME: 'push',

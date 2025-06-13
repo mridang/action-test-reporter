@@ -30,6 +30,14 @@ inputs:
       (e.g., 'build/reports/clover.xml').
     required: true
 
+  upload-coverage-report:
+    description: >
+      Set to `true` to upload the generated coverage report as a workflow
+      artifact. If omitted or left empty, this defaults to `true`.
+      Set to `false` to disable artifact upload.
+    required: false
+    default: 'true'
+
 runs:
   using: node20
   main: dist/main.cjs
