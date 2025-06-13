@@ -14,6 +14,8 @@ export default {
       '@semantic-release/github',
       {
         assets: ['action.yml', 'dist/**'],
+        successComment: false,
+        failComment: false,
       },
     ],
     [
