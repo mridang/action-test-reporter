@@ -9,6 +9,7 @@
     "emitDecoratorMetadata": true,
     "experimentalDecorators": true,
     "esModuleInterop": true,
+	  "allowSyntheticDefaultImports": true,
     "outDir": "dist",
     "typeRoots": ["./node_modules/@types", "./types"],
     "declaration": false,
