@@ -135,8 +135,8 @@ export default {
     // Transpiles TypeScript code to JavaScript.
     typescript({
       tsconfig: './tsconfig.json', // References your project's TypeScript configuration.
-      module: "NodeNext",
-      moduleResolution: "NodeNext",
+      module: 'NodeNext',
+      moduleResolution: 'NodeNext',
     }),
   ],
   // Marks Node.js built-in modules as external, meaning they will be required from the Node.js runtime
