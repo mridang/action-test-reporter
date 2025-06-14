@@ -7,6 +7,7 @@ import * as xml2js from 'xml2js';
 import { run } from '../src/index.js';
 import { withTempDir } from './helpers/with-temp-dir.js';
 import { withEnvVars } from './helpers/with-env-vars.js';
+import nock from 'nock';
 
 /**
  * Executes the main action script (`run`) within a controlled environment,
@@ -22,6 +23,25 @@ async function runAction(
   inputs: Record<string, string>,
   extraEnv: Record<string, string | undefined> = {},
 ): Promise<{ summary: string }> {
+  nock('http://results.local:8080')
+    .post('/twirp/github.actions.results.api.v1.ArtifactService/CreateArtifact')
+    .reply(200, {
+      ok: true,
+      signedUploadUrl: `http://results.local:8080/_upload/artifact-chunk`,
+    })
+    .put(new RegExp('/_upload/artifact-chunk\\?comp=block&blockid='))
+    .reply(201, {})
+    .put('/_upload/artifact-chunk?comp=blocklist')
+    .reply(201, {})
+    .post(
+      '/twirp/github.actions.results.api.v1.ArtifactService/FinalizeArtifact',
+    )
+    .reply(200, {
+      ok: true,
+      artifactId: '5678',
+      size: 100,
+    });
+
   const summaryDir = mkdtempSync(join(tmpdir(), 'test-summary-'));
   const summaryPath = join(summaryDir, 'summary.md');
   writeFileSync(summaryPath, '');
@@ -39,10 +59,18 @@ async function runAction(
     GITHUB_REPOSITORY: 'test-owner/test-repo',
     GITHUB_SHA: '03ab23e',
     GITHUB_REF: 'refs/heads/main',
+    GITHUB_RUN_ID: '1',
+    ACTIONS_RUNTIME_TOKEN:
+      'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJzY3AiOiJBY3Rpb25zLlJlc3VsdHM6c29tZS1ydW4taWQ6c29tZS1qb2ItaWQifQ.dummy_signature',
+    ACTIONS_RESULTS_URL: 'http://results.local:8080',
   };
 
-  const wrappedRun = withEnvVars(env, () => run());
-  await wrappedRun();
+  try {
+    const wrappedRun = withEnvVars(env, () => run());
+    await wrappedRun();
+  } finally {
+    nock.cleanAll();
+  }
 
   const summaryContent = readFileSync(summaryPath, 'utf8');
   rmSync(summaryDir, { recursive: true, force: true });
