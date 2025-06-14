@@ -41,7 +41,6 @@ const inlinePackageJsonPlugin = {
   },
 };
 
-
 // noinspection JSUnusedGlobalSymbols
 export default {
   input: 'src/main.ts',
@@ -76,7 +75,7 @@ export default {
     commonjs({
       include: /node_modules/,
       requireReturnsDefault: 'auto',
-      ignore: ['util', 'events', 'http', 'https', 'tls', 'url', 'path', 'fs']
+      ignore: ['util', 'events', 'http', 'https', 'tls', 'url', 'path', 'fs'],
     }),
     json({
       preferConst: true,
