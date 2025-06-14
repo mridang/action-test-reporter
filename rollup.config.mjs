@@ -130,7 +130,17 @@ export default {
     format: 'cjs',
     sourcemap: false,
     inlineDynamicImports: true,
-    interop: 'esModule',
+    interop: (id) => {
+      // If the ID is a Node.js built-in module
+      if (NODE_BUILTINS.includes(id)) {
+        // Force pure CommonJS behavior: no default wrapper.
+        // This makes `require('buffer')` return the actual buffer module directly.
+        return 'default'; // Or false, which also means pure CJS interop
+      }
+      // For all other modules (like jwt-decode), continue with esModule interop
+      // where `import Foo from 'foo'` expects `foo.default`.
+      return 'esModule';
+    },
   },
   onwarn(warning, warn) {
     if (warning.code === 'CIRCULAR_DEPENDENCY') {
