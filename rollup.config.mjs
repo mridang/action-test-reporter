@@ -8,7 +8,7 @@ import { readFileSync } from 'node:fs';
 import path from 'path';
 import * as fs from 'node:fs';
 
-const NODE_BUILTINS = [
+const BASE_NODE_BUILTINS = [
   '_http_agent',
   '_http_client',
   '_http_common',
@@ -77,6 +77,16 @@ const NODE_BUILTINS = [
   'wasi',
   'worker_threads',
   'zlib',
+];
+
+// Automatically generate 'node:' prefixed versions for common built-ins
+// Filter out the ones that are already subpath imports (e.g., 'path/posix')
+// and those that don't make sense with 'node:' prefix (e.g., '_http_agent')
+const NODE_BUILTINS = [
+  ...BASE_NODE_BUILTINS,
+  ...BASE_NODE_BUILTINS.filter(
+    (moduleName) => !moduleName.includes('/') && !moduleName.startsWith('_'),
+  ).map((moduleName) => `node:${moduleName}`),
 ];
 
 const badJson = r('node_modules/@pnpm/npm-conf/lib/tsconfig.make-out.json');
