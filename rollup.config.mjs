@@ -1,99 +1,42 @@
+// rollup.config.mjs
+
+// --- Plugin Imports ---
 import alias from '@rollup/plugin-alias';
 import json from '@rollup/plugin-json';
 import resolve from '@rollup/plugin-node-resolve';
 import commonjs from '@rollup/plugin-commonjs';
-import esbuild from 'rollup-plugin-esbuild';
+import typescript from '@rollup/plugin-typescript'; // For TypeScript transpilation
+// Uncomment if minification is desired:
+// import { terser } from 'rollup-plugin-terser';
+
+// --- Node.js Built-in Module Imports (for dynamic list generation and path resolution) ---
 import { dirname, resolve as r } from 'node:path';
 import { readFileSync } from 'node:fs';
-import path from 'path';
-import * as fs from 'node:fs';
+import * as nodeModule from 'node:module'; // Used to dynamically get Node.js built-in modules
 
-const BASE_NODE_BUILTINS = [
-  '_http_agent',
-  '_http_client',
-  '_http_common',
-  '_http_incoming',
-  '_http_outgoing',
-  '_http_server',
-  '_stream_duplex',
-  '_stream_passthrough',
-  '_stream_readable',
-  '_stream_transform',
-  '_stream_wrap',
-  '_stream_writable',
-  '_tls_common',
-  '_tls_wrap',
-  'assert',
-  'assert/strict',
-  'async_hooks',
-  'buffer',
-  'child_process',
-  'cluster',
-  'console',
-  'constants',
-  'crypto',
-  'dgram',
-  'diagnostics_channel',
-  'dns',
-  'dns/promises',
-  'domain',
-  'events',
-  'fs',
-  'fs/promises',
-  'http',
-  'http2',
-  'https',
-  'inspector',
-  'inspector/promises',
-  'module',
-  'net',
-  'os',
-  'path',
-  'path/posix',
-  'path/win32',
-  'perf_hooks',
-  'process',
-  'punycode',
-  'querystring',
-  'readline',
-  'readline/promises',
-  'repl',
-  'stream',
-  'stream/consumers',
-  'stream/promises',
-  'stream/web',
-  'string_decoder',
-  'sys',
-  'timers',
-  'timers/promises',
-  'tls',
-  'trace_events',
-  'tty',
-  'url',
-  'util',
-  'util/types',
-  'v8',
-  'vm',
-  'wasi',
-  'worker_threads',
-  'zlib',
-];
+// --- Node.js Built-ins List (Dynamically generated for robustness) ---
+// Retrieves the list of all built-in Node.js modules for the current runtime.
+const BASE_NODE_BUILTINS_RAW_OUTPUT = nodeModule.builtinModules;
 
-// Automatically generate 'node:' prefixed versions for common built-ins
-// Filter out the ones that are already subpath imports (e.g., 'path/posix')
-// and those that don't make sense with 'node:' prefix (e.g., '_http_agent')
+// Enhances the list to include both raw names (e.g., 'fs') and 'node:' prefixed names (e.g., 'node:fs').
 const NODE_BUILTINS_SET = new Set();
-BASE_NODE_BUILTINS.forEach((moduleName) => {
-  NODE_BUILTINS_SET.add(moduleName); // Add the original form (e.g., 'fs/promises')
-  NODE_BUILTINS_SET.add(`node:${moduleName}`); // Add the 'node:' prefixed form (e.g., 'node:fs/promises')
+BASE_NODE_BUILTINS_RAW_OUTPUT.forEach((moduleName) => {
+  NODE_BUILTINS_SET.add(moduleName);
+  NODE_BUILTINS_SET.add(`node:${moduleName}`);
 });
-
 const NODE_BUILTINS = Array.from(NODE_BUILTINS_SET);
+
+// --- Specific Workaround for problematic JSON dependency ---
+// Aliases a problematic JSON file path from '@pnpm/npm-conf' to an empty object.
 const badJson = r('node_modules/@pnpm/npm-conf/lib/tsconfig.make-out.json');
 
+// --- Plugin to Inline package.json files from node_modules ---
+// Transforms 'require("...package.json")' calls inside node_modules
+// to inline the actual package.json content.
 const inlinePackageJsonPlugin = {
   name: 'inline-package-json',
   transform(code, id) {
+    // Only apply to files within node_modules
     if (!id.includes('node_modules')) {
       return null;
     }
@@ -122,34 +65,42 @@ const inlinePackageJsonPlugin = {
   },
 };
 
-// noinspection JSUnusedGlobalSymbols
+// --- Main Rollup Configuration ---
 export default {
   input: 'src/main.ts',
   output: {
     file: 'dist/main.cjs',
-    format: 'cjs',
-    sourcemap: false,
-    inlineDynamicImports: true,
+    format: 'cjs', // Output as CommonJS for Node.js environment
+    sourcemap: true, // Keep false if you don't need source maps for production
+    inlineDynamicImports: true, // Bundles dynamic imports directly into the main file
+    // Custom interoperability logic for module loading:
     interop: (id) => {
-      // If the ID is a Node.js built-in module
+      // For Node.js built-in modules (e.g., 'buffer', 'fs/promises'):
+      // Return 'default' to ensure they are treated as pure CommonJS modules,
+      // without extra '.default' wrappers, matching Node.js's native behavior.
       if (NODE_BUILTINS.includes(id)) {
-        // Force pure CommonJS behavior: no default wrapper.
-        // This makes `require('buffer')` return the actual buffer module directly.
-        return 'default'; // Or false, which also means pure CJS interop
+        return 'default'; // CHANGED from `false` to `'default'`
       }
-      // For all other modules (like jwt-decode), continue with esModule interop
-      // where `import Foo from 'foo'` expects `foo.default`.
+      // For all other modules (e.g., 'jwt-decode'), return 'esModule' to ensure
+      // they get the `__esModule: true` flag, allowing `import Foo from 'foo'` to work.
       return 'esModule';
     },
   },
   onwarn(warning, warn) {
+    // Suppress specific warnings, e.g., circular dependencies which might be expected.
     if (warning.code === 'CIRCULAR_DEPENDENCY') {
       return;
     }
-    warn(warning);
+    // Suppress the 'this' rewrite warning for __awaiter, as it's typically harmless.
+    if (warning.code === 'THIS_IS_UNDEFINED') {
+      return;
+    }
+    warn(warning); // Log other warnings
   },
   plugins: [
+    // Alias problematic module paths.
     alias({ entries: [{ find: badJson, replacement: '\0empty-json' }] }),
+    // Provides an empty module for aliased paths.
     {
       name: 'empty-json',
       resolveId(id) {
@@ -160,29 +111,35 @@ export default {
       },
     },
 
-    inlinePackageJsonPlugin,
+    inlinePackageJsonPlugin, // Custom plugin to inline package.json files.
 
+    // Resolves modules from node_modules, preferring Node.js entry points and built-ins.
     resolve({ exportConditions: ['node', 'default'], preferBuiltins: true }),
+    // Converts CommonJS modules in node_modules into ES Module equivalents for Rollup's graph.
     commonjs({
       include: /node_modules/,
+      // Explicitly handles `jwt-decode`'s default export to ensure compatibility with `__importDefault` helper.
       requireReturnsDefault: (id) => {
-        // Use `id.includes()` for robustness against full paths vs short names
         if (id.includes('jwt-decode')) {
-          return true; // Explicitly tell commonjs that jwt-decode's main export IS its default
+          return true;
         }
-        return 'auto'; // For all other modules handled by commonjs
+        return 'auto'; // For all other CommonJS modules, use auto-detection.
       },
-      ignore: NODE_BUILTINS,
+      ignore: NODE_BUILTINS, // Prevents commonjs from transforming require() calls for Node.js built-ins.
     }),
+    // Handles JSON file imports, converting them into ES modules.
     json({
       preferConst: true,
       compact: true,
     }),
-    esbuild({
-      target: 'node20',
-      tsconfig: './tsconfig.json',
-      exclude: ['**/node_modules/jwt-decode/**'],
+    // Transpiles TypeScript code to JavaScript.
+    typescript({
+      tsconfig: './tsconfig.json', // References your project's TypeScript configuration.
+      module: "NodeNext",
+      moduleResolution: "NodeNext",
     }),
   ],
+  // Marks Node.js built-in modules as external, meaning they will be required from the Node.js runtime
+  // instead of being bundled. This is crucial for Node.js applications.
   external: NODE_BUILTINS,
 };
