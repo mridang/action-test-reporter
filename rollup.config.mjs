@@ -165,7 +165,13 @@ export default {
     resolve({ exportConditions: ['node', 'default'], preferBuiltins: true }),
     commonjs({
       include: /node_modules/,
-      requireReturnsDefault: 'auto',
+      requireReturnsDefault: (id) => {
+        // Use `id.includes()` for robustness against full paths vs short names
+        if (id.includes('jwt-decode')) {
+          return true; // Explicitly tell commonjs that jwt-decode's main export IS its default
+        }
+        return 'auto'; // For all other modules handled by commonjs
+      },
       ignore: NODE_BUILTINS,
     }),
     json({
