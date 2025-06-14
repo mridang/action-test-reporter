@@ -82,13 +82,13 @@ const BASE_NODE_BUILTINS = [
 // Automatically generate 'node:' prefixed versions for common built-ins
 // Filter out the ones that are already subpath imports (e.g., 'path/posix')
 // and those that don't make sense with 'node:' prefix (e.g., '_http_agent')
-const NODE_BUILTINS = [
-  ...BASE_NODE_BUILTINS,
-  ...BASE_NODE_BUILTINS.filter(
-    (moduleName) => !moduleName.includes('/') && !moduleName.startsWith('_'),
-  ).map((moduleName) => `node:${moduleName}`),
-];
+const NODE_BUILTINS_SET = new Set();
+BASE_NODE_BUILTINS.forEach((moduleName) => {
+  NODE_BUILTINS_SET.add(moduleName); // Add the original form (e.g., 'fs/promises')
+  NODE_BUILTINS_SET.add(`node:${moduleName}`); // Add the 'node:' prefixed form (e.g., 'node:fs/promises')
+});
 
+const NODE_BUILTINS = Array.from(NODE_BUILTINS_SET);
 const badJson = r('node_modules/@pnpm/npm-conf/lib/tsconfig.make-out.json');
 
 const inlinePackageJsonPlugin = {
