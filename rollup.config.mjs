@@ -50,7 +50,7 @@ export default {
     format: 'cjs',
     sourcemap: false,
     inlineDynamicImports: true,
-    interop: 'esModule'
+    interop: 'esModule',
   },
   onwarn(warning, warn) {
     if (warning.code === 'CIRCULAR_DEPENDENCY') {
