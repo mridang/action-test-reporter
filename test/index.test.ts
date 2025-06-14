@@ -22,8 +22,12 @@ import nock from 'nock';
 async function runAction(
   inputs: Record<string, string>,
   extraEnv: Record<string, string | undefined> = {},
-): Promise<{ summary: string }> {
-  nock('http://results.local:8080')
+): Promise<{ summary: string; nockScope: nock.Scope }> {
+  const summaryDir = mkdtempSync(join(tmpdir(), 'test-summary-'));
+  const summaryPath = join(summaryDir, 'summary.md');
+  writeFileSync(summaryPath, '');
+
+  const nockScope = nock('http://results.local:8080')
     .post('/twirp/github.actions.results.api.v1.ArtifactService/CreateArtifact')
     .reply(200, {
       ok: true,
@@ -41,10 +45,6 @@ async function runAction(
       artifactId: '5678',
       size: 100,
     });
-
-  const summaryDir = mkdtempSync(join(tmpdir(), 'test-summary-'));
-  const summaryPath = join(summaryDir, 'summary.md');
-  writeFileSync(summaryPath, '');
 
   const env = {
     ...extraEnv,
@@ -73,9 +73,7 @@ async function runAction(
   }
 
   const summaryContent = readFileSync(summaryPath, 'utf8');
-  rmSync(summaryDir, { recursive: true, force: true });
-
-  return { summary: summaryContent };
+  return { summary: summaryContent, nockScope };
 }
 
 describe('Coverage Action', () => {
@@ -144,7 +142,6 @@ describe('Coverage Action', () => {
           'coverage-file': coverageFilePath,
           'working-directory': tmp,
           'github-token': 'fake-token',
-          'upload-coverage-report': 'false',
         },
         {
           GITHUB_EVENT_NAME: 'push',
