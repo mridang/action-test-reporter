@@ -79,6 +79,7 @@ export default {
     format: 'cjs',
     sourcemap: false,
     inlineDynamicImports: true,
+    interop: 'esModule'
   },
   onwarn(warning, warn) {
     if (warning.code === 'CIRCULAR_DEPENDENCY') {
@@ -113,6 +114,7 @@ export default {
     esbuild({
       target: 'node20',
       tsconfig: './tsconfig.json',
+      exclude: ['**/node_modules/jwt-decode/**'],
     }),
   ],
   external: [],
