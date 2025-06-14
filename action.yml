@@ -1,13 +1,12 @@
-name: Test Reporter
+name: Better Test Reports Action
 
 description: |
-  Parses various code coverage report formats (Clover, Cobertura,
-  JaCoCo, LCOV) to generate a detailed summary with progress bars
-  and file-specific links directly in your GitHub Actions workflow.
+  Parse coverage reports (Clover, LCOV, etc.) and show insightful test summaries directly in your GitHub workflow.
 
 author: mridang
 branding:
   color: blue
+  icon: box
 
 inputs:
   github-token:
