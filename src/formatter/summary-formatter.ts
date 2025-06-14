@@ -34,11 +34,10 @@ interface SummaryOptions {
  * @class SummaryFormatter
  * @implements {CoverageFormatter}
  */
-export class SummaryFormatter implements CoverageFormatter {
+export class SummaryFormatter implements CoverageFormatter<SummaryOptions> {
   /**
    * {@inheritDoc CoverageFormatter.format}
    */
-  // @ts-expect-error af sff
   public format(coverageData: CoverageData, options: SummaryOptions): string {
     const tree = this.buildTree(coverageData.details, options.rootDir);
     this.calculateAggregates(tree);

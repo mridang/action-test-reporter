@@ -1,5 +1,5 @@
 import { describe, expect, test } from '@jest/globals';
-import { mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
+import { mkdtempSync, readFileSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { tmpdir } from 'node:os';
 import * as xml2js from 'xml2js';
@@ -7,6 +7,8 @@ import * as xml2js from 'xml2js';
 import { run } from '../src/index.js';
 import { withTempDir } from './helpers/with-temp-dir.js';
 import { withEnvVars } from './helpers/with-env-vars.js';
+import nock from 'nock';
+import jwt from 'jsonwebtoken';
 
 /**
  * Executes the main action script (`run`) within a controlled environment,
@@ -21,10 +23,29 @@ import { withEnvVars } from './helpers/with-env-vars.js';
 async function runAction(
   inputs: Record<string, string>,
   extraEnv: Record<string, string | undefined> = {},
-): Promise<{ summary: string }> {
+): Promise<{ summary: string; nockScope: nock.Scope }> {
   const summaryDir = mkdtempSync(join(tmpdir(), 'test-summary-'));
   const summaryPath = join(summaryDir, 'summary.md');
   writeFileSync(summaryPath, '');
+
+  const nockScope = nock('http://results.local:8080')
+    .post('/twirp/github.actions.results.api.v1.ArtifactService/CreateArtifact')
+    .reply(200, {
+      ok: true,
+      signedUploadUrl: `http://results.local:8080/_upload/artifact-chunk`,
+    })
+    .put(new RegExp('/_upload/artifact-chunk\\?comp=block&blockid='))
+    .reply(201, {})
+    .put('/_upload/artifact-chunk?comp=blocklist')
+    .reply(201, {})
+    .post(
+      '/twirp/github.actions.results.api.v1.ArtifactService/FinalizeArtifact',
+    )
+    .reply(200, {
+      ok: true,
+      artifactId: '5678',
+      size: 100,
+    });
 
   const env = {
     ...extraEnv,
@@ -39,15 +60,25 @@ async function runAction(
     GITHUB_REPOSITORY: 'test-owner/test-repo',
     GITHUB_SHA: '03ab23e',
     GITHUB_REF: 'refs/heads/main',
+    GITHUB_RUN_ID: '1',
+    ACTIONS_RUNTIME_TOKEN: jwt.sign(
+      {
+        scp: 'Actions.Results:some-run-id:some-job-id',
+      },
+      'dummy-secret',
+    ),
+    ACTIONS_RESULTS_URL: 'http://results.local:8080',
   };
 
-  const wrappedRun = withEnvVars(env, () => run());
-  await wrappedRun();
+  try {
+    const wrappedRun = withEnvVars(env, () => run());
+    await wrappedRun();
+  } finally {
+    nock.cleanAll();
+  }
 
   const summaryContent = readFileSync(summaryPath, 'utf8');
-  rmSync(summaryDir, { recursive: true, force: true });
-
-  return { summary: summaryContent };
+  return { summary: summaryContent, nockScope };
 }
 
 describe('Coverage Action', () => {
@@ -116,7 +147,6 @@ describe('Coverage Action', () => {
           'coverage-file': coverageFilePath,
           'working-directory': tmp,
           'github-token': 'fake-token',
-          'upload-coverage-report': 'false',
         },
         {
           GITHUB_EVENT_NAME: 'push',

@@ -1,46 +1,17 @@
-import alias from '@rollup/plugin-alias';
-import json from '@rollup/plugin-json';
 import resolve from '@rollup/plugin-node-resolve';
 import commonjs from '@rollup/plugin-commonjs';
-import esbuild from 'rollup-plugin-esbuild';
-import { dirname, resolve as r } from 'node:path';
-import { readFileSync } from 'node:fs';
+import typescript from '@rollup/plugin-typescript';
+import * as nodules from 'node:module';
+import json from '@rollup/plugin-json';
 import path from 'path';
 import * as fs from 'node:fs';
 
-const badJson = r('node_modules/@pnpm/npm-conf/lib/tsconfig.make-out.json');
+const NODE_BUILTINS = nodules.builtinModules.reduce(
+  (acc, name) => acc.concat([name, `node:${name}`]),
+  [],
+);
 
-const inlinePackageJsonPlugin = {
-  name: 'inline-package-json',
-  transform(code, id) {
-    if (!id.includes('node_modules')) {
-      return null;
-    }
-
-    const requirePattern = /require\((['"`])(.+?package\.json)\1\)/g;
-
-    const newCode = code.replace(
-      requirePattern,
-      (match, quote, requiredPath) => {
-        try {
-          const pkgPath = r(dirname(id), requiredPath);
-          return readFileSync(pkgPath, 'utf-8');
-        } catch (e) {
-          this.warn(
-            `Failed to inline '${requiredPath}' for ${id}: ${e.message}`,
-          );
-          return match;
-        }
-      },
-    );
-
-    return {
-      code: newCode,
-      map: null,
-    };
-  },
-};
-
+// noinspection JSUnusedGlobalSymbols
 const progressBarSvgs = ({ outputDir = 'dist/res', maxPct = 100 } = {}) => ({
   name: 'progress-bar-svgs',
   async buildStart() {
@@ -77,43 +48,49 @@ export default {
   output: {
     file: 'dist/main.cjs',
     format: 'cjs',
-    sourcemap: false,
+    sourcemap: true,
     inlineDynamicImports: true,
+    interop: (id) => {
+      // For Node.js built-in modules (e.g., 'buffer', 'fs/promises'):
+      // Return 'default' to ensure they are treated as pure CommonJS modules,
+      // without extra '.default' wrappers, matching Node.js's native behavior.
+      if (NODE_BUILTINS.includes(id)) {
+        return 'default'; // CHANGED from `false` to `'default'`
+      }
+      // For all other modules (e.g., 'jwt-decode'), return 'esModule' to ensure
+      // they get the `__esModule: true` flag, allowing `import Foo from 'foo'` to work.
+      return 'esModule';
+    },
   },
   onwarn(warning, warn) {
-    if (warning.code === 'CIRCULAR_DEPENDENCY') {
-      return;
+    switch (warning.code) {
+      case 'CIRCULAR_DEPENDENCY':
+      case 'THIS_IS_UNDEFINED':
+        return;
+      default:
+        warn(warning);
     }
-    warn(warning);
   },
   plugins: [
     progressBarSvgs(),
-    alias({ entries: [{ find: badJson, replacement: '\0empty-json' }] }),
-    {
-      name: 'empty-json',
-      resolveId(id) {
-        return id === '\0empty-json' ? id : null;
-      },
-      load(id) {
-        if (id === '\0empty-json') return 'export default {};';
-      },
-    },
-
-    inlinePackageJsonPlugin,
-
+    json(),
     resolve({ exportConditions: ['node', 'default'], preferBuiltins: true }),
     commonjs({
       include: /node_modules/,
-      requireReturnsDefault: 'auto',
+      // Explicitly handles `jwt-decode`'s default export to ensure compatibility with `__importDefault` helper.
+      requireReturnsDefault: (id) => {
+        if (id.includes('jwt-decode')) {
+          return true;
+        }
+        return 'auto'; // For all other CommonJS modules, use auto-detection.
+      },
+      ignore: NODE_BUILTINS,
     }),
-    json({
-      preferConst: true,
-      compact: true,
-    }),
-    esbuild({
-      target: 'node20',
+    typescript({
       tsconfig: './tsconfig.json',
+      module: 'NodeNext',
+      moduleResolution: 'NodeNext',
     }),
   ],
-  external: [],
+  external: NODE_BUILTINS,
 };
