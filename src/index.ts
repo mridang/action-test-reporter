@@ -14,6 +14,7 @@ import { getParserForFile } from './coverage/index.js';
 import { SummaryFormatter } from './formatter/summary-formatter.js';
 import { execSync } from 'node:child_process';
 import { DefaultArtifactClient } from '@actions/artifact';
+import { ConsoleFormatter } from './formatter/console-formatter.js';
 
 /**
  * Retrieves the working directory from the action's 'working-directory' input.
@@ -82,8 +83,9 @@ function setFailed(message: string | Error): void {
   }
 }
 
-const artifact = new DefaultArtifactClient();
-const formatter = new SummaryFormatter();
+const artifactClient = new DefaultArtifactClient();
+const summaryFormatter = new SummaryFormatter();
+const consoleFormatter = new ConsoleFormatter();
 
 /**
  * The main entry point for the action.
@@ -138,7 +140,10 @@ export async function run(ghCtx: Context = new Context()): Promise<void> {
     endGroup();
 
     startGroup('Formatting summary');
-    const report: string = formatter.format(coverageData, {
+    consoleFormatter.format(coverageData, {
+      rootDir: workDir,
+    });
+    const report: string = summaryFormatter.format(coverageData, {
       repoUrl: `${serverUrl}/${repo.owner}/${repo.repo}`,
       sha,
       rootDir: workDir,
@@ -149,7 +154,7 @@ export async function run(ghCtx: Context = new Context()): Promise<void> {
     info('Successfully generated and wrote coverage summary.');
 
     if (getUploadCoverageReport()) {
-      const { id, size } = await artifact.uploadArtifact(
+      const { id, size } = await artifactClient.uploadArtifact(
         'test-coverage',
         [coveragePath],
         workDir,

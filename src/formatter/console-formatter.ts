@@ -36,7 +36,9 @@ type CoverageNode = {
  * @class ConsoleFormatter
  * @implements {CoverageFormatter}
  */
-export class ConsoleFormatter implements CoverageFormatter {
+export class ConsoleFormatter
+  implements CoverageFormatter<{ rootDir?: string }>
+{
   /**
    * {@inheritDoc CoverageFormatter.format}
    */

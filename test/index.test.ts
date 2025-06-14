@@ -1,5 +1,5 @@
 import { describe, expect, test } from '@jest/globals';
-import { mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
+import { mkdtempSync, readFileSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { tmpdir } from 'node:os';
 import * as xml2js from 'xml2js';
@@ -8,6 +8,7 @@ import { run } from '../src/index.js';
 import { withTempDir } from './helpers/with-temp-dir.js';
 import { withEnvVars } from './helpers/with-env-vars.js';
 import nock from 'nock';
+import jwt from 'jsonwebtoken';
 
 /**
  * Executes the main action script (`run`) within a controlled environment,
@@ -60,8 +61,12 @@ async function runAction(
     GITHUB_SHA: '03ab23e',
     GITHUB_REF: 'refs/heads/main',
     GITHUB_RUN_ID: '1',
-    ACTIONS_RUNTIME_TOKEN:
-      'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJzY3AiOiJBY3Rpb25zLlJlc3VsdHM6c29tZS1ydW4taWQ6c29tZS1qb2ItaWQifQ.dummy_signature',
+    ACTIONS_RUNTIME_TOKEN: jwt.sign(
+      {
+        scp: 'Actions.Results:some-run-id:some-job-id',
+      },
+      'dummy-secret',
+    ),
     ACTIONS_RESULTS_URL: 'http://results.local:8080',
   };
 
