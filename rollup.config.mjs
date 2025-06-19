@@ -15,7 +15,7 @@ const NODE_BUILTINS = nodules.builtinModules.reduce(
 const progressBarSvgs = ({ outputDir = 'dist/res', maxPct = 100 } = {}) => ({
   name: 'progress-bar-svgs',
   async buildStart() {
-    const colors = { yellow: '#ffc107', red: '#dc3545', green: '#28a745' };
+    const colors = { yellow: '#eac54f', red: '#cf222e', green: '#3fb94f' };
     const background = '#e9ecef';
     const W = 100,
       H = 16,
