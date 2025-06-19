@@ -42,7 +42,7 @@ const progressBarSvgs = ({ outputDir = 'dist/res', maxPct = 100 } = {}) => ({
   },
 });
 
-// noinspection JSUnusedGlobalSymbols
+// noinspection JSUnusedGlobalSymbols,SpellCheckingInspection
 export default {
   input: 'src/main.ts',
   output: {
@@ -73,16 +73,21 @@ export default {
   },
   plugins: [
     progressBarSvgs(),
-    json(),
-    resolve({ exportConditions: ['node', 'default'], preferBuiltins: true }),
+    json({
+      preferConst: true,
+      compact: true,
+    }),
+    resolve({
+      exportConditions: ['node', 'default'],
+      preferBuiltins: true,
+    }),
     commonjs({
       include: /node_modules/,
-      // Explicitly handles `jwt-decode`'s default export to ensure compatibility with `__importDefault` helper.
       requireReturnsDefault: (id) => {
         if (id.includes('jwt-decode')) {
           return true;
         }
-        return 'auto'; // For all other CommonJS modules, use auto-detection.
+        return 'auto';
       },
       ignore: NODE_BUILTINS,
     }),
