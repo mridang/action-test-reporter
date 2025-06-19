@@ -43,7 +43,7 @@ const progressBarSvgs = ({ outputDir = 'dist/res', maxPct = 100 } = {}) => ({
 });
 
 // noinspection JSUnusedGlobalSymbols,SpellCheckingInspection
-export default {
+export default (configOverrides = {}) => ({
   input: 'src/main.ts',
   output: {
     file: 'dist/main.cjs',
@@ -95,7 +95,8 @@ export default {
       tsconfig: './tsconfig.json',
       module: 'NodeNext',
       moduleResolution: 'NodeNext',
+      ...configOverrides.typescript,
     }),
   ],
   external: NODE_BUILTINS,
-};
+});

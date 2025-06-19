@@ -2,7 +2,7 @@ import { describe, test } from '@jest/globals';
 import * as fs from 'node:fs';
 import { mkdtempSync, readFileSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
-import { tmpdir } from 'node:os';
+import os, { tmpdir } from 'node:os';
 import * as xml2js from 'xml2js';
 // noinspection ES6PreferShortImport
 import { withTempDir } from './helpers/with-temp-dir.js';
@@ -26,25 +26,33 @@ import { constants as VM } from 'vm';
  */
 export async function bundleToPath(): Promise<string> {
   // eslint-disable-next-line no-unsanitized/method
-  const { default: cfg } = await import(
+  const { default: createRollupConfig } = await import(
     pathToFileURL(path.resolve('rollup.config.mjs')).href
   );
 
-  const bundle = await rollup(cfg);
-  const base =
-    cfg.output?.dir ??
-    (cfg.output?.file ? path.dirname(cfg.output.file) : 'dist');
-  const dir = path.resolve(base, '.test-bundles');
-  fs.mkdirSync(dir, { recursive: true });
-  const file = path.join(dir, `bundle-${Date.now()}.cjs`);
+  const testConfig = createRollupConfig({
+    typescript: {
+      outDir: undefined,
+      declaration: false,
+      sourceMap: true,
+    },
+  });
 
+  const bundle = await rollup(testConfig);
+  const tempDir = fs.mkdtempSync(path.join(os.tmpdir(), 'test-bundle-'));
+  const outputFile = path.join(tempDir, `bundle-${Date.now()}.cjs`);
+
+  fs.copyFileSync(
+    path.join(process.cwd(), 'tsconfig.json'),
+    path.join(tempDir, 'tsconfig.json'),
+  );
   try {
-    await bundle.write({ ...(cfg.output ?? {}), file, format: 'cjs' });
+    await bundle.write({ ...testConfig.output, file: outputFile });
   } finally {
     await bundle.close();
   }
 
-  return file;
+  return outputFile;
 }
 
 /**
