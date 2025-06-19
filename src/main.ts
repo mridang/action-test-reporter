@@ -5,4 +5,7 @@
 import { run } from './index.js';
 
 /* istanbul ignore next */
-void run();
+// noinspection JSUnusedGlobalSymbols
+export default (async () => {
+  await run();
+})();
