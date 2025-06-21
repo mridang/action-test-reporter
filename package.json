@@ -81,6 +81,7 @@
 		"prettier": "^3.1.1",
 		"rollup": "^4.41.1",
 		"semantic-release": "^24.0.0",
+		"semantic-release-major-tag": "^0.3.2",
 		"ts-jest": "^29.1.0",
 		"typescript": "^5.1.3"
 	},
