@@ -9,20 +9,12 @@
     "emitDecoratorMetadata": true,
     "experimentalDecorators": true,
     "esModuleInterop": true,
-	  "allowSyntheticDefaultImports": true,
+    "allowSyntheticDefaultImports": true,
     "outDir": "dist",
     "typeRoots": ["./node_modules/@types", "./types"],
     "declaration": false,
-	  "lib": ["es2023" ]
+    "lib": ["es2023"]
   },
-  "include": [
-    "src/**/*",
-    "types/**/*"
-  ],
-  "exclude": [
-    "node_modules",
-    "**/*.spec.ts",
-    "dist",
-    "test"
-  ]
+  "include": ["src/**/*", "types/**/*"],
+  "exclude": ["node_modules", "**/*.spec.ts", "dist", "test"]
 }
