@@ -2,6 +2,7 @@ import { promises as fs } from 'fs';
 import { CoverageParser } from './coverage-parser.js';
 import { CloverParser } from './clover-parser.js';
 import { CoberturaParser } from './cobertura-parser.js';
+import { GcovParser } from './gcov-parser.js';
 import { JacocoParser } from './jacoco-parser.js';
 import { LcovParser } from './lcov-parser.js';
 
@@ -13,6 +14,7 @@ const availableParsers: CoverageParser[] = [
   new JacocoParser(),
   new CoberturaParser(),
   new CloverParser(),
+  new GcovParser(),
   new LcovParser(),
 ];
 

@@ -4,7 +4,7 @@ A GitHub Action that parses various code coverage report formats and generates a
 
 ## Features
 
-- **Multi-Format Support**: Natively parses the most popular coverage report formats: Clover (clover.xml), Cobertura (cobertura.xml), JaCoCo (jacoco.xml), and LCOV (lcov.info). Please note that many other formats (such as those from gcov or other language-specific tools) are not currently supported.
+- **Multi-Format Support**: Natively parses the most popular coverage report formats: Clover (clover.xml), Cobertura (cobertura.xml), JaCoCo (jacoco.xml), and LCOV (lcov.info). Please note that many other formats are not currently supported.
 - **Automatic Detection**: Intelligently determines the report format from the file content, so no configuration is needed.
 - **Interactive Summaries**: Generates a clean, hierarchical Markdown summary with progress bars for quick visual feedback.
 - **Deep Linking**: Creates links to each file and even to the specific uncovered lines within that file for the exact commit, making it easy to see where coverage is lacking.
