@@ -43057,7 +43057,9 @@ function getTestRunsReport(testRuns, options) {
 }
 function getSuitesReport(tr, runIndex, options) {
     const sections = [];
-    const suites = options.listSuites === 'failed' ? tr.failedSuites : tr.suites;
+    const suites = options.listSuites === 'failed'
+        ? tr.suites.filter((suite) => suite.result === 'failed')
+        : tr.suites;
     if (options.listSuites !== 'none') {
         const trSlug = makeRunSlug(runIndex, options);
         const nameLink = `<a id="${trSlug.id}" href="${options.baseUrl + trSlug.link}">${tr.path}</a>`;
@@ -43156,7 +43158,7 @@ function encodeImgShieldsURIComponent(component) {
 }
 
 class TestReporter {
-    name = coreExports.getInput('name', { required: true });
+    name = coreExports.getInput('name', { required: false }).trim() || 'tests';
     resultsPath = coreExports.getInput('results-path', { required: true });
     listSuites = coreExports.getInput('list-suites', { required: true });
     listTests = coreExports.getInput('list-tests', { required: true });

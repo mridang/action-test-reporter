@@ -15,7 +15,7 @@ export interface TestReporterOutput {
 }
 
 class TestReporter {
-  readonly name = core.getInput('name', { required: true });
+  readonly name = core.getInput('name', { required: false }).trim() || 'tests';
   readonly resultsPath = core.getInput('results-path', { required: true });
   readonly listSuites = core.getInput('list-suites', { required: true }) as
     | 'all'
