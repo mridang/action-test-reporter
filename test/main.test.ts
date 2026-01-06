@@ -78,8 +78,6 @@ test('combines test and coverage reports into a single summary', async () => {
     'report-title': '',
     collapsed: 'never',
     'coverage-path': lcovPath,
-    'repo-url': 'https://example.com/repo',
-    sha: 'abc123',
   });
 
   const originalCwd = process.cwd();
@@ -110,8 +108,6 @@ test('reports only coverage when results path is not provided', async () => {
     'coverage-path': lcovPath,
     'fail-on-empty': 'true',
     'working-directory': process.cwd(),
-    'repo-url': 'https://example.com/repo',
-    sha: 'abc123',
   });
 
   const originalCwd = process.cwd();

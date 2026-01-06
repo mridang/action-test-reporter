@@ -67,8 +67,5 @@ jobs:
       - name: Generate coverage report
         uses: ./
         with:
-          results-path: '.out/junit.xml,junit.xml'
+          results-path: '.out/junit.xml'
           coverage-path: '.out/lcov.info'
-          repo-url: ${{ github.server_url }}/${{ github.repository }}
-          sha: ${{ github.sha }}
-          fail-on-empty: true

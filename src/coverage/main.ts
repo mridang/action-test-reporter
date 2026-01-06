@@ -14,8 +14,6 @@ class CoverageReporter {
   readonly workDirInput = core.getInput('working-directory', {
     required: false,
   });
-  readonly repoUrl = core.getInput('repo-url', { required: false });
-  readonly sha = core.getInput('sha', { required: false });
   readonly failOnEmpty =
     core.getInput('fail-on-empty', { required: false }) === 'true';
 
@@ -31,11 +29,17 @@ class CoverageReporter {
     }
 
     try {
+      const repoUrl =
+        process.env.GITHUB_SERVER_URL && process.env.GITHUB_REPOSITORY
+          ? `${process.env.GITHUB_SERVER_URL}/${process.env.GITHUB_REPOSITORY}`
+          : '';
+      const sha = process.env.GITHUB_SHA ?? '';
+
       const output = await runCoverage({
         patterns: this.patterns,
         rootDir: process.cwd(),
-        repoUrl: this.repoUrl,
-        sha: this.sha,
+        repoUrl,
+        sha,
       });
       if (writeSummary && output.summaries.length > 0) {
         await core.summary.addRaw(output.summaries.join('\n\n')).write();
