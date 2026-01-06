@@ -67,5 +67,8 @@ jobs:
       - name: Generate coverage report
         uses: ./
         with:
-          github-token: ${{ secrets.GITHUB_TOKEN }}
-          coverage-file: '.out/lcov.info'
+          type: coverage
+          path: '.out/lcov.info'
+          repo-url: ${{ github.server_url }}/${{ github.repository }}
+          sha: ${{ github.sha }}
+          fail-on-empty: true

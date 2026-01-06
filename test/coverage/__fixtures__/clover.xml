@@ -1,0 +1,24 @@
+<coverage>
+  <project>
+    <metrics
+      statements="2"
+      coveredstatements="1"
+      conditionals="0"
+      coveredconditionals="0"
+      methods="1"
+      coveredmethods="1"
+    />
+    <file name="/tmp/file.ts">
+      <metrics
+        statements="2"
+        coveredstatements="1"
+        conditionals="0"
+        coveredconditionals="0"
+        methods="1"
+        coveredmethods="1"
+      />
+      <line num="1" count="1" />
+      <line num="2" count="0" />
+    </file>
+  </project>
+</coverage>
