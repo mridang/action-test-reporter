@@ -249,7 +249,10 @@ function getSuitesReport(
   options: ReportOptions,
 ): string[] {
   const sections: string[] = [];
-  const suites = options.listSuites === 'failed' ? tr.failedSuites : tr.suites;
+  const suites =
+    options.listSuites === 'failed'
+      ? tr.suites.filter((suite) => suite.result === 'failed')
+      : tr.suites;
 
   if (options.listSuites !== 'none') {
     const trSlug = makeRunSlug(runIndex, options);
@@ -268,7 +271,7 @@ function getSuitesReport(
       const suitesTable = table(
         ['Test suite', 'Passed', 'Failed', 'Skipped', 'Time'],
         [Align.Left, Align.Right, Align.Right, Align.Right, Align.Right],
-        ...suites.map((s, suiteIndex) => {
+        ...suites.map((s: TestSuiteResult, suiteIndex: number) => {
           const tsTime = formatTime(s.time);
           const tsName = s.name;
           const skipLink =
@@ -289,7 +292,7 @@ function getSuitesReport(
 
   if (options.listTests !== 'none') {
     const tests = suites
-      .map((ts, suiteIndex) =>
+      .map((ts: TestSuiteResult, suiteIndex: number) =>
         getTestsReport(ts, runIndex, suiteIndex, options),
       )
       .flat();

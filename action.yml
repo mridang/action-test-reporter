@@ -12,7 +12,7 @@ inputs:
   name:
     description: Name for the test report.
     required: false
-    default: ''
+    default: ""
   results-path:
     description: >
       Comma-separated list of paths to test results. Supports wildcards via
@@ -39,15 +39,15 @@ inputs:
     description: >
       Limits parsing effort for errors. Must be less or equal to 50.
     required: false
-    default: '10'
+    default: "10"
   fail-on-error:
     description: Set this action as failed if test report contains any failed test.
     required: false
-    default: 'true'
+    default: "true"
   fail-on-empty:
     description: Set this action as failed if no test or coverage results were found.
     required: false
-    default: 'true'
+    default: "true"
   working-directory:
     description: Relative path under $GITHUB_WORKSPACE where the repository was checked out.
     required: false
@@ -55,12 +55,12 @@ inputs:
   report-title:
     description: Title for the test report summary.
     required: false
-    default: ''
+    default: ""
   only-summary:
     description: >
       If enabled, the report will contain only the per-report table without
       listing individual suites or tests.
-    default: 'false'
+    default: "false"
     required: false
   badge-title:
     description: Customize badge title.
@@ -77,11 +77,11 @@ inputs:
   repo-url:
     description: Repository URL for coverage summary links.
     required: false
-    default: ''
+    default: ""
   sha:
     description: Commit SHA for coverage summary links.
     required: false
-    default: ''
+    default: ""
   coverage-path:
     description: >
       Comma-separated list of paths to coverage reports. Supports wildcards via
