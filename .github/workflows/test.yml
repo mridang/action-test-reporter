@@ -61,17 +61,13 @@ jobs:
       - name: Install Dependencies
         run: npm ci
 
-      - name: Run Jest (JUnit + coverage)
-        env:
-          JEST_JUNIT_OUTPUT: .out/junit.xml
-        run: |
-          mkdir -p .out
-          npm run test -- --reporters=default --reporters=jest-junit
+      - name: Run Jest
+        run: npm run test
 
       - name: Generate coverage report
         uses: ./
         with:
-          results-path: '.out/junit.xml'
+          results-path: '.out/junit.xml,junit.xml'
           coverage-path: '.out/lcov.info'
           repo-url: ${{ github.server_url }}/${{ github.repository }}
           sha: ${{ github.sha }}
