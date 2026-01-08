@@ -237,4 +237,40 @@ describe('java-junit tests', () => {
     });
     expect(report).toMatch(/^# My Custom Title\n/);
   });
+
+  test('parses nested phpunit suites with leaf testcases', async () => {
+    const fixturePath = path.join(
+      __dirname,
+      '..',
+      '__fixtures__',
+      'phpunit-nested.xml',
+    );
+    const outputPath = path.join(
+      __dirname,
+      '..',
+      '__outputs__',
+      'phpunit-nested.md',
+    );
+    const filePath = normalizeFilePath(
+      path.relative(path.join(__dirname, '..'), fixturePath),
+    );
+    const fileContent = fs.readFileSync(fixturePath, { encoding: 'utf8' });
+
+    const opts: ParseOptions = {
+      parseErrors: true,
+      trackedFiles: [],
+    };
+
+    const parser = new JavaJunitParser(opts);
+    const result = await parser.parse(filePath, fileContent);
+
+    expect(result.passed).toBe(33);
+    expect(result.failed).toBe(0);
+    expect(result.skipped).toBe(0);
+    expect(result.suites.length).toBe(5);
+
+    const report = getReport([result]);
+    fs.mkdirSync(path.dirname(outputPath), { recursive: true });
+    fs.writeFileSync(outputPath, report);
+  });
 });

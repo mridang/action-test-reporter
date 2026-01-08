@@ -13,6 +13,29 @@ import { getDirname } from '../helpers/dir.js';
 const __dirname = getDirname(import.meta.url);
 
 describe('jest-junit tests', () => {
+  test('rejects nested junit suites (e.g. phpunit structure)', async () => {
+    const fixturePath = path.join(
+      __dirname,
+      '..',
+      '__fixtures__',
+      'phpunit-nested.xml',
+    );
+    const filePath = normalizeFilePath(
+      path.relative(path.join(__dirname, '..'), fixturePath),
+    );
+    const fileContent = fs.readFileSync(fixturePath, { encoding: 'utf8' });
+
+    const opts: ParseOptions = {
+      parseErrors: true,
+      trackedFiles: [],
+    };
+
+    const parser = new JestJunitParser(opts);
+    await expect(parser.parse(filePath, fileContent)).rejects.toThrow(
+      /Not a Jest JUnit report/,
+    );
+  });
+
   test('produces empty test run result when there are no test cases in the testsuites element', async () => {
     const fixturePath = path.join(
       __dirname,

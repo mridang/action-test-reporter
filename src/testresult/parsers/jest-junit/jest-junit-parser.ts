@@ -24,6 +24,11 @@ export class JestJunitParser implements TestParser {
 
   async parse(path: string, content: string): Promise<TestRunResult> {
     const ju = await this.getJunitReport(path, content);
+    if (!this.isProbablyJestReport(ju)) {
+      throw new Error(
+        'Not a Jest JUnit report: structure or naming does not match jest-junit output.',
+      );
+    }
     return this.getTestRunResult(path, ju);
   }
 
@@ -51,6 +56,54 @@ export class JestJunitParser implements TestParser {
     const time =
       junit.testsuites.$ && parseFloat(junit.testsuites.$.time) * 1000;
     return new TestRunResult(path, suites, time);
+  }
+
+  private isProbablyJestReport(junit: JunitReport): boolean {
+    const suites = junit.testsuites.testsuite ?? [];
+    const queue = [...suites];
+    const suiteNames: string[] = [];
+    const classNames: string[] = [];
+    let hasNestedSuites = false;
+
+    while (queue.length > 0) {
+      const suite = queue.shift();
+      if (!suite) break;
+      if (suite.$?.name) {
+        suiteNames.push(suite.$.name);
+      }
+      if (suite.testsuite && suite.testsuite.length > 0) {
+        hasNestedSuites = true;
+        queue.push(...suite.testsuite);
+      }
+      if (suite.testcase) {
+        for (const tc of suite.testcase) {
+          if (tc.$?.classname !== undefined) {
+            classNames.push(tc.$.classname);
+          }
+        }
+      }
+    }
+
+    if (hasNestedSuites) {
+      return false;
+    }
+
+    const topLevelName = junit.testsuites.$?.name ?? '';
+    const suiteNameHint = suiteNames.some((n) =>
+      /jest|__tests__|\.test|\.spec/i.test(n),
+    );
+    const classNameHint = classNames.some(
+      (cn) => cn === '' || /›|__tests__|\.test|\.spec|\/|\\/i.test(cn ?? ''),
+    );
+    const topLevelHint = /jest/.test(topLevelName);
+
+    return (
+      suiteNameHint ||
+      classNameHint ||
+      topLevelHint ||
+      suites.length > 0 ||
+      classNames.length > 0
+    );
   }
 
   private getGroups(suite: TestSuite): TestGroupResult[] {

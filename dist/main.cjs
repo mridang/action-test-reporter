@@ -42398,19 +42398,29 @@ class JavaJunitParser {
         }
     }
     getTestRunResult(filePath, junit) {
-        const suites = junit.testsuites.testsuite === undefined
-            ? []
-            : junit.testsuites.testsuite.map((ts) => {
-                const rawName = ts.$.name?.trim() ?? '';
-                const name = rawName === '' || rawName === 'undefined'
-                    ? path__namespace.basename(filePath)
-                    : rawName;
-                const time = parseFloat(ts.$.time) * 1000;
-                return new TestSuiteResult(name, this.getGroups(ts), time);
-            });
+        const suites = junit.testsuites.testsuite
+            ? this.flattenSuites(junit.testsuites.testsuite, filePath)
+            : [];
         const seconds = parseFloat(junit.testsuites.$?.time);
         const time = isNaN(seconds) ? undefined : seconds * 1000;
         return new TestRunResult(filePath, suites, time);
+    }
+    flattenSuites(suites, filePath) {
+        const results = [];
+        for (const suite of suites) {
+            if (suite.testsuite && suite.testsuite.length > 0) {
+                results.push(...this.flattenSuites(suite.testsuite, filePath));
+            }
+            if (suite.testcase !== undefined && suite.testcase.length > 0) {
+                const rawName = suite.$.name?.trim() ?? '';
+                const name = rawName === '' || rawName === 'undefined'
+                    ? path__namespace.basename(filePath)
+                    : rawName;
+                const time = parseFloat(suite.$.time) * 1000;
+                results.push(new TestSuiteResult(name, this.getGroups(suite), time));
+            }
+        }
+        return results;
     }
     getGroups(suite) {
         if (suite.testcase === undefined) {
@@ -42532,6 +42542,9 @@ class JestJunitParser {
     }
     async parse(path, content) {
         const ju = await this.getJunitReport(path, content);
+        if (!this.isProbablyJestReport(ju)) {
+            throw new Error('Not a Jest JUnit report: structure or naming does not match jest-junit output.');
+        }
         return this.getTestRunResult(path, ju);
     }
     async getJunitReport(path, content) {
@@ -42552,6 +42565,44 @@ class JestJunitParser {
             });
         const time = junit.testsuites.$ && parseFloat(junit.testsuites.$.time) * 1000;
         return new TestRunResult(path, suites, time);
+    }
+    isProbablyJestReport(junit) {
+        const suites = junit.testsuites.testsuite ?? [];
+        const queue = [...suites];
+        const suiteNames = [];
+        const classNames = [];
+        let hasNestedSuites = false;
+        while (queue.length > 0) {
+            const suite = queue.shift();
+            if (!suite)
+                break;
+            if (suite.$?.name) {
+                suiteNames.push(suite.$.name);
+            }
+            if (suite.testsuite && suite.testsuite.length > 0) {
+                hasNestedSuites = true;
+                queue.push(...suite.testsuite);
+            }
+            if (suite.testcase) {
+                for (const tc of suite.testcase) {
+                    if (tc.$?.classname !== undefined) {
+                        classNames.push(tc.$.classname);
+                    }
+                }
+            }
+        }
+        if (hasNestedSuites) {
+            return false;
+        }
+        const topLevelName = junit.testsuites.$?.name ?? '';
+        const suiteNameHint = suiteNames.some((n) => /jest|__tests__|\.test|\.spec/i.test(n));
+        const classNameHint = classNames.some((cn) => cn === '' || /›|__tests__|\.test|\.spec|\/|\\/i.test(cn ?? ''));
+        const topLevelHint = /jest/.test(topLevelName);
+        return (suiteNameHint ||
+            classNameHint ||
+            topLevelHint ||
+            suites.length > 0 ||
+            classNames.length > 0);
     }
     getGroups(suite) {
         if (!suite.testcase) {

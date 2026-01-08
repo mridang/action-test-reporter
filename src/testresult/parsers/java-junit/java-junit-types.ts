@@ -9,6 +9,7 @@ export interface SingleSuiteReport {
 interface TestSuites {
   $: {
     time: string;
+    name?: string;
   };
   testsuite?: TestSuite[];
 }
@@ -23,7 +24,8 @@ export interface TestSuite {
     time: string;
     timestamp?: Date;
   };
-  testcase: TestCase[];
+  testcase?: TestCase[];
+  testsuite?: TestSuite[];
 }
 
 export interface TestCase {

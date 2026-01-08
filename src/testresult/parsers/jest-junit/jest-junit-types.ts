@@ -5,6 +5,7 @@ export interface JunitReport {
 interface TestSuites {
   $: {
     time: string;
+    name?: string;
   };
   testsuite?: TestSuite[];
 }
@@ -20,6 +21,7 @@ export interface TestSuite {
     timestamp?: Date;
   };
   testcase?: TestCase[];
+  testsuite?: TestSuite[];
 }
 
 export interface TestCase {
