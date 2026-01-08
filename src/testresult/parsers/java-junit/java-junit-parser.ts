@@ -71,22 +71,35 @@ export class JavaJunitParser implements TestParser {
     filePath: string,
     junit: JunitReport,
   ): TestRunResult {
-    const suites =
-      junit.testsuites.testsuite === undefined
-        ? []
-        : junit.testsuites.testsuite.map((ts) => {
-            const rawName = ts.$.name?.trim() ?? '';
-            const name =
-              rawName === '' || rawName === 'undefined'
-                ? path.basename(filePath)
-                : rawName;
-            const time = parseFloat(ts.$.time) * 1000;
-            return new TestSuiteResult(name, this.getGroups(ts), time);
-          });
+    const suites = junit.testsuites.testsuite
+      ? this.flattenSuites(junit.testsuites.testsuite, filePath)
+      : [];
 
     const seconds = parseFloat(junit.testsuites.$?.time);
     const time = isNaN(seconds) ? undefined : seconds * 1000;
     return new TestRunResult(filePath, suites, time);
+  }
+
+  private flattenSuites(
+    suites: TestSuite[],
+    filePath: string,
+  ): TestSuiteResult[] {
+    const results: TestSuiteResult[] = [];
+    for (const suite of suites) {
+      if (suite.testsuite && suite.testsuite.length > 0) {
+        results.push(...this.flattenSuites(suite.testsuite, filePath));
+      }
+      if (suite.testcase !== undefined && suite.testcase.length > 0) {
+        const rawName = suite.$.name?.trim() ?? '';
+        const name =
+          rawName === '' || rawName === 'undefined'
+            ? path.basename(filePath)
+            : rawName;
+        const time = parseFloat(suite.$.time) * 1000;
+        results.push(new TestSuiteResult(name, this.getGroups(suite), time));
+      }
+    }
+    return results;
   }
 
   private getGroups(suite: TestSuite): TestGroupResult[] {
