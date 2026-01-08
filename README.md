@@ -47,13 +47,10 @@ Provide `results-path` for tests, `coverage-path` for coverage, or both to combi
   uses: mridang/action-test-reporter@v1
   with:
     coverage-path: coverage/lcov.info
-    repo-url: https://github.com/your-org/your-repo
-    sha: ${{ github.sha }}
 ```
 
 - `coverage-path`: Comma-separated glob of coverage reports.
 - `working-directory`: Base directory for globs (default `.`).
-- `repo-url` / `sha`: Optional commit info for file links.
 - `fail-on-empty`: Fail the workflow step when no coverage files were found (default `true`).
 
 ### Outputs

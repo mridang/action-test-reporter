@@ -74,14 +74,6 @@ inputs:
         - never: Always expand the report details
     required: false
     default: auto
-  repo-url:
-    description: Repository URL for coverage summary links.
-    required: false
-    default: ''
-  sha:
-    description: Commit SHA for coverage summary links.
-    required: false
-    default: ''
   coverage-path:
     description: >
       Comma-separated list of paths to coverage reports. Supports wildcards via
