@@ -44138,7 +44138,8 @@ class SummaryFormatter {
         const { statements, branches, methods, lines } = data;
         const indentStr = ' '.repeat(indent) + (indent > 0 ? '•  ' : '');
         const fileName = isSummary ? `**${name}**` : name;
-        const fileLink = filePath
+        const canLink = Boolean(options.repoUrl && options.sha && filePath);
+        const fileLink = canLink && filePath
             ? `[${fileName}](${options.repoUrl}/blob/${options.sha}/${filePath})`
             : fileName;
         const cols = [
@@ -44177,10 +44178,16 @@ class SummaryFormatter {
             const ranges = formatUncoveredLines(data.uncoveredLines, {
                 maxLength: 15,
             }).split(',');
-            const fileUrl = `${options.repoUrl}/blob/${options.sha}/${filePath}`;
+            const canLink = Boolean(options.repoUrl && options.sha);
+            const fileUrl = canLink
+                ? `${options.repoUrl}/blob/${options.sha}/${filePath}`
+                : '';
             return ranges
                 .map((range) => {
                 const [start, end] = range.split('-');
+                if (!fileUrl) {
+                    return `\`${range}\``;
+                }
                 const link = end
                     ? `${fileUrl}#L${start}-L${end}`
                     : `${fileUrl}#L${start}`;
@@ -44462,8 +44469,6 @@ class CoverageReporter {
     workDirInput = coreExports.getInput('working-directory', {
         required: false,
     });
-    repoUrl = coreExports.getInput('repo-url', { required: false });
-    sha = coreExports.getInput('sha', { required: false });
     failOnEmpty = coreExports.getInput('fail-on-empty', { required: false }) === 'true';
     async run(writeSummary = true) {
         if (this.patterns.length === 0) {
@@ -44475,11 +44480,15 @@ class CoverageReporter {
             process.chdir(this.workDirInput);
         }
         try {
+            const repoUrl = process.env.GITHUB_SERVER_URL && process.env.GITHUB_REPOSITORY
+                ? `${process.env.GITHUB_SERVER_URL}/${process.env.GITHUB_REPOSITORY}`
+                : '';
+            const sha = process.env.GITHUB_SHA ?? '';
             const output = await runCoverage({
                 patterns: this.patterns,
                 rootDir: process.cwd(),
-                repoUrl: this.repoUrl,
-                sha: this.sha,
+                repoUrl,
+                sha,
             });
             if (writeSummary && output.summaries.length > 0) {
                 await coreExports.summary.addRaw(output.summaries.join('\n\n')).write();

@@ -204,10 +204,12 @@ export class SummaryFormatter implements CoverageFormatter<SummaryOptions> {
     const { statements, branches, methods, lines } = data;
     const indentStr = ' '.repeat(indent) + (indent > 0 ? '•  ' : '');
     const fileName = isSummary ? `**${name}**` : name;
+    const canLink = Boolean(options.repoUrl && options.sha && filePath);
 
-    const fileLink = filePath
-      ? `[${fileName}](${options.repoUrl}/blob/${options.sha}/${filePath})`
-      : fileName;
+    const fileLink =
+      canLink && filePath
+        ? `[${fileName}](${options.repoUrl}/blob/${options.sha}/${filePath})`
+        : fileName;
 
     const cols = [
       `${indentStr}${fileLink}`,
@@ -254,11 +256,17 @@ export class SummaryFormatter implements CoverageFormatter<SummaryOptions> {
       const ranges = formatUncoveredLines(data.uncoveredLines, {
         maxLength: 15,
       }).split(',');
-      const fileUrl = `${options.repoUrl}/blob/${options.sha}/${filePath}`;
+      const canLink = Boolean(options.repoUrl && options.sha);
+      const fileUrl = canLink
+        ? `${options.repoUrl}/blob/${options.sha}/${filePath}`
+        : '';
 
       return ranges
         .map((range) => {
           const [start, end] = range.split('-');
+          if (!fileUrl) {
+            return `\`${range}\``;
+          }
           const link = end
             ? `${fileUrl}#L${start}-L${end}`
             : `${fileUrl}#L${start}`;
