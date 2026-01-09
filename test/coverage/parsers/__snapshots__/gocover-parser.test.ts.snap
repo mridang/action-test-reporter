@@ -1,0 +1,79 @@
+// Jest Snapshot v1, https://jestjs.io/docs/snapshot-testing
+
+exports[`gocover parser parses go coverage profile content 1`] = `
+{
+  "details": [
+    {
+      "branches": {
+        "covered": 0,
+        "total": 0,
+      },
+      "file": "github.com/example/project/cmd/main.go",
+      "lines": {
+        "covered": 5,
+        "total": 11,
+      },
+      "methods": {
+        "covered": 0,
+        "total": 0,
+      },
+      "statements": {
+        "covered": 3,
+        "total": 7,
+      },
+      "uncoveredLines": [
+        15,
+        16,
+        17,
+        18,
+        19,
+        20,
+      ],
+    },
+    {
+      "branches": {
+        "covered": 0,
+        "total": 0,
+      },
+      "file": "github.com/example/project/internal/util/helper.go",
+      "lines": {
+        "covered": 6,
+        "total": 11,
+      },
+      "methods": {
+        "covered": 0,
+        "total": 0,
+      },
+      "statements": {
+        "covered": 4,
+        "total": 7,
+      },
+      "uncoveredLines": [
+        10,
+        11,
+        12,
+        13,
+        14,
+      ],
+    },
+  ],
+  "overall": {
+    "branches": {
+      "covered": 0,
+      "total": 0,
+    },
+    "lines": {
+      "covered": 11,
+      "total": 22,
+    },
+    "methods": {
+      "covered": 0,
+      "total": 0,
+    },
+    "statements": {
+      "covered": 7,
+      "total": 14,
+    },
+  },
+}
+`;

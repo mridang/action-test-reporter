@@ -3,6 +3,7 @@ import { CoverageData, CoverageParser } from './coverage-parser.js';
 import { CloverParser } from './clover/clover-parser.js';
 import { CoberturaParser } from './cobertura/cobertura-parser.js';
 import { GcovParser } from './gcov/gcov-parser.js';
+import { GocoverParser } from './gocover/gocover-parser.js';
 import { JacocoParser } from './jacoco/jacoco-parser.js';
 import { LcovParser } from './lcov/lcov-parser.js';
 
@@ -15,6 +16,7 @@ const availableParsers: CoverageParser[] = [
   new CoberturaParser(),
   new CloverParser(),
   new GcovParser(),
+  new GocoverParser(),
   new LcovParser(),
 ];
 
