@@ -1,32 +1,37 @@
-// noinspection JSUnusedGlobalSymbols
+import { readFileSync } from 'fs';
+
+const packageJson = JSON.parse(
+  readFileSync(new URL('./package.json', import.meta.url), 'utf-8'),
+);
+
 export default {
   branches: ['master'],
   plugins: [
     '@semantic-release/commit-analyzer',
     '@semantic-release/release-notes-generator',
     [
-      '@semantic-release/exec',
+      '@semantic-release/npm',
       {
-        prepareCmd: 'npm run build',
+        npmPublish: true,
+        pkgRoot: '.',
+        tarballDir: '.',
+        access: 'public',
       },
     ],
     [
       '@semantic-release/github',
       {
-        assets: ['action.yml', 'dist/**'],
-        successComment: false,
-        failComment: false,
+        assets: [{ path: '*.tgz', label: 'Package' }],
       },
     ],
     [
       '@semantic-release/git',
       {
-        assets: ['package.json', 'package-lock.json', 'dist'],
+        assets: ['package.json', 'package-lock.json'],
         message:
           'chore(release): ${nextRelease.version} [skip ci]\n\n${nextRelease.notes}',
       },
     ],
-    'semantic-release-major-tag',
   ],
-  repositoryUrl: 'git+https://github.com/mridang/action-test-reporter.git',
+  repositoryUrl: packageJson.repository.url,
 };
