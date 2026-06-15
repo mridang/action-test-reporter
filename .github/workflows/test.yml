@@ -35,5 +35,5 @@ jobs:
       - name: Generate coverage report
         uses: ./
         with:
-          github-token: ${{ secrets.GITHUB_TOKEN }}
-          coverage-file: '.out/lcov.info'
+          results-path: '.out/junit.xml'
+          coverage-path: '.out/lcov.info'

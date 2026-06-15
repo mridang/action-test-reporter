@@ -1,7 +1,7 @@
 name: Better Test Reports Action
 
 description: |
-  Parse coverage reports (Clover, LCOV, etc.) and show insightful test summaries directly in your GitHub workflow.
+  Parse test results (Junit, TRX, JSON, etc.) and publish a detailed summary in GitHub Actions.
 
 author: mridang
 branding:
@@ -9,33 +9,92 @@ branding:
   icon: box
 
 inputs:
-  github-token:
-    description: >
-      GitHub token used to authenticate API requests. Required for
-      checking status checks and publishing releases. Use
-      `secrets.GITHUB_TOKEN` or a PAT with elevated scopes if needed.
-    required: true
-
-  working-directory:
-    description: >
-      The directory where your project is located, used as the base for
-      making file paths in the report relative.
+  name:
+    description: Name for the test report.
     required: false
-    default: '.'
-
-  coverage-file:
+    default: tests
+  results-path:
     description: >
-      The path to the single code coverage report file you want to parse
-      (e.g., 'build/reports/clover.xml').
-    required: true
-
-  upload-coverage-report:
+      Comma-separated list of paths to test results. Supports wildcards via
+      fast-glob. All matched result files must be of the same format. Provide to
+      generate test result reports.
+    required: false
+  list-suites:
+    description: |
+      Limits which test suites are listed. Supported options:
+        - all
+        - failed
+        - none
+    required: false
+    default: all
+  list-tests:
+    description: |
+      Limits which test cases are listed. Supported options:
+        - all
+        - failed
+        - none
+    required: false
+    default: all
+  max-annotations:
     description: >
-      Set to `true` to upload the generated coverage report as a workflow
-      artifact. If omitted or left empty, this defaults to `true`.
-      Set to `false` to disable artifact upload.
+      Limits parsing effort for errors. Must be less or equal to 50.
+    required: false
+    default: '10'
+  fail-on-error:
+    description: Set this action as failed if test report contains any failed test.
     required: false
     default: 'true'
+  fail-on-empty:
+    description: Set this action as failed if no test or coverage results were found.
+    required: false
+    default: 'true'
+  working-directory:
+    description: Relative path under $GITHUB_WORKSPACE where the repository was checked out.
+    required: false
+    default: .
+  report-title:
+    description: Title for the test report summary.
+    required: false
+    default: ''
+  only-summary:
+    description: >
+      If enabled, the report will contain only the per-report table without
+      listing individual suites or tests.
+    default: 'false'
+    required: false
+  badge-title:
+    description: Customize badge title.
+    required: false
+    default: tests
+  collapsed:
+    description: |
+      Controls whether test report details are collapsed or expanded. Supported options:
+        - auto: Collapse only if all tests pass (default behavior)
+        - always: Always collapse the report details
+        - never: Always expand the report details
+    required: false
+    default: auto
+  coverage-path:
+    description: >
+      Comma-separated list of paths to coverage reports. Supports wildcards via
+      fast-glob. All matched coverage files must be of the same format. Provide
+      to generate coverage reports.
+    required: false
+
+outputs:
+  conclusion:
+    description: |
+      Final conclusion based on test results:
+        - 'success' if no failed tests were found
+        - 'failure' if any failed test was found
+  passed:
+    description: Count of passed tests
+  failed:
+    description: Count of failed tests
+  skipped:
+    description: Count of skipped tests
+  time:
+    description: Test execution time [ms]
 
 runs:
   using: node24

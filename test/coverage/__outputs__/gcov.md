@@ -1,0 +1,8 @@
+### Code Coverage Report 📊
+
+Here are the details about the code coverage for the latest commit.
+
+| File | Statements | Branches | Functions | Lines | Uncovered Lines |
+| :--- | :--- | :--- | :--- | :--- | :--- |
+| [file.cpp](https://example.com/repo/blob/abc123/file.cpp) | ![50%](https://raw.githubusercontent.com/mridang/scratch/refs/heads/master/dist/res/progress-yellow-050.svg) 50.00% | ![100%](https://raw.githubusercontent.com/mridang/scratch/refs/heads/master/dist/res/progress-green-100.svg) 100.00% | ![100%](https://raw.githubusercontent.com/mridang/scratch/refs/heads/master/dist/res/progress-green-100.svg) 100.00% | ![50%](https://raw.githubusercontent.com/mridang/scratch/refs/heads/master/dist/res/progress-yellow-050.svg) 50.00% | [`2`](https://example.com/repo/blob/abc123/file.cpp#L2) |
+| **All Files** | ![50%](https://raw.githubusercontent.com/mridang/scratch/refs/heads/master/dist/res/progress-yellow-050.svg) 50.00% | ![100%](https://raw.githubusercontent.com/mridang/scratch/refs/heads/master/dist/res/progress-green-100.svg) 100.00% | ![100%](https://raw.githubusercontent.com/mridang/scratch/refs/heads/master/dist/res/progress-green-100.svg) 100.00% | ![50%](https://raw.githubusercontent.com/mridang/scratch/refs/heads/master/dist/res/progress-yellow-050.svg) 50.00% |  |

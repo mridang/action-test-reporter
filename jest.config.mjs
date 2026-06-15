@@ -29,8 +29,18 @@ export default {
   coverageReporters: ['lcov', 'text'],
   coveragePathIgnorePatterns: ['/dist/', '/node_modules/'],
   testTimeout: 60000,
+  reporters: [
+    'default',
+    [
+      'jest-junit',
+      {
+        outputDirectory: './.out',
+        outputName: 'junit.xml',
+      },
+    ],
+  ],
   extensionsToTreatAsEsm: ['.ts', '.tsx', '.mts'],
   moduleNameMapper: {
-    '^(\\.{1,2}/.*)\\.js$': '$1',
+    '^(\\.{1,2}/(?!cjs/).*)\\.js$': '$1',
   },
 };
