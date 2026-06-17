@@ -21,7 +21,7 @@ inputs:
       The directory where your project is located, used as the base for
       making file paths in the report relative.
     required: false
-    default: '.'
+    default: .
 
   coverage-file:
     description: >
