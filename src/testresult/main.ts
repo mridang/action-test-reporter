@@ -18,13 +18,9 @@ class TestReporter {
   readonly name = core.getInput('name', { required: false }).trim() || 'tests';
   readonly resultsPath = core.getInput('results-path', { required: true });
   readonly listSuites = core.getInput('list-suites', { required: true }) as
-    | 'all'
-    | 'failed'
-    | 'none';
+    'all' | 'failed' | 'none';
   readonly listTests = core.getInput('list-tests', { required: true }) as
-    | 'all'
-    | 'failed'
-    | 'none';
+    'all' | 'failed' | 'none';
   readonly maxAnnotations = parseInt(
     core.getInput('max-annotations', { required: true }),
   );
@@ -40,9 +36,7 @@ class TestReporter {
   readonly badgeTitle = core.getInput('badge-title', { required: false });
   readonly reportTitle = core.getInput('report-title', { required: false });
   readonly collapsed = core.getInput('collapsed', { required: false }) as
-    | 'auto'
-    | 'always'
-    | 'never';
+    'auto' | 'always' | 'never';
 
   constructor() {
     if (
