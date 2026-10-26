@@ -1,0 +1,6 @@
+File 'file.cpp'
+Lines executed:50.00% of 2
+Branches executed:0.00% of 0
+Functions executed:100.00% of 1
+    1:   1:int main() {
+#####: 2:   return 0;

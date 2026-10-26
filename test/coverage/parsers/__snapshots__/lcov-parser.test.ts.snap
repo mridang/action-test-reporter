@@ -1,0 +1,48 @@
+// Jest Snapshot v1, https://jestjs.io/docs/snapshot-testing
+
+exports[`lcov parser parses lcov info content 1`] = `
+{
+  "details": [
+    {
+      "branches": {
+        "covered": 0,
+        "total": 0,
+      },
+      "file": "/tmp/file.ts",
+      "lines": {
+        "covered": 1,
+        "total": 2,
+      },
+      "methods": {
+        "covered": 1,
+        "total": 1,
+      },
+      "statements": {
+        "covered": 1,
+        "total": 2,
+      },
+      "uncoveredLines": [
+        2,
+      ],
+    },
+  ],
+  "overall": {
+    "branches": {
+      "covered": 0,
+      "total": 0,
+    },
+    "lines": {
+      "covered": 1,
+      "total": 2,
+    },
+    "methods": {
+      "covered": 1,
+      "total": 1,
+    },
+    "statements": {
+      "covered": 1,
+      "total": 2,
+    },
+  },
+}
+`;

@@ -36,10 +36,6 @@ export default {
   coverageReporters: ['lcov', 'text'],
   coveragePathIgnorePatterns: ['/dist/', '/node_modules/'],
   testTimeout: 60000,
-  extensionsToTreatAsEsm: ['.ts', '.tsx', '.mts'],
-  moduleNameMapper: {
-    '^(\\.{1,2}/.*)\\.js$': '$1',
-  },
   reporters: [
     'default',
     [
@@ -50,4 +46,8 @@ export default {
       },
     ],
   ],
+  extensionsToTreatAsEsm: ['.ts', '.tsx', '.mts'],
+  moduleNameMapper: {
+    '^(\\.{1,2}/(?!cjs/).*)\\.js$': '$1',
+  },
 };

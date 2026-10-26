@@ -72,3 +72,6 @@ Thumbs.db
 
 # Github Keys
 *.pem
+
+# Claude
+.claude

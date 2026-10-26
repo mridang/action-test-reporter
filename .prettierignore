@@ -21,3 +21,11 @@ node_modules
 # Image files
 *.png
 *.jpeg
+
+# Test fixtures
+test/testresult/__fixtures__/**/*.json
+test/coverage/__fixtures__/**/*.json
+test/__fixtures__/main/**
+test/testresult/__outputs__/**
+test/testresult/parsers/__outputs__/**
+test/coverage/__outputs__/**

@@ -1,0 +1,305 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<testsuites name="jest tests" tests="129" failures="0" errors="0" time="3.071">
+  <testsuite name="jest-junit tests" errors="0" failures="0" skipped="0" timestamp="2025-12-21T23:57:05" time="0.719" tests="19">
+    <testcase classname="jest-junit tests produces empty test run result when there are no test cases in the testsuites element" name="jest-junit tests produces empty test run result when there are no test cases in the testsuites element" time="0.003">
+    </testcase>
+    <testcase classname="jest-junit tests produces empty test run result when there are no test cases in a nested testsuite element" name="jest-junit tests produces empty test run result when there are no test cases in a nested testsuite element" time="0.001">
+    </testcase>
+    <testcase classname="jest-junit tests report from ./reports/jest test results matches snapshot" name="jest-junit tests report from ./reports/jest test results matches snapshot" time="0.013">
+    </testcase>
+    <testcase classname="jest-junit tests report from facebook/jest test results matches snapshot" name="jest-junit tests report from facebook/jest test results matches snapshot" time="0.195">
+    </testcase>
+    <testcase classname="jest-junit tests report from #235 testing react components named &lt;ComponentName /&gt;" name="jest-junit tests report from #235 testing react components named &lt;ComponentName /&gt;" time="0.001">
+    </testcase>
+    <testcase classname="jest-junit tests parsing ESLint report without timing information works - PR #134" name="jest-junit tests parsing ESLint report without timing information works - PR #134" time="0.001">
+    </testcase>
+    <testcase classname="jest-junit tests parsing junit report with message succeeds" name="jest-junit tests parsing junit report with message succeeds" time="0.001">
+    </testcase>
+    <testcase classname="jest-junit tests report does not include a title by default" name="jest-junit tests report does not include a title by default" time="0.001">
+    </testcase>
+    <testcase classname="jest-junit tests report does not include a title when configured value is empty string" name="jest-junit tests report does not include a title when configured value is empty string" time="0.001">
+    </testcase>
+    <testcase classname="jest-junit tests report does not include a title when configured value is space" name="jest-junit tests report does not include a title when configured value is space" time="0.001">
+    </testcase>
+    <testcase classname="jest-junit tests report does not include a title when configured value is tab" name="jest-junit tests report does not include a title when configured value is tab" time="0.002">
+    </testcase>
+    <testcase classname="jest-junit tests report does not include a title when configured value is newline" name="jest-junit tests report does not include a title when configured value is newline" time="0.001">
+    </testcase>
+    <testcase classname="jest-junit tests report includes a custom report title" name="jest-junit tests report includes a custom report title" time="0.001">
+    </testcase>
+    <testcase classname="jest-junit tests report can be collapsed when configured" name="jest-junit tests report can be collapsed when configured" time="0.001">
+    </testcase>
+    <testcase classname="jest-junit tests report is not collapsed when configured to never" name="jest-junit tests report is not collapsed when configured to never" time="0">
+    </testcase>
+    <testcase classname="jest-junit tests report auto-collapses when all tests pass" name="jest-junit tests report auto-collapses when all tests pass" time="0.001">
+    </testcase>
+    <testcase classname="jest-junit tests report does not auto-collapse when tests fail" name="jest-junit tests report does not auto-collapse when tests fail" time="0.001">
+    </testcase>
+    <testcase classname="jest-junit tests report includes the short summary" name="jest-junit tests report includes the short summary" time="0">
+    </testcase>
+    <testcase classname="jest-junit tests report includes a custom report title and short summary" name="jest-junit tests report includes a custom report title and short summary" time="0.001">
+    </testcase>
+  </testsuite>
+  <testsuite name="dotnet-trx tests" errors="0" failures="0" skipped="0" timestamp="2025-12-21T23:57:06" time="0.266" tests="13">
+    <testcase classname="dotnet-trx tests produces empty test run result when there are no test cases" name="dotnet-trx tests produces empty test run result when there are no test cases" time="0.004">
+    </testcase>
+    <testcase classname="dotnet-trx tests produces empty test run result when TestDefinitions is empty" name="dotnet-trx tests produces empty test run result when TestDefinitions is empty" time="0.001">
+    </testcase>
+    <testcase classname="dotnet-trx tests matches dotnet-trx report snapshot" name="dotnet-trx tests matches dotnet-trx report snapshot" time="0.008">
+    </testcase>
+    <testcase classname="dotnet-trx tests matches dotnet-xunitv3 report snapshot" name="dotnet-trx tests matches dotnet-xunitv3 report snapshot" time="0.003">
+    </testcase>
+    <testcase classname="dotnet-trx tests matches report snapshot (only failed tests)" name="dotnet-trx tests matches report snapshot (only failed tests)" time="0.006">
+    </testcase>
+    <testcase classname="dotnet-trx tests report from FluentValidation test results matches snapshot" name="dotnet-trx tests report from FluentValidation test results matches snapshot" time="0.109">
+    </testcase>
+    <testcase classname="dotnet-trx tests report from SilentNotes test results matches snapshot" name="dotnet-trx tests report from SilentNotes test results matches snapshot" time="0.011">
+    </testcase>
+    <testcase classname="dotnet-trx tests report does not include a title by default" name="dotnet-trx tests report does not include a title by default" time="0.002">
+    </testcase>
+    <testcase classname="dotnet-trx tests report does not include a title when configured value is empty string" name="dotnet-trx tests report does not include a title when configured value is empty string" time="0.002">
+    </testcase>
+    <testcase classname="dotnet-trx tests report does not include a title when configured value is space" name="dotnet-trx tests report does not include a title when configured value is space" time="0.001">
+    </testcase>
+    <testcase classname="dotnet-trx tests report does not include a title when configured value is tab" name="dotnet-trx tests report does not include a title when configured value is tab" time="0.002">
+    </testcase>
+    <testcase classname="dotnet-trx tests report does not include a title when configured value is newline" name="dotnet-trx tests report does not include a title when configured value is newline" time="0.002">
+    </testcase>
+    <testcase classname="dotnet-trx tests report includes a custom report title" name="dotnet-trx tests report includes a custom report title" time="0.001">
+    </testcase>
+  </testsuite>
+  <testsuite name="undefined" errors="0" failures="0" skipped="0" timestamp="2025-12-21T23:57:06" time="0.422" tests="2">
+    <testcase classname=" runs test reporter end-to-end with junit input" name=" runs test reporter end-to-end with junit input" time="0.014">
+    </testcase>
+    <testcase classname=" runs coverage reporter end-to-end with lcov input" name=" runs coverage reporter end-to-end with lcov input" time="0.012">
+    </testcase>
+  </testsuite>
+  <testsuite name="java-junit tests" errors="0" failures="0" skipped="0" timestamp="2025-12-21T23:57:07" time="0.147" tests="10">
+    <testcase classname="java-junit tests produces empty test run result when there are no test cases" name="java-junit tests produces empty test run result when there are no test cases" time="0.003">
+    </testcase>
+    <testcase classname="java-junit tests report from apache/pulsar single suite test results matches snapshot" name="java-junit tests report from apache/pulsar single suite test results matches snapshot" time="0.009">
+    </testcase>
+    <testcase classname="java-junit tests report from apache/pulsar test results matches snapshot" name="java-junit tests report from apache/pulsar test results matches snapshot" time="0.05">
+    </testcase>
+    <testcase classname="java-junit tests parses empty failures in test results" name="java-junit tests parses empty failures in test results" time="0.001">
+    </testcase>
+    <testcase classname="java-junit tests report does not include a title by default" name="java-junit tests report does not include a title by default" time="0.001">
+    </testcase>
+    <testcase classname="java-junit tests report does not include a title when configured value is empty string" name="java-junit tests report does not include a title when configured value is empty string" time="0.001">
+    </testcase>
+    <testcase classname="java-junit tests report does not include a title when configured value is space" name="java-junit tests report does not include a title when configured value is space" time="0">
+    </testcase>
+    <testcase classname="java-junit tests report does not include a title when configured value is tab" name="java-junit tests report does not include a title when configured value is tab" time="0.002">
+    </testcase>
+    <testcase classname="java-junit tests report does not include a title when configured value is newline" name="java-junit tests report does not include a title when configured value is newline" time="0.001">
+    </testcase>
+    <testcase classname="java-junit tests report includes a custom report title" name="java-junit tests report includes a custom report title" time="0">
+    </testcase>
+  </testsuite>
+  <testsuite name="dotnet-nunit tests" errors="0" failures="0" skipped="0" timestamp="2025-12-21T23:57:07" time="0.1" tests="7">
+    <testcase classname="dotnet-nunit tests report from ./reports/dotnet test results matches snapshot" name="dotnet-nunit tests report from ./reports/dotnet test results matches snapshot" time="0.008">
+    </testcase>
+    <testcase classname="dotnet-nunit tests report does not include a title by default" name="dotnet-nunit tests report does not include a title by default" time="0.004">
+    </testcase>
+    <testcase classname="dotnet-nunit tests report does not include a title when configured value is empty string" name="dotnet-nunit tests report does not include a title when configured value is empty string" time="0.003">
+    </testcase>
+    <testcase classname="dotnet-nunit tests report does not include a title when configured value is space" name="dotnet-nunit tests report does not include a title when configured value is space" time="0.003">
+    </testcase>
+    <testcase classname="dotnet-nunit tests report does not include a title when configured value is tab" name="dotnet-nunit tests report does not include a title when configured value is tab" time="0.003">
+    </testcase>
+    <testcase classname="dotnet-nunit tests report does not include a title when configured value is newline" name="dotnet-nunit tests report does not include a title when configured value is newline" time="0.003">
+    </testcase>
+    <testcase classname="dotnet-nunit tests report includes a custom report title" name="dotnet-nunit tests report includes a custom report title" time="0.003">
+    </testcase>
+  </testsuite>
+  <testsuite name="python-xunit unittest report" errors="0" failures="0" skipped="0" timestamp="2025-12-21T23:57:07" time="0.089" tests="8">
+    <testcase classname="python-xunit unittest report report from python test results matches snapshot" name="python-xunit unittest report report from python test results matches snapshot" time="0.007">
+    </testcase>
+    <testcase classname="python-xunit unittest report report does not include a title by default" name="python-xunit unittest report report does not include a title by default" time="0.002">
+    </testcase>
+    <testcase classname="python-xunit unittest report report does not include a title when configured value is empty string" name="python-xunit unittest report report does not include a title when configured value is empty string" time="0.002">
+    </testcase>
+    <testcase classname="python-xunit unittest report report does not include a title when configured value is space" name="python-xunit unittest report report does not include a title when configured value is space" time="0">
+    </testcase>
+    <testcase classname="python-xunit unittest report report does not include a title when configured value is tab" name="python-xunit unittest report report does not include a title when configured value is tab" time="0.003">
+    </testcase>
+    <testcase classname="python-xunit unittest report report does not include a title when configured value is newline" name="python-xunit unittest report report does not include a title when configured value is newline" time="0.001">
+    </testcase>
+    <testcase classname="python-xunit unittest report report includes a custom report title" name="python-xunit unittest report report includes a custom report title" time="0">
+    </testcase>
+    <testcase classname="python-xunit pytest report report from python test results matches snapshot" name="python-xunit pytest report report from python test results matches snapshot" time="0.001">
+    </testcase>
+  </testsuite>
+  <testsuite name="dart-json tests" errors="0" failures="0" skipped="0" timestamp="2025-12-21T23:57:07" time="0.086" tests="9">
+    <testcase classname="dart-json tests produces empty test run result when there are no test cases" name="dart-json tests produces empty test run result when there are no test cases" time="0.001">
+    </testcase>
+    <testcase classname="dart-json tests matches report snapshot" name="dart-json tests matches report snapshot" time="0.003">
+    </testcase>
+    <testcase classname="dart-json tests report from rrousselGit/provider test results matches snapshot" name="dart-json tests report from rrousselGit/provider test results matches snapshot" time="0.011">
+    </testcase>
+    <testcase classname="dart-json tests report does not include a title by default" name="dart-json tests report does not include a title by default" time="0">
+    </testcase>
+    <testcase classname="dart-json tests report does not include a title when configured value is empty string" name="dart-json tests report does not include a title when configured value is empty string" time="0.001">
+    </testcase>
+    <testcase classname="dart-json tests report does not include a title when configured value is space" name="dart-json tests report does not include a title when configured value is space" time="0">
+    </testcase>
+    <testcase classname="dart-json tests report does not include a title when configured value is tab" name="dart-json tests report does not include a title when configured value is tab" time="0">
+    </testcase>
+    <testcase classname="dart-json tests report does not include a title when configured value is newline" name="dart-json tests report does not include a title when configured value is newline" time="0.001">
+    </testcase>
+    <testcase classname="dart-json tests report includes a custom report title" name="dart-json tests report includes a custom report title" time="0">
+    </testcase>
+  </testsuite>
+  <testsuite name="mocha-json tests" errors="0" failures="0" skipped="0" timestamp="2025-12-21T23:57:07" time="0.11" tests="9">
+    <testcase classname="mocha-json tests produces empty test run result when there are no test cases" name="mocha-json tests produces empty test run result when there are no test cases" time="0.001">
+    </testcase>
+    <testcase classname="mocha-json tests report from ./reports/mocha-json test results matches snapshot" name="mocha-json tests report from ./reports/mocha-json test results matches snapshot" time="0.003">
+    </testcase>
+    <testcase classname="mocha-json tests report from mochajs/mocha test results matches snapshot" name="mocha-json tests report from mochajs/mocha test results matches snapshot" time="0.034">
+    </testcase>
+    <testcase classname="mocha-json tests report does not include a title by default" name="mocha-json tests report does not include a title by default" time="0.001">
+    </testcase>
+    <testcase classname="mocha-json tests report does not include a title when configured value is empty string" name="mocha-json tests report does not include a title when configured value is empty string" time="0">
+    </testcase>
+    <testcase classname="mocha-json tests report does not include a title when configured value is space" name="mocha-json tests report does not include a title when configured value is space" time="0.001">
+    </testcase>
+    <testcase classname="mocha-json tests report does not include a title when configured value is tab" name="mocha-json tests report does not include a title when configured value is tab" time="0">
+    </testcase>
+    <testcase classname="mocha-json tests report does not include a title when configured value is newline" name="mocha-json tests report does not include a title when configured value is newline" time="0">
+    </testcase>
+    <testcase classname="mocha-json tests report includes a custom report title" name="mocha-json tests report includes a custom report title" time="0.001">
+    </testcase>
+  </testsuite>
+  <testsuite name="swift-xunit tests" errors="0" failures="0" skipped="0" timestamp="2025-12-21T23:57:07" time="0.098" tests="7">
+    <testcase classname="swift-xunit tests report from swift test results matches snapshot" name="swift-xunit tests report from swift test results matches snapshot" time="0.006">
+    </testcase>
+    <testcase classname="swift-xunit tests report does not include a title by default" name="swift-xunit tests report does not include a title by default" time="0.001">
+    </testcase>
+    <testcase classname="swift-xunit tests report does not include a title when configured value is empty string" name="swift-xunit tests report does not include a title when configured value is empty string" time="0">
+    </testcase>
+    <testcase classname="swift-xunit tests report does not include a title when configured value is space" name="swift-xunit tests report does not include a title when configured value is space" time="0.001">
+    </testcase>
+    <testcase classname="swift-xunit tests report does not include a title when configured value is tab" name="swift-xunit tests report does not include a title when configured value is tab" time="0">
+    </testcase>
+    <testcase classname="swift-xunit tests report does not include a title when configured value is newline" name="swift-xunit tests report does not include a title when configured value is newline" time="0">
+    </testcase>
+    <testcase classname="swift-xunit tests report includes a custom report title" name="swift-xunit tests report includes a custom report title" time="0">
+    </testcase>
+  </testsuite>
+  <testsuite name="rspec-json tests" errors="0" failures="0" skipped="0" timestamp="2025-12-21T23:57:08" time="0.077" tests="8">
+    <testcase classname="rspec-json tests produces empty test run result when there are no test cases" name="rspec-json tests produces empty test run result when there are no test cases" time="0.002">
+    </testcase>
+    <testcase classname="rspec-json tests report from ./reports/rspec-json test results matches snapshot" name="rspec-json tests report from ./reports/rspec-json test results matches snapshot" time="0.003">
+    </testcase>
+    <testcase classname="rspec-json tests report does not include a title by default" name="rspec-json tests report does not include a title by default" time="0">
+    </testcase>
+    <testcase classname="rspec-json tests report does not include a title when configured value is empty string" name="rspec-json tests report does not include a title when configured value is empty string" time="0">
+    </testcase>
+    <testcase classname="rspec-json tests report does not include a title when configured value is space" name="rspec-json tests report does not include a title when configured value is space" time="0.001">
+    </testcase>
+    <testcase classname="rspec-json tests report does not include a title when configured value is tab" name="rspec-json tests report does not include a title when configured value is tab" time="0">
+    </testcase>
+    <testcase classname="rspec-json tests report does not include a title when configured value is newline" name="rspec-json tests report does not include a title when configured value is newline" time="0">
+    </testcase>
+    <testcase classname="rspec-json tests report includes a custom report title" name="rspec-json tests report includes a custom report title" time="0.001">
+    </testcase>
+  </testsuite>
+  <testsuite name="LocalFileProvider" errors="0" failures="0" skipped="0" timestamp="2025-12-21T23:57:08" time="0.074" tests="1">
+    <testcase classname="LocalFileProvider loads matching test result files" name="LocalFileProvider loads matching test result files" time="0.006">
+    </testcase>
+  </testsuite>
+  <testsuite name="golang-json tests" errors="0" failures="0" skipped="0" timestamp="2025-12-21T23:57:08" time="0.067" tests="1">
+    <testcase classname="golang-json tests report from ./reports/dotnet test results matches snapshot" name="golang-json tests report from ./reports/dotnet test results matches snapshot" time="0.005">
+    </testcase>
+  </testsuite>
+  <testsuite name="getBadge" errors="0" failures="0" skipped="0" timestamp="2025-12-21T23:57:08" time="0.069" tests="14">
+    <testcase classname="getBadge URI encoding with special characters generates correct URI with simple badge title" name="getBadge URI encoding with special characters generates correct URI with simple badge title" time="0.001">
+    </testcase>
+    <testcase classname="getBadge URI encoding with special characters handles badge title with single hyphen" name="getBadge URI encoding with special characters handles badge title with single hyphen" time="0.001">
+    </testcase>
+    <testcase classname="getBadge URI encoding with special characters handles badge title with multiple hyphens" name="getBadge URI encoding with special characters handles badge title with multiple hyphens" time="0">
+    </testcase>
+    <testcase classname="getBadge URI encoding with special characters handles badge title with multiple underscores" name="getBadge URI encoding with special characters handles badge title with multiple underscores" time="0">
+    </testcase>
+    <testcase classname="getBadge URI encoding with special characters handles badge title with version format containing hyphen" name="getBadge URI encoding with special characters handles badge title with version format containing hyphen" time="0">
+    </testcase>
+    <testcase classname="getBadge URI encoding with special characters handles badge title with dots and hyphens" name="getBadge URI encoding with special characters handles badge title with dots and hyphens" time="0">
+    </testcase>
+    <testcase classname="getBadge URI encoding with special characters preserves structural hyphens between label and message" name="getBadge URI encoding with special characters preserves structural hyphens between label and message" time="0">
+    </testcase>
+    <testcase classname="getBadge generates test outcome as color name for imgshields uses success color when all tests pass" name="getBadge generates test outcome as color name for imgshields uses success color when all tests pass" time="0.001">
+    </testcase>
+    <testcase classname="getBadge generates test outcome as color name for imgshields uses critical color when tests fail" name="getBadge generates test outcome as color name for imgshields uses critical color when tests fail" time="0">
+    </testcase>
+    <testcase classname="getBadge generates test outcome as color name for imgshields uses yellow color when no tests found" name="getBadge generates test outcome as color name for imgshields uses yellow color when no tests found" time="0">
+    </testcase>
+    <testcase classname="getBadge badge message composition includes only passed count when no failures or skips" name="getBadge badge message composition includes only passed count when no failures or skips" time="0">
+    </testcase>
+    <testcase classname="getBadge badge message composition includes passed and failed counts" name="getBadge badge message composition includes passed and failed counts" time="0">
+    </testcase>
+    <testcase classname="getBadge badge message composition includes passed, failed and skipped counts" name="getBadge badge message composition includes passed, failed and skipped counts" time="0">
+    </testcase>
+    <testcase classname="getBadge badge message composition uses &quot;none&quot; message when no tests" name="getBadge badge message composition uses &quot;none&quot; message when no tests" time="0.001">
+    </testcase>
+  </testsuite>
+  <testsuite name="lcov parser" errors="0" failures="0" skipped="0" timestamp="2025-12-21T23:57:08" time="0.039" tests="1">
+    <testcase classname="lcov parser parses lcov info content" name="lcov parser parses lcov info content" time="0.001">
+    </testcase>
+  </testsuite>
+  <testsuite name="LocalCoverageProvider" errors="0" failures="0" skipped="0" timestamp="2025-12-21T23:57:08" time="0.052" tests="1">
+    <testcase classname="LocalCoverageProvider loads matching coverage files" name="LocalCoverageProvider loads matching coverage files" time="0.006">
+    </testcase>
+  </testsuite>
+  <testsuite name="parseNetDuration" errors="0" failures="0" skipped="0" timestamp="2025-12-21T23:57:08" time="0.044" tests="7">
+    <testcase classname="parseNetDuration returns 0 for 00:00:00" name="parseNetDuration returns 0 for 00:00:00" time="0.001">
+    </testcase>
+    <testcase classname="parseNetDuration returns 0 for 00:00:00.0000000" name="parseNetDuration returns 0 for 00:00:00.0000000" time="0">
+    </testcase>
+    <testcase classname="parseNetDuration returns 123 for 00:00:00.123" name="parseNetDuration returns 123 for 00:00:00.123" time="0">
+    </testcase>
+    <testcase classname="parseNetDuration returns 12 * 1000 for 00:00:12" name="parseNetDuration returns 12 * 1000 for 00:00:12" time="0">
+    </testcase>
+    <testcase classname="parseNetDuration returns 12 * 60 * 1000 for 00:12:00" name="parseNetDuration returns 12 * 60 * 1000 for 00:12:00" time="0.001">
+    </testcase>
+    <testcase classname="parseNetDuration returns 12 * 60 * 60 * 1000 for 12:00:00" name="parseNetDuration returns 12 * 60 * 60 * 1000 for 12:00:00" time="0">
+    </testcase>
+    <testcase classname="parseNetDuration throws when string has invalid format" name="parseNetDuration throws when string has invalid format" time="0.003">
+    </testcase>
+  </testsuite>
+  <testsuite name="parseStackTraceLine tests" errors="0" failures="0" skipped="0" timestamp="2025-12-21T23:57:08" time="0.044" tests="7">
+    <testcase classname="parseStackTraceLine tests empty line is not parsed" name="parseStackTraceLine tests empty line is not parsed" time="0.001">
+    </testcase>
+    <testcase classname="parseStackTraceLine tests java class simple" name="parseStackTraceLine tests java class simple" time="0.001">
+    </testcase>
+    <testcase classname="parseStackTraceLine tests java class inner class" name="parseStackTraceLine tests java class inner class" time="0">
+    </testcase>
+    <testcase classname="parseStackTraceLine tests java class starts with whitespaces" name="parseStackTraceLine tests java class starts with whitespaces" time="0">
+    </testcase>
+    <testcase classname="parseStackTraceLine tests java class since Java 9 with classloader and module" name="parseStackTraceLine tests java class since Java 9 with classloader and module" time="0">
+    </testcase>
+    <testcase classname="parseStackTraceLine tests java class since Java 9 with classloader" name="parseStackTraceLine tests java class since Java 9 with classloader" time="0.001">
+    </testcase>
+    <testcase classname="parseStackTraceLine tests Kotlin class method name containing whitespaces" name="parseStackTraceLine tests Kotlin class method name containing whitespaces" time="0">
+    </testcase>
+  </testsuite>
+  <testsuite name="cobertura parser" errors="0" failures="0" skipped="0" timestamp="2025-12-21T23:57:08" time="0.055" tests="1">
+    <testcase classname="cobertura parser parses cobertura xml content" name="cobertura parser parses cobertura xml content" time="0.003">
+    </testcase>
+  </testsuite>
+  <testsuite name="jacoco parser" errors="0" failures="0" skipped="0" timestamp="2025-12-21T23:57:08" time="0.052" tests="1">
+    <testcase classname="jacoco parser parses jacoco xml content" name="jacoco parser parses jacoco xml content" time="0.004">
+    </testcase>
+  </testsuite>
+  <testsuite name="clover parser" errors="0" failures="0" skipped="0" timestamp="2025-12-21T23:57:08" time="0.05" tests="1">
+    <testcase classname="clover parser parses clover xml content" name="clover parser parses clover xml content" time="0.003">
+    </testcase>
+  </testsuite>
+  <testsuite name="gcov parser" errors="0" failures="0" skipped="0" timestamp="2025-12-21T23:57:08" time="0.048" tests="1">
+    <testcase classname="gcov parser parses gcov text content" name="gcov parser parses gcov text content" time="0.002">
+    </testcase>
+  </testsuite>
+  <testsuite name="coverage summary formatter" errors="0" failures="0" skipped="0" timestamp="2025-12-21T23:57:08" time="0.046" tests="1">
+    <testcase classname="coverage summary formatter renders basic coverage table" name="coverage summary formatter renders basic coverage table" time="0.001">
+    </testcase>
+  </testsuite>
+</testsuites>
