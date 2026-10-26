@@ -1,7 +1,7 @@
 name: Better Test Reports Action
 
 description: |
-  Parse coverage reports (Clover, LCOV, etc.) and show insightful test summaries directly in your GitHub workflow.
+  Parse coverage reports (Clover, Cobertura, JaCoCo, LCOV, llvm-cov JSON, etc.) and show insightful test summaries directly in your GitHub workflow.
 
 author: mridang
 branding:

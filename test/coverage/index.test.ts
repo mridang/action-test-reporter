@@ -5,6 +5,7 @@ import { CloverParser } from '../../src/coverage/clover-parser.js';
 import { CoberturaParser } from '../../src/coverage/cobertura-parser.js';
 import { JacocoParser } from '../../src/coverage/jacoco-parser.js';
 import { LcovParser } from '../../src/coverage/lcov-parser.js';
+import { LlvmCovParser } from '../../src/coverage/llvm-cov-parser.js';
 
 describe('getParserForFile', () => {
   it('should return a clover-parser for a clover.xml file', async () => {
@@ -29,5 +30,11 @@ describe('getParserForFile', () => {
     const filePath = path.join(process.cwd(), 'test', 'res', 'lcov.info');
     const parser = await getParserForFile(filePath);
     expect(parser).toBeInstanceOf(LcovParser);
+  });
+
+  it('should return a llvm-cov-parser for a llvm-cov.json file', async () => {
+    const filePath = path.join(process.cwd(), 'test', 'res', 'llvm-cov.json');
+    const parser = await getParserForFile(filePath);
+    expect(parser).toBeInstanceOf(LlvmCovParser);
   });
 });
