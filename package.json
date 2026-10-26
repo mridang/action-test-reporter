@@ -25,6 +25,8 @@
     "cobertura",
     "jacoco",
     "lcov",
+    "llvm-cov",
+    "swift",
     "junit",
     "typescript"
   ],
