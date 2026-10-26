@@ -5,6 +5,7 @@ import { CoberturaParser } from './cobertura-parser.js';
 import { GcovParser } from './gcov-parser.js';
 import { JacocoParser } from './jacoco-parser.js';
 import { LcovParser } from './lcov-parser.js';
+import { LlvmCovParser } from './llvm-cov-parser.js';
 
 /**
  * An array of all available parser instances to be tried in order.
@@ -15,6 +16,7 @@ const availableParsers: CoverageParser[] = [
   new CoberturaParser(),
   new CloverParser(),
   new GcovParser(),
+  new LlvmCovParser(),
   new LcovParser(),
 ];
 

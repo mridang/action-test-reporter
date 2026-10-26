@@ -4,7 +4,7 @@ A GitHub Action that parses various code coverage report formats and generates a
 
 ## Features
 
-- **Multi-Format Support**: Natively parses the most popular coverage report formats: Clover (clover.xml), Cobertura (cobertura.xml), JaCoCo (jacoco.xml), and LCOV (lcov.info). Please note that many other formats are not currently supported.
+- **Multi-Format Support**: Natively parses the most popular coverage report formats: Clover (clover.xml), Cobertura (cobertura.xml), JaCoCo (jacoco.xml), LCOV (lcov.info), and the llvm-cov JSON export (e.g. from SwiftPM). Please note that many other formats are not currently supported.
 - **Automatic Detection**: Intelligently determines the report format from the file content, so no configuration is needed.
 - **Interactive Summaries**: Generates a clean, hierarchical Markdown summary with progress bars for quick visual feedback.
 - **Deep Linking**: Creates links to each file and even to the specific uncovered lines within that file for the exact commit, making it easy to see where coverage is lacking.
@@ -48,7 +48,7 @@ jobs:
         uses: mridang/action-test-reporter@v1
         with:
           github-token: ${{ secrets.GITHUB_TOKEN }}
-          coverage-file: ./coverage/clover.xml # Path to your clover, cobertura, jacoco, or lcov file
+          coverage-file: ./coverage/clover.xml # Path to your clover, cobertura, jacoco, lcov, or llvm-cov JSON file
           working-directory: ./
 ```
 
@@ -67,6 +67,7 @@ To use this action, your test suite must be configured to generate a supported c
 - **[coverage.py](https://coverage.readthedocs.io/en/latest/)**: The standard Python coverage tool. Use it with pytest or unittest and then generate a Cobertura-compatible XML report with `coverage xml`.
 - **[cargo-tarpaulin](https://github.com/xd009642/tarpaulin#readme)**: A popular tool for Rust that can generate reports in various formats, including Cobertura and LCOV.
 - **[Coverlet](https://github.com/coverlet-coverage/coverlet#readme)**: The official Microsoft documentation details how to use Coverlet with `dotnet test` to generate Cobertura coverage reports.
+- **[SwiftPM](https://www.swift.org/documentation/package-manager/)**: Run `swift test --enable-code-coverage` and point `coverage-file` at the llvm-cov JSON it writes to `.build/<triple>/debug/codecov/<package>.json` (find it with `swift test --show-codecov-path`). No conversion step is needed. Files under `.build/` (dependencies) are ignored so they do not dilute the totals, and paths are made relative to `working-directory`.
 
 ### Inputs
 
