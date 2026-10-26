@@ -12,11 +12,18 @@ defaults:
   run:
     working-directory: ./
 
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: false
+
 jobs:
   publish-package:
     runs-on: ubuntu-latest
 
     steps:
+      - name: Runner Common Setup
+        uses: mridang/action-runner-common@v1
+
       - name: Checkout code
         uses: actions/checkout@v5
 
@@ -25,14 +32,6 @@ jobs:
         with:
           cache: 'npm'
           node-version-file: '.nvmrc'
-
-      - name: Cache node modules
-        uses: actions/cache@v4
-        with:
-          path: ~/.npm
-          key: ${{ runner.os }}-node-${{ hashFiles('**/package-lock.json') }}
-          restore-keys: |
-            ${{ runner.os }}-node-
 
       - name: Install Dependencies
         run: npm ci

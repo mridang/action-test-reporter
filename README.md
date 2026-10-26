@@ -5,7 +5,7 @@ A GitHub Action that parses test results and coverage files from popular tools a
 ## Features
 
 - Test results: Auto-detects `dart-json`, `dotnet-nunit`, `dotnet-trx`, `flutter-json`, `golang-json`, `java-junit`, `jest-junit`, `mocha-json`, `python-xunit`, `rspec-json`, and `swift-xunit`.
-- Coverage: Auto-detects `clover`, `cobertura`, `gcov`, `jacoco`, and `lcov`.
+- Coverage: Auto-detects `clover`, `cobertura`, `gcov`, `gocover`, `jacoco`, `lcov`, and `llvm-cov` (JSON export, e.g. SwiftPM).
 - Writes directly to the Actions summary (no tokens required) with badges and tables.
 - Handles large suites with an optional summary-only mode.
 - Traces failures back to repository files when stack traces match tracked paths.

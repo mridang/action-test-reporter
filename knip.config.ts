@@ -1,4 +1,4 @@
-module.exports = {
+export default {
   entry: [
     'src/index.ts',
     'src/testresult/main.ts',
@@ -7,8 +7,7 @@ module.exports = {
   ],
   project: ['src/**/*.ts', 'test/**/*.ts'],
   ignoreDependencies: [
-    '@semantic-release/.*?',
+    /^@semantic-release\//,
     '@commitlint/config-conventional',
-    'jest-junit',
   ],
 };
