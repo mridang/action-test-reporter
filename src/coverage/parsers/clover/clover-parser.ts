@@ -4,18 +4,18 @@ import { CloverFile, CloverXml } from './clover-types.js';
 
 /**
  * A parser for Clover XML coverage reports.
- * @export
  * @class CloverParser
- * @extends {BaseParser}
+ * @augments {BaseParser}
+ * @export
  */
 export class CloverParser extends BaseParser<CloverXml> {
   /**
    * Processes the parsed Clover XML object to extract coverage data.
-   * @protected
-   * @param {CloverXml} xml - The parsed Clover XML report.
-   * @returns {Promise<CoverageData>} A promise that resolves to the
-   * structured file coverage data.
    * @memberof CloverParser
+   * @param xml - The parsed Clover XML report.
+   * @returns A promise that resolves to the
+   * structured file coverage data.
+   * @protected
    */
   protected process(xml: CloverXml): Promise<CoverageData> {
     const project = xml.coverage.project[0];

@@ -1,4 +1,4 @@
-import * as fs from 'fs';
+import * as fs from 'node:fs';
 import glob from 'fast-glob';
 import { CoverageFile, CoverageInputProvider } from './input-provider.js';
 

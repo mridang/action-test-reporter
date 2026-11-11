@@ -36,14 +36,18 @@ class Test {
 
   get result(): TestExecutionResult | undefined {
     switch (this.outcome) {
-      case 'Passed':
+      case 'Passed': {
         return 'success';
-      case 'NotExecuted':
+      }
+      case 'NotExecuted': {
         return 'skipped';
-      case 'Failed':
+      }
+      case 'Failed': {
         return 'failed';
-      default:
+      }
+      default: {
         return undefined;
+      }
     }
   }
 }
@@ -70,8 +74,8 @@ export class DotnetTrxParser implements TestParser {
   ): Promise<TrxReport> {
     try {
       return (await parseStringPromise(content)) as TrxReport;
-    } catch (e) {
-      throw new Error(`Invalid XML at ${path}\n\n${e}`);
+    } catch (error) {
+      throw new Error(`Invalid XML at ${path}\n\n${error}`);
     }
   }
 
@@ -209,7 +213,7 @@ export class DotnetTrxParser implements TestParser {
         if (workDir) {
           const file = filePath.slice(workDir.length);
           if (trackedFiles.includes(file)) {
-            const line = parseInt(lineStr);
+            const line = Number.parseInt(lineStr);
             return { path: file, line };
           }
         }

@@ -1,5 +1,5 @@
-import * as fs from 'fs';
-import * as path from 'path';
+import * as fs from 'node:fs';
+import * as path from 'node:path';
 
 import { DotnetNunitParser } from '../../../src/testresult/parsers/dotnet-nunit/dotnet-nunit-parser.js';
 import { ParseOptions } from '../../../src/testresult/test-parser.js';

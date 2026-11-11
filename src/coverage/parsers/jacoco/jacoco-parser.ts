@@ -8,18 +8,18 @@ import { JacocoCounter, JacocoReport, JacocoPackage } from './jacoco-types.js';
 
 /**
  * A parser for JaCoCo XML coverage reports.
- * @export
  * @class JacocoParser
- * @extends {BaseParser}
+ * @augments {BaseParser}
+ * @export
  */
 export class JacocoParser extends BaseParser<JacocoReport> {
   /**
    * Processes the parsed JaCoCo XML object to extract coverage data.
-   * @protected
-   * @param {JacocoReport} xml - The parsed JaCoCo XML report.
-   * @returns {Promise<CoverageData>} A promise that resolves to the
-   * structured file coverage data.
    * @memberof JacocoParser
+   * @param xml - The parsed JaCoCo XML report.
+   * @returns A promise that resolves to the
+   * structured file coverage data.
+   * @protected
    */
   protected process(xml: JacocoReport): Promise<CoverageData> {
     const overall = this.aggregateCounters(xml.report.counter);
@@ -32,10 +32,10 @@ export class JacocoParser extends BaseParser<JacocoReport> {
 
   /**
    * Extracts coverage information from a single package element.
-   * @private
-   * @param {JacocoPackage} pack - The package object from the report.
-   * @returns {FileCoverageDetails[]} An array of file coverage details.
    * @memberof JacocoParser
+   * @param pack - The package object from the report.
+   * @returns An array of file coverage details.
+   * @private
    */
   private unpackage(pack: JacocoPackage): FileCoverageDetails[] {
     return (pack.sourcefile || []).map((s) => {
@@ -53,11 +53,10 @@ export class JacocoParser extends BaseParser<JacocoReport> {
   /**
    * Aggregates an array of Jacoco counter elements into the standard
    * coverage metrics object.
-   * @private
-   * @param {JacocoCounter[]} counters - The array of counter-elements.
-   * @returns {Omit<FileCoverageDetails, 'file' | 'uncoveredLines'>}
-   * The aggregated coverage metrics.
    * @memberof JacocoParser
+   * @param counters - The array of counter-elements.
+   * @returns
+   * @private
    */
   private aggregateCounters(
     counters: JacocoCounter[],

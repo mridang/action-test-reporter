@@ -7,17 +7,17 @@ import { LcovFileBuilder } from './lcov-types.js';
 
 /**
  * A parser for LCOV string-based coverage reports.
- * @export
  * @class LcovParser
  * @implements {CoverageParser}
+ * @export
  */
 export class LcovParser implements CoverageParser {
   /**
    * Parses the LCOV content string line by line.
-   * @param {string} content - The LCOV content of the coverage report.
-   * @returns {Promise<CoverageData>} A promise that resolves to the
-   * structured file coverage data.
    * @memberof LcovParser
+   * @param content - The LCOV content of the coverage report.
+   * @returns A promise that resolves to the
+   * structured file coverage data.
    */
   public parse(content: string): Promise<CoverageData> {
     const records = content.split('end_of_record');
@@ -32,9 +32,9 @@ export class LcovParser implements CoverageParser {
 
   /**
    * Creates a new, empty builder object for a file record.
-   * @private
-   * @returns {LcovFileBuilder} An empty builder object.
    * @memberof LcovParser
+   * @returns An empty builder object.
+   * @private
    */
   private createNewBuilder(): LcovFileBuilder {
     return {
@@ -47,11 +47,11 @@ export class LcovParser implements CoverageParser {
 
   /**
    * Parses a single "record" block from an LCOV file.
-   * @private
-   * @param {string} record - A block of LCOV data for a single file.
-   * @returns {(FileCoverageDetails | null)} The parsed coverage data or
-   * null if the record is empty.
    * @memberof LcovParser
+   * @param record - A block of LCOV data for a single file.
+   * @returns The parsed coverage data or
+   * null if the record is empty.
+   * @private
    */
   private parseRecord(record: string): FileCoverageDetails | null {
     if (record.trim() === '') {
@@ -95,11 +95,11 @@ export class LcovParser implements CoverageParser {
 
   /**
    * Processes a single line of an LCOV record and updates the builder.
-   * @private
-   * @param {string} type - The LCOV data type (e.g., 'SF', 'DA').
-   * @param {string} value - The value associated with the type.
-   * @param {LcovFileBuilder} builder - The file builder to populate.
    * @memberof LcovParser
+   * @param type - The LCOV data type (e.g., 'SF', 'DA').
+   * @param value - The value associated with the type.
+   * @param builder - The file builder to populate.
+   * @private
    */
   private processLine(
     type: string,
@@ -145,10 +145,10 @@ export class LcovParser implements CoverageParser {
 
   /**
    * Aggregates the details from all files to create an overall summary.
-   * @private
-   * @param {FileCoverageDetails[]} details - The details for all files.
-   * @returns {CoverageData['overall']} The project-wide coverage summary.
    * @memberof LcovParser
+   * @param details - The details for all files.
+   * @returns The project-wide coverage summary.
+   * @private
    */
   private aggregateOverallCoverage(
     details: FileCoverageDetails[],

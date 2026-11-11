@@ -1,4 +1,4 @@
-import { promises as fs } from 'fs';
+import { promises as fs } from 'node:fs';
 import { CoverageData, CoverageParser } from './coverage-parser.js';
 import { CloverParser } from './clover/clover-parser.js';
 import { CoberturaParser } from './cobertura/cobertura-parser.js';
@@ -43,8 +43,8 @@ export async function detectCoverage(
 
 /**
  * Reads a file, detects the appropriate parser, and parses the content.
- * @param {string} filePath - The path to the coverage report file.
- * @returns {Promise<DetectedCoverage>} The detected parser and parsed data.
+ * @param filePath - The path to the coverage report file.
+ * @returns The detected parser and parsed data.
  */
 export async function parseCoverageFile(
   filePath: string,

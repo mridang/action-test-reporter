@@ -3,15 +3,15 @@
   "version": "1.0.0",
   "type": "module",
   "scripts": {
-    "prepack": "tsc",
     "build": "rollup --config=rollup.config.mjs",
-    "test": "NODE_OPTIONS='--experimental-vm-modules' jest --verbose --config=jest.config.mjs --runInBand",
-    "test:watch": "npm run test -- --watch",
-    "test:debug": "jest --verbose --config=jest.config.mjs --runInBand --detectOpenHandles",
     "format": "prettier --write .",
     "format:check": "prettier --check .",
     "lint": "npx eslint .",
-    "lint:fix": "npx eslint . --fix"
+    "lint:fix": "npx eslint . --fix",
+    "prepack": "tsc",
+    "test": "NODE_OPTIONS='--experimental-vm-modules' jest --verbose --config=jest.config.mjs --runInBand",
+    "test:debug": "jest --verbose --config=jest.config.mjs --runInBand --detectOpenHandles",
+    "test:watch": "npm run test -- --watch"
   },
   "main": "dist/main.cjs",
   "keywords": [

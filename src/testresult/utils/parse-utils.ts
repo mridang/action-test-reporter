@@ -7,7 +7,9 @@ export function parseNetDuration(str: string): number {
 
   const [, hourStr, minStr, secStr] = durationMatch;
   return (
-    (parseInt(hourStr) * 3600 + parseInt(minStr) * 60 + parseFloat(secStr)) *
+    (Number.parseInt(hourStr) * 3600 +
+      Number.parseInt(minStr) * 60 +
+      Number.parseFloat(secStr)) *
     1000
   );
 }

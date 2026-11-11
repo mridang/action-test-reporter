@@ -21,7 +21,7 @@ class TestReporter {
     'all' | 'failed' | 'none';
   readonly listTests = core.getInput('list-tests', { required: true }) as
     'all' | 'failed' | 'none';
-  readonly maxAnnotations = parseInt(
+  readonly maxAnnotations = Number.parseInt(
     core.getInput('max-annotations', { required: true }),
   );
   readonly failOnError =

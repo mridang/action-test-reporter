@@ -8,17 +8,17 @@ import { GcovFileSection, GcovLine } from './gcov-types.js';
 
 /**
  * A parser for gcov text output files.
- * @export
  * @class GcovParser
  * @implements {CoverageParser}
+ * @export
  */
 export class GcovParser implements CoverageParser {
   /**
    * Parses the gcov text content to extract coverage data.
-   * @param {string} content - The gcov text content.
-   * @returns {Promise<CoverageData>} A promise that resolves to the
-   * structured coverage data.
    * @memberof GcovParser
+   * @param content - The gcov text content.
+   * @returns A promise that resolves to the
+   * structured coverage data.
    */
   public async parse(content: string): Promise<CoverageData> {
     const sections = this.parseGcovContent(content);
@@ -37,18 +37,18 @@ export class GcovParser implements CoverageParser {
 
   /**
    * Parses the complete gcov text content into file sections.
-   * @private
-   * @param {string} content - The raw gcov text content.
-   * @returns {GcovFileSection[]} Array of parsed file sections.
    * @memberof GcovParser
+   * @param content - The raw gcov text content.
+   * @returns Array of parsed file sections.
+   * @private
    */
   private parseGcovContent(content: string): GcovFileSection[] {
     const lines = content.split('\n');
     const sections: GcovFileSection[] = [];
     let currentSection: GcovFileSection | null = null;
 
-    for (let i = 0; i < lines.length; i++) {
-      const line = lines[i].trim();
+    for (const line_ of lines) {
+      const line = line_.trim();
 
       const fileMatch = line.match(/^File\s+'(.+)'$/);
       const creatingMatch = line.match(/^Creating\s+'(.+)'$/);
@@ -78,8 +78,8 @@ export class GcovParser implements CoverageParser {
         );
 
         if (linesMatch) {
-          const percentage = parseFloat(linesMatch[1]);
-          const total = parseInt(linesMatch[2], 10);
+          const percentage = Number.parseFloat(linesMatch[1]);
+          const total = Number.parseInt(linesMatch[2], 10);
           const covered = Math.round((percentage / 100) * total);
 
           if (!currentSection.summary) {
@@ -92,8 +92,8 @@ export class GcovParser implements CoverageParser {
         }
 
         if (branchesMatch) {
-          const percentage = parseFloat(branchesMatch[1]);
-          const total = parseInt(branchesMatch[2], 10);
+          const percentage = Number.parseFloat(branchesMatch[1]);
+          const total = Number.parseInt(branchesMatch[2], 10);
           const covered = Math.round((percentage / 100) * total);
 
           if (!currentSection.summary) {
@@ -106,8 +106,8 @@ export class GcovParser implements CoverageParser {
         }
 
         if (functionsMatch) {
-          const percentage = parseFloat(functionsMatch[1]);
-          const total = parseInt(functionsMatch[2], 10);
+          const percentage = Number.parseFloat(functionsMatch[1]);
+          const total = Number.parseInt(functionsMatch[2], 10);
           const covered = Math.round((percentage / 100) * total);
 
           if (!currentSection.summary) {
@@ -123,7 +123,7 @@ export class GcovParser implements CoverageParser {
       const lineMatch = line.match(/^\s*([#\d-]+):\s*(\d+):\s*(.*)/);
       if (lineMatch && currentSection) {
         const [, countStr, lineNumberStr, sourceCode] = lineMatch;
-        const lineNumber = parseInt(lineNumberStr, 10);
+        const lineNumber = Number.parseInt(lineNumberStr, 10);
 
         let executionCount: number | null = null;
 
@@ -132,7 +132,7 @@ export class GcovParser implements CoverageParser {
         } else if (countStr.trim() === '#####') {
           executionCount = 0;
         } else {
-          const count = parseInt(countStr.trim(), 10);
+          const count = Number.parseInt(countStr.trim(), 10);
           if (!isNaN(count)) {
             executionCount = count;
           }
@@ -155,10 +155,10 @@ export class GcovParser implements CoverageParser {
 
   /**
    * Converts a gcov file section into standardized coverage details.
-   * @private
-   * @param {GcovFileSection} section - The parsed gcov file section.
-   * @returns {FileCoverageDetails} The standardized coverage details.
    * @memberof GcovParser
+   * @param section - The parsed gcov file section.
+   * @returns The standardized coverage details.
+   * @private
    */
   private processSectionToDetails(
     section: GcovFileSection,
@@ -177,14 +177,12 @@ export class GcovParser implements CoverageParser {
     const branches: CoverageMetrics = { total: 0, covered: 0 };
     const methods: CoverageMetrics = { total: 0, covered: 0 };
 
-    if (section.summary?.linesExecuted) {
-      lines = section.summary.linesExecuted;
-    } else {
-      lines = {
-        total: executableLines.length,
-        covered: coveredLines.length,
-      };
-    }
+    lines = section.summary?.linesExecuted
+      ? section.summary.linesExecuted
+      : {
+          total: executableLines.length,
+          covered: coveredLines.length,
+        };
 
     if (section.summary?.branchesExecuted) {
       branches.total = section.summary.branchesExecuted.total;
@@ -208,10 +206,10 @@ export class GcovParser implements CoverageParser {
 
   /**
    * Aggregates the details from all files to create an overall summary.
-   * @private
-   * @param {FileCoverageDetails[]} details - The details for all files.
-   * @returns {CoverageData['overall']} The project-wide coverage summary.
    * @memberof GcovParser
+   * @param details - The details for all files.
+   * @returns The project-wide coverage summary.
+   * @private
    */
   private aggregateOverallCoverage(
     details: FileCoverageDetails[],

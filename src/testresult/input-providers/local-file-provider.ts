@@ -1,4 +1,4 @@
-import * as fs from 'fs';
+import * as fs from 'node:fs';
 import glob from 'fast-glob';
 import { FileContent, InputProvider, ReportInput } from './input-provider.js';
 import { listFiles } from '../utils/git.js';

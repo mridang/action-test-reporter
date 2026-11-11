@@ -38,8 +38,8 @@ export class JestJunitParser implements TestParser {
   ): Promise<JunitReport> {
     try {
       return (await parseStringPromise(content)) as JunitReport;
-    } catch (e) {
-      throw new Error(`Invalid XML at ${path}\n\n${e}`);
+    } catch (error) {
+      throw new Error(`Invalid XML at ${path}\n\n${error}`);
     }
   }
 
@@ -49,12 +49,12 @@ export class JestJunitParser implements TestParser {
         ? []
         : junit.testsuites.testsuite.map((ts) => {
             const name = this.escapeCharacters(ts.$.name.trim());
-            const time = parseFloat(ts.$.time) * 1000;
+            const time = Number.parseFloat(ts.$.time) * 1000;
             return new TestSuiteResult(name, this.getGroups(ts), time);
           });
 
     const time =
-      junit.testsuites.$ && parseFloat(junit.testsuites.$.time) * 1000;
+      junit.testsuites.$ && Number.parseFloat(junit.testsuites.$.time) * 1000;
     return new TestRunResult(path, suites, time);
   }
 
@@ -125,7 +125,7 @@ export class JestJunitParser implements TestParser {
       const tests = grp.tests.map((tc) => {
         const name = tc.$.name.trim();
         const result = this.getTestCaseResult(tc);
-        const time = parseFloat(tc.$.time) * 1000;
+        const time = Number.parseFloat(tc.$.time) * 1000;
         const error = this.getTestCaseError(tc);
         return new TestCaseResult(name, result, time, error);
       });
@@ -182,6 +182,6 @@ export class JestJunitParser implements TestParser {
   }
 
   private escapeCharacters(s: string): string {
-    return s.replace(/([<>])/g, '\\$1');
+    return s.replaceAll(/([<>])/g, String.raw`\$1`);
   }
 }

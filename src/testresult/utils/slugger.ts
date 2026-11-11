@@ -10,9 +10,9 @@ export function slug(
 ): { id: string; link: string } {
   const slugId = name
     .trim()
-    .replace(/_/g, '')
-    .replace(/[./\\]/g, '-')
-    .replace(/[^\w-]/g, '');
+    .replaceAll('_', '')
+    .replaceAll(/[./\\]/g, '-')
+    .replaceAll(/[^\w-]/g, '');
 
   const id = `user-content-${slugId}`;
   const link = options.useActionsSummary ? `#${id}` : `#${slugId}`;

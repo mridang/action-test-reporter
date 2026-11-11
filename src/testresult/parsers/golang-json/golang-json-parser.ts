@@ -32,8 +32,10 @@ export class GolangJsonParser implements TestParser {
       .map((line, index) => {
         try {
           return JSON.parse(line) as GoTestEvent;
-        } catch (e) {
-          throw new Error(`Invalid JSON at ${path} line ${index + 1}\n\n${e}`);
+        } catch (error) {
+          throw new Error(
+            `Invalid JSON at ${path} line ${index + 1}\n\n${error}`,
+          );
         }
       });
   }

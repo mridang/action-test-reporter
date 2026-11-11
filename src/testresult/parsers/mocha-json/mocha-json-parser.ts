@@ -23,14 +23,14 @@ export class MochaJsonParser implements TestParser {
     const mocha = this.getMochaJson(path, content);
     const result = this.getTestRunResult(path, mocha);
     result.sort(true);
-    return Promise.resolve(result);
+    return result;
   }
 
   private getMochaJson(path: string, content: string): MochaJson {
     try {
       return JSON.parse(content);
-    } catch (e) {
-      throw new Error(`Invalid JSON at ${path}\n\n${e}`);
+    } catch (error) {
+      throw new Error(`Invalid JSON at ${path}\n\n${error}`);
     }
   }
 
@@ -72,11 +72,11 @@ export class MochaJsonParser implements TestParser {
     result: TestExecutionResult,
   ): void {
     const groupName =
-      test.fullTitle !== test.title
-        ? test.fullTitle
+      test.fullTitle === test.title
+        ? null
+        : test.fullTitle
             .slice(0, test.fullTitle.length - test.title.length)
-            .trimEnd()
-        : null;
+            .trimEnd();
 
     let group = suite.groups.find((grp) => grp.name === groupName);
     if (group === undefined) {

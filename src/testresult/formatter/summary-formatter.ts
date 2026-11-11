@@ -15,8 +15,8 @@ import { DEFAULT_LOCALE } from '../utils/node-utils.js';
 import { getFirstNonEmptyLine } from '../utils/parse-utils.js';
 import { slug } from '../utils/slugger.js';
 
-const MAX_REPORT_LENGTH = 65535;
-const MAX_ACTIONS_SUMMARY_LENGTH = 1048576;
+const MAX_REPORT_LENGTH = 65_535;
+const MAX_ACTIONS_SUMMARY_LENGTH = 1_048_576;
 
 interface TestResultFormatter<TOptions> {
   format(
@@ -235,9 +235,9 @@ function getTestRunsReport(
   }
 
   if (!options.onlySummary) {
-    const suitesReports = testRuns
-      .map((tr, i) => getSuitesReport(tr, i, options))
-      .flat();
+    const suitesReports = testRuns.flatMap((tr, i) =>
+      getSuitesReport(tr, i, options),
+    );
     sections.push(...suitesReports);
   }
   return sections;
@@ -258,7 +258,7 @@ function getSuitesReport(
     const trSlug = makeRunSlug(runIndex, options);
     const nameLink = `<a id="${trSlug.id}" href="${options.baseUrl + trSlug.link}">${tr.path}</a>`;
     const icon = getResultIcon(tr.result);
-    sections.push(`## ${icon}\xa0${nameLink}`);
+    sections.push(`## ${icon}\u00A0${nameLink}`);
 
     const time = formatTime(tr.time);
     const headingLine2 =
@@ -291,11 +291,9 @@ function getSuitesReport(
   }
 
   if (options.listTests !== 'none') {
-    const tests = suites
-      .map((ts: TestSuiteResult, suiteIndex: number) =>
-        getTestsReport(ts, runIndex, suiteIndex, options),
-      )
-      .flat();
+    const tests = suites.flatMap((ts: TestSuiteResult, suiteIndex: number) =>
+      getTestsReport(ts, runIndex, suiteIndex, options),
+    );
 
     if (tests.length > 1) {
       sections.push(...tests);
@@ -325,9 +323,7 @@ function getTestsReport(
   const tsSlug = makeSuiteSlug(runIndex, suiteIndex, options);
   const tsNameLink = `<a id="${tsSlug.id}" href="${options.baseUrl + tsSlug.link}">${tsName}</a>`;
   const icon = getResultIcon(ts.result);
-  sections.push(`### ${icon}\xa0${tsNameLink}`);
-
-  sections.push('```');
+  sections.push(`### ${icon}\u00A0${tsNameLink}`, '```');
   for (const grp of groups) {
     if (grp.name) {
       sections.push(grp.name);
@@ -373,17 +369,23 @@ function makeSuiteSlug(
 
 function getResultIcon(result: TestExecutionResult): string {
   switch (result) {
-    case 'success':
+    case 'success': {
       return Icon.success;
-    case 'skipped':
+    }
+    case 'skipped': {
       return Icon.skip;
-    case 'failed':
+    }
+    case 'failed': {
       return Icon.fail;
-    default:
+    }
+    default: {
       return '';
+    }
   }
 }
 
 function encodeImgShieldsURIComponent(component: string): string {
-  return encodeURIComponent(component).replace(/-/g, '--').replace(/_/g, '__');
+  return encodeURIComponent(component)
+    .replaceAll('-', '--')
+    .replaceAll('_', '__');
 }

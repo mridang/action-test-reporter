@@ -18,7 +18,7 @@ export function normalizeFilePath(path: string): string {
     return path;
   }
 
-  return path.trim().replace(/\\/g, '/');
+  return path.trim().replaceAll('\\', '/');
 }
 
 export function getBasePath(

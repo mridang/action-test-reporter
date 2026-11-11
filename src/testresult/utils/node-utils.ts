@@ -26,7 +26,7 @@ export function getExceptionSource(
         continue;
       }
       if (trackedFiles.includes(path)) {
-        const line = parseInt(lineStr);
+        const line = Number.parseInt(lineStr);
 
         return { path, line };
       }

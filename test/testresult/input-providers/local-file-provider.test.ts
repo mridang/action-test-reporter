@@ -1,6 +1,6 @@
-import { promises as fs } from 'fs';
-import path from 'path';
-import { tmpdir } from 'os';
+import { promises as fs } from 'node:fs';
+import path from 'node:path';
+import { tmpdir } from 'node:os';
 import { LocalFileProvider } from '../../../src/testresult/input-providers/local-file-provider.js';
 
 describe('LocalFileProvider', () => {

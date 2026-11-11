@@ -28,7 +28,7 @@ export function table(
 }
 
 function tableEscape(content: ToString): string {
-  return content.toString().replace('|', '\\|');
+  return content.toString().replace('|', String.raw`\|`);
 }
 
 export function formatTime(ms: number): string {
