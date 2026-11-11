@@ -92,9 +92,7 @@ export class DotnetNunitParser implements TestParser {
       .slice(0, -1)
       .map((suite) => suite.$.name)
       .join('.');
-    const groupName =
-      // eslint-disable-next-line unicorn/prefer-at -- .at() would widen the element type to include undefined
-      suitesWithoutTheories[suitesWithoutTheories.length - 1].$.name;
+    const groupName = suitesWithoutTheories.at(-1)!.$.name;
 
     let existingSuite = result.find((suite) => suite.name === suiteName);
     if (existingSuite === undefined) {

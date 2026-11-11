@@ -30,10 +30,8 @@ export function formatUncoveredLines(
 
     const groupedRanges = sortedLines.reduce(
       (acc: number[][], current: number) => {
-        // eslint-disable-next-line unicorn/prefer-at -- .at() would widen the element type to include undefined
-        const lastGroup = acc[acc.length - 1];
-        // eslint-disable-next-line unicorn/prefer-at -- .at() would widen the element type to include undefined
-        if (acc.length === 0 || current > lastGroup[lastGroup.length - 1] + 1) {
+        const lastGroup = acc.at(-1)!;
+        if (acc.length === 0 || current > lastGroup.at(-1)! + 1) {
           acc.push([current]);
         } else {
           lastGroup.push(current);
@@ -50,8 +48,7 @@ export function formatUncoveredLines(
       .join(',');
 
     return options?.maxLength && fullRangeString.length > options.maxLength
-      ? // eslint-disable-next-line unicorn/prefer-at -- .at() would widen the element type to include undefined
-        `${sortedLines[0]}-${sortedLines[sortedLines.length - 1]}`
+      ? `${sortedLines[0]}-${sortedLines.at(-1)}`
       : fullRangeString;
   }
 }

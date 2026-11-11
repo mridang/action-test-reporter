@@ -108,8 +108,7 @@ export class ConsoleFormatter implements CoverageFormatter<{
         }
         currentNode = currentNode.children.get(part)!;
       }
-      // eslint-disable-next-line unicorn/prefer-at -- .at() would widen the element type to include undefined
-      const fileName = pathParts[pathParts.length - 1];
+      const fileName = pathParts.at(-1)!;
       currentNode.children.set(fileName, {
         children: new Map(),
         _coverage: detail,

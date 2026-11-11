@@ -53,8 +53,7 @@ class TestGroup {
 
 class TestCase {
   constructor(readonly testStart: TestStartEvent) {
-    // eslint-disable-next-line unicorn/prefer-at -- .at() would widen the element type to include undefined
-    this.groupId = testStart.test.groupIDs[testStart.test.groupIDs.length - 1];
+    this.groupId = testStart.test.groupIDs.at(-1)!;
   }
   readonly groupId: number;
   readonly print: MessageEvent[] = [];
