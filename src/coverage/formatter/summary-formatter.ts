@@ -105,8 +105,7 @@ export class SummaryFormatter implements CoverageFormatter<SummaryOptions> {
         currentNode = currentNode.children.get(part)!;
       }
 
-      // eslint-disable-next-line unicorn/prefer-at -- .at() would widen the element type to include undefined
-      const fileName = pathParts[pathParts.length - 1];
+      const [fileName] = pathParts.slice(-1);
       currentNode.children.set(fileName, {
         children: new Map(),
         _coverage: detail,

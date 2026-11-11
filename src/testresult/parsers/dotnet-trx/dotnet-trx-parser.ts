@@ -25,6 +25,12 @@ import {
   TestSuiteResult,
 } from '../../test-results.js';
 
+/**
+ * Matches a line break together with the carriage returns in front of it. The lookbehind makes the match start at
+ * the first carriage return of a run, so a long run of carriage returns without a line feed is scanned only once.
+ */
+export const STACK_TRACE_LINE_BREAK = /(?<!\r)\r*\n/;
+
 class TestClass {
   constructor(readonly name: string) {}
   readonly tests: Test[] = [];
@@ -204,8 +210,7 @@ export class DotnetTrxParser implements TestParser {
   private exceptionThrowSource(
     stackTrace: string,
   ): { path: string; line: number } | undefined {
-    // eslint-disable-next-line sonarjs/super-linear-regex -- splits a single stack trace text, so backtracking is bounded
-    const lines = stackTrace.split(/\r*\n/);
+    const lines = stackTrace.split(STACK_TRACE_LINE_BREAK);
     const re = / in (.+):line (\d+)$/;
     const { trackedFiles } = this.options;
 

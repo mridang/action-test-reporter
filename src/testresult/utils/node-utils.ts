@@ -32,6 +32,22 @@ export function getExceptionSource(
 }
 
 /**
+ * Extracts the file path and line number from the parenthesized location at the end of a stack trace line.
+ * The pattern is anchored at the start and skips to the first opening parenthesis with a negated class, so the
+ * scan stays linear on long lines.
+ * @param str - A single line of the stack trace.
+ * @returns The file path and the line number text, or undefined when the line has no location.
+ * @example
+ * const match = matchStackFrame('at run (/work/src/index.ts:10:5)');
+ */
+export function matchStackFrame(
+  str: string,
+): [path: string, line: string] | undefined {
+  const match = /^[^(]*\((.*):(\d+):\d+\)$/.exec(str);
+  return match === null ? undefined : [match[1], match[2]];
+}
+
+/**
  * Parses one stack trace line and returns it when it points to a tracked project file.
  * @param str - A single line of the stack trace.
  * @param trackedFiles - The files tracked by Git.
@@ -45,12 +61,11 @@ function getTrackedFrame(
   trackedFiles: string[],
   getRelativePath: (str: string) => string,
 ): { path: string; line: number } | undefined {
-  // eslint-disable-next-line sonarjs/super-linear-regex -- applied to a single stack trace line
-  const match = /\((.*):(\d+):\d+\)$/.exec(str);
-  if (match === null) {
+  const match = matchStackFrame(str);
+  if (match === undefined) {
     return undefined;
   }
-  const [, fileStr, lineStr] = match;
+  const [fileStr, lineStr] = match;
   const filePath = normalizeFilePath(fileStr);
   if (filePath.startsWith('internal/') || filePath.includes('/node_modules/')) {
     return undefined;

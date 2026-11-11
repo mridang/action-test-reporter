@@ -5,7 +5,11 @@
 import { mkdir, readFile, writeFile } from 'node:fs/promises';
 import path from 'node:path';
 
-import { DotnetTrxParser } from '../../../src/testresult/parsers/dotnet-trx/dotnet-trx-parser.js';
+import {
+  DotnetTrxParser,
+  STACK_TRACE_LINE_BREAK,
+} from '../../../src/testresult/parsers/dotnet-trx/dotnet-trx-parser.js';
+import { randomStrings, referencePattern } from '../helpers/fuzz.js';
 import { ParseOptions } from '../../../src/testresult/test-parser.js';
 import {
   DEFAULT_OPTIONS,
@@ -271,5 +275,32 @@ describe('dotnet-trx tests', () => {
       reportTitle: 'My Custom Title',
     });
     expect(report).toMatch(/^# My Custom Title\n/);
+  });
+});
+
+describe('stack trace line break pattern matches the original pattern', () => {
+  const originalBreak = referencePattern('', String.raw`\r*`, String.raw`\n`);
+
+  test('splits random texts the same way', () => {
+    const samples = randomStrings(
+      ['a', '\r', '\r', '\n', '\n', ' '],
+      150_000,
+      14,
+    );
+    for (const sample of samples) {
+      expect({ sample, parts: sample.split(STACK_TRACE_LINE_BREAK) }).toEqual({
+        sample,
+        parts: sample.split(originalBreak),
+      });
+    }
+  });
+
+  test('stays fast on a long run of carriage returns', () => {
+    const started = Date.now();
+    const text = `${'\r'.repeat(200_000)}a`;
+    expect(text.split(STACK_TRACE_LINE_BREAK)).toEqual([text]);
+    expect(Date.now() - started).toBeLessThan(1000);
+    const shortText = `${'\r'.repeat(3000)}a`;
+    expect(shortText.split(originalBreak)).toEqual([shortText]);
   });
 });

@@ -10,8 +10,30 @@ interface StackTraceElement {
   lineStr: string;
 }
 
-// eslint-disable-next-line sonarjs/super-linear-regex -- applied to a single stack trace line
-const re = /^\s*at (\S+\/\S*\/)?(.*)\((.*):(\d+)\)$/;
+const re = /^\s*at (.*)\(([^(]*):(\d+)\)$/;
+
+/**
+ * Splits the text between the word at and the location into the optional class loader and module prefix and the
+ * trace path. The prefix is the longest run of non-whitespace characters from the start that ends with a slash and
+ * holds another slash after its first character.
+ * @param text - The text between the word at and the opening parenthesis of the location.
+ * @returns The prefix, which is undefined when absent, and the rest of the text.
+ * @example
+ * const [prefix, tracePath] = splitClassLoaderPrefix('app//com.example.App.run');
+ */
+export function splitClassLoaderPrefix(
+  text: string,
+): [prefix: string | undefined, rest: string] {
+  const runLength = /^\S*/.exec(text)?.[0].length ?? 0;
+  const firstSlash = text.indexOf('/', 1);
+  if (firstSlash === -1 || firstSlash >= runLength) {
+    return [undefined, text];
+  }
+  const lastSlash = text.lastIndexOf('/', runLength - 1);
+  return lastSlash > firstSlash
+    ? [text.slice(0, lastSlash + 1), text.slice(lastSlash + 1)]
+    : [undefined, text];
+}
 
 /**
  * Parses a single Java stack trace line into its class loader, module, file and line parts.
@@ -25,13 +47,9 @@ export function parseStackTraceElement(
 ): StackTraceElement | undefined {
   const match = re.exec(stackTraceLine);
   if (match !== null) {
-    const [
-      ,
-      maybeClassLoaderAndModuleNameAndVersion,
-      tracePath,
-      fileName,
-      lineStr,
-    ] = match;
+    const [, beforeLocation, fileName, lineStr] = match;
+    const [maybeClassLoaderAndModuleNameAndVersion, tracePath] =
+      splitClassLoaderPrefix(beforeLocation);
     const { classLoader, moduleNameAndVersion } = parseClassLoaderAndModule(
       maybeClassLoaderAndModuleNameAndVersion,
     );
