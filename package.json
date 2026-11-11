@@ -67,7 +67,7 @@
     "@commitlint/config-conventional": "^19.8.1",
     "@eslint/compat": "^2.1.1",
     "@jest/globals": "^30.2.0",
-    "@mridang/eslint-defaults": "file:../../../../../../../../private/tmp/claude-501/-Users-mridang-Code-mridang-eslint-defaults--claude-worktrees-jolly-nobel-b54514/5d85ee26-5030-436a-b806-a5058404a92f/scratchpad/pack/mridang-eslint-defaults-2.0.1.tgz",
+    "@mridang/eslint-defaults": "^2.1.0",
     "@rollup/plugin-commonjs": "^28.0.3",
     "@rollup/plugin-json": "^6.1.0",
     "@rollup/plugin-node-resolve": "^16.0.1",
