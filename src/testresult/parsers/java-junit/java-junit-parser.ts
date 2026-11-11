@@ -1,4 +1,8 @@
-import * as path from 'path';
+/**
+ * @file Parses JUnit XML test results produced by Java test runners.
+ */
+
+import path from 'node:path';
 import { ParseOptions, TestParser } from '../../test-parser.js';
 import { parseStringPromise } from 'xml2js';
 
@@ -38,7 +42,8 @@ export class JavaJunitParser implements TestParser {
 
   async parse(filePath: string, content: string): Promise<TestRunResult> {
     const reportOrSuite = await this.getJunitReport(filePath, content);
-    const isReport = (reportOrSuite as JunitReport).testsuites !== undefined;
+    const isReport =
+      (reportOrSuite as { testsuites?: unknown }).testsuites !== undefined;
 
     let ju: JunitReport;
     if (isReport) {
@@ -62,8 +67,8 @@ export class JavaJunitParser implements TestParser {
   ): Promise<JunitReport | SingleSuiteReport> {
     try {
       return await parseStringPromise(content);
-    } catch (e) {
-      throw new Error(`Invalid XML at ${filePath}\n\n${e}`);
+    } catch (error) {
+      throw new Error(`Invalid XML at ${filePath}\n\n${error}`);
     }
   }
 
@@ -75,8 +80,8 @@ export class JavaJunitParser implements TestParser {
       ? this.flattenSuites(junit.testsuites.testsuite, filePath)
       : [];
 
-    const seconds = parseFloat(junit.testsuites.$?.time);
-    const time = isNaN(seconds) ? undefined : seconds * 1000;
+    const seconds = Number.parseFloat(junit.testsuites.$?.time);
+    const time = Number.isNaN(seconds) ? undefined : seconds * 1000;
     return new TestRunResult(filePath, suites, time);
   }
 
@@ -95,7 +100,7 @@ export class JavaJunitParser implements TestParser {
           rawName === '' || rawName === 'undefined'
             ? path.basename(filePath)
             : rawName;
-        const time = parseFloat(suite.$.time) * 1000;
+        const time = Number.parseFloat(suite.$.time) * 1000;
         results.push(new TestSuiteResult(name, this.getGroups(suite), time));
       }
     }
@@ -122,7 +127,7 @@ export class JavaJunitParser implements TestParser {
       const tests = grp.tests.map((tc) => {
         const name = tc.$.name.trim();
         const result = this.getTestCaseResult(tc);
-        const time = parseFloat(tc.$.time) * 1000;
+        const time = Number.parseFloat(tc.$.time) * 1000;
         const error = this.getTestCaseError(tc);
         return new TestCaseResult(name, result, time, error);
       });
@@ -185,7 +190,7 @@ export class JavaJunitParser implements TestParser {
         const { tracePath, fileName, lineStr } = stackTraceElement;
         const filePath = this.getFilePath(tracePath, fileName);
         if (filePath !== undefined) {
-          const line = parseInt(lineStr);
+          const line = Number.parseInt(lineStr);
           return { filePath, line };
         }
       }
@@ -193,7 +198,7 @@ export class JavaJunitParser implements TestParser {
   }
 
   private getFilePath(tracePath: string, fileName: string): string | undefined {
-    const files = this.trackedFiles[fileName];
+    const files = this.trackedFiles[fileName] as string[] | undefined;
     if (files === undefined) {
       return undefined;
     }

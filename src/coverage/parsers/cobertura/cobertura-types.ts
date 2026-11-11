@@ -1,3 +1,7 @@
+/**
+ * @file Declares the types of the Cobertura XML coverage report structure.
+ */
+
 export type CoberturaLineAttributes = {
   number: string;
   hits: string;

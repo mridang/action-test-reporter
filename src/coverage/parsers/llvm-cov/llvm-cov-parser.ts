@@ -1,3 +1,7 @@
+/**
+ * @file Parses llvm-cov JSON exports into the shared coverage model.
+ */
+
 import {
   CoverageParser,
   CoverageData,
@@ -54,18 +58,17 @@ const DEPENDENCY_PATH = /(^|[\\/])\.build[\\/]/;
  * SwiftPM writes to `.build/<triple>/debug/codecov/<package>.json` when tests
  * run with `--enable-code-coverage`. Files under a `.build` directory
  * (dependencies) are ignored.
- * @export
  * @class LlvmCovParser
  * @implements {CoverageParser}
  */
 export class LlvmCovParser implements CoverageParser {
   /**
    * Parses the llvm-cov JSON export.
-   * @param {string} content - The JSON content of the coverage report.
-   * @returns {Promise<CoverageData>} A promise that resolves to the
+   * @memberof LlvmCovParser
+   * @param content - The JSON content of the coverage report.
+   * @returns A promise that resolves to the
    * structured coverage data.
    * @throws {Error} If the content is not an llvm-cov JSON export.
-   * @memberof LlvmCovParser
    */
   public parse(content: string): Promise<CoverageData> {
     let json: LlvmExport;
@@ -117,11 +120,11 @@ export class LlvmCovParser implements CoverageParser {
    * rule: a line's count is the largest count among the regions starting on
    * it and the region wrapping into it, ignoring gap regions. The wrapping
    * region is disregarded when the line's first segment opens a new region.
-   * @private
-   * @param {LlvmSegment[]} segments - The segments of a file.
-   * @returns {Map<number, number>} Hit counts keyed by line number, holding
-   * executable lines only.
    * @memberof LlvmCovParser
+   * @param segments - The segments of a file.
+   * @returns Hit counts keyed by line number, holding
+   * executable lines only.
+   * @private
    */
   private lineCounts(segments: LlvmSegment[]): Map<number, number> {
     const counts = new Map<number, number>();
@@ -162,11 +165,11 @@ export class LlvmCovParser implements CoverageParser {
 
   /**
    * Converts a single exported file to the standard file details.
-   * @private
-   * @param {LlvmFile} file - The exported file.
-   * @param {CoverageMetrics} methods - Function metrics for the file.
-   * @returns {FileCoverageDetails} The standardized details.
    * @memberof LlvmCovParser
+   * @param file - The exported file.
+   * @param methods - Function metrics for the file.
+   * @returns The standardized details.
+   * @private
    */
   private processFile(
     file: LlvmFile,
@@ -199,10 +202,10 @@ export class LlvmCovParser implements CoverageParser {
 
   /**
    * Aggregates the details from all files to create an overall summary.
-   * @private
-   * @param {FileCoverageDetails[]} details - The details for all files.
-   * @returns {CoverageData['overall']} The project-wide coverage summary.
    * @memberof LlvmCovParser
+   * @param details - The details for all files.
+   * @returns The project-wide coverage summary.
+   * @private
    */
   private aggregateOverallCoverage(
     details: FileCoverageDetails[],

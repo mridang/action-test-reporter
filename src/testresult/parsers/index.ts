@@ -1,3 +1,7 @@
+/**
+ * @file Registers the test result parsers and detects the format of a results file.
+ */
+
 import { ParseOptions, TestParser } from '../test-parser.js';
 import { TestRunResult } from '../test-results.js';
 import { DartJsonParser } from './dart-json/dart-json-parser.js';
@@ -28,7 +32,7 @@ interface ParserEntry {
  * 5. Golang - NDJSON with `Action` and `Package` fields
  * 6. RSpec - JSON with `version` and `examples` array
  * 7. Mocha - JSON with `stats`, `passes`, `failures`, `pending`
- * 8. Java JUnit - XML with `testsuites` or `testsuite` (fallback)
+ * 8. Java JUnit - XML with `testsuites` or `testsuite` (fallback).
  *
  * Note: Python xUnit and Swift xUnit are structurally identical to Java JUnit.
  */
@@ -52,12 +56,13 @@ export interface DetectedTestResult {
 /**
  * Detects the test result format by trying each parser in order.
  * Returns the first parser that successfully parses the content.
- *
- * @param path - The file path (used for error reporting and some parsers)
- * @param content - The raw file content to parse
- * @param options - Parse options including workDir and trackedFiles
- * @returns The detected parser, parsed result, and format name
- * @throws Error if no parser can handle the content
+ * @param path - The file path (used for error reporting and some parsers).
+ * @param content - The raw file content to parse.
+ * @param options - Parse options including workDir and trackedFiles.
+ * @returns The detected parser, parsed result, and format name.
+ * @rejects {Error} When no parser can handle the content.
+ * @example
+ * const { format, result } = await detectTestFormat('results.xml', content, options);
  */
 export async function detectTestFormat(
   path: string,

@@ -1,3 +1,7 @@
+/**
+ * @file Declares the event types emitted by go test -json.
+ */
+
 type GoTestAction =
   | 'start'
   | 'run'

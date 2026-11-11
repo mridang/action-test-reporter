@@ -1,5 +1,9 @@
-import { promises as fs } from 'fs';
-import path from 'path';
+/**
+ * @file Tests the llvm-cov coverage parser against its JSON export.
+ */
+
+import { promises as fs } from 'node:fs';
+import path from 'node:path';
 import { LlvmCovParser } from '../../../src/coverage/parsers/llvm-cov/llvm-cov-parser.js';
 
 describe('LlvmCovParser', () => {

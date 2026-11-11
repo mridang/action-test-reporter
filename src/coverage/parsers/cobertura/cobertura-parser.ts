@@ -1,4 +1,8 @@
-import path from 'path';
+/**
+ * @file Parses Cobertura XML coverage reports into the shared coverage model.
+ */
+
+import path from 'node:path';
 import { BaseParser } from '../base-parser.js';
 import {
   CoverageData,
@@ -16,18 +20,19 @@ import {
 
 /**
  * A parser for Cobertura XML coverage reports.
- * @export
  * @class CoberturaParser
- * @extends {BaseParser}
+ * @augments {BaseParser}
  */
 export class CoberturaParser extends BaseParser<CoberturaXml> {
   /**
    * Processes the parsed Cobertura XML object to extract coverage data.
-   * @protected
-   * @param {CoberturaXml} xml - The parsed Cobertura XML report.
-   * @returns {Promise<CoverageData>} A promise that resolves to the
-   * structured file coverage data.
    * @memberof CoberturaParser
+   * @param xml - The parsed Cobertura XML report.
+   * @returns A promise that resolves to the
+   * structured file coverage data.
+   * @protected
+   * @example
+   * const data = await parser.parse(xml);
    */
   protected process(xml: CoberturaXml): Promise<CoverageData> {
     const coverage = xml.coverage;
@@ -76,10 +81,12 @@ export class CoberturaParser extends BaseParser<CoberturaXml> {
 
   /**
    * Extracts all class elements from the package structure.
-   * @private
-   * @param {CoberturaPackages[]} packages - The array of package elements.
-   * @returns {CoberturaClass[]} An array of all found class elements.
    * @memberof CoberturaParser
+   * @param packages - The array of package elements.
+   * @returns An array of all found class elements.
+   * @private
+   * @example
+   * const classes = this.classesFromPackages(xml.coverage.packages[0].package);
    */
   private classesFromPackages(packages: CoberturaPackages[]): CoberturaClass[] {
     return (packages || []).flatMap((p) =>
@@ -91,10 +98,12 @@ export class CoberturaParser extends BaseParser<CoberturaXml> {
 
   /**
    * Extracts line coverage details from a class element.
-   * @private
-   * @param {CoberturaClass} c - The class element.
-   * @returns {CoverageMetrics} The structured line coverage.
    * @memberof CoberturaParser
+   * @param c - The class element.
+   * @returns The structured line coverage.
+   * @private
+   * @example
+   * const lines = this.getLineCoverage(classElement);
    */
   private getLineCoverage(c: CoberturaClass): CoverageMetrics {
     const lines = c.lines?.[0]?.line || [];
@@ -106,10 +115,12 @@ export class CoberturaParser extends BaseParser<CoberturaXml> {
 
   /**
    * Extracts function coverage details from a class element.
-   * @private
-   * @param {CoberturaClass} c - The class element.
-   * @returns {CoverageMetrics} The structured function coverage.
    * @memberof CoberturaParser
+   * @param c - The class element.
+   * @returns The structured function coverage.
+   * @private
+   * @example
+   * const functions = this.getFunctionCoverage(classElement);
    */
   private getFunctionCoverage(c: CoberturaClass): CoverageMetrics {
     const methods = c.methods?.[0]?.method || [];
@@ -123,10 +134,12 @@ export class CoberturaParser extends BaseParser<CoberturaXml> {
 
   /**
    * Extracts branch coverage details from a class element.
-   * @private
-   * @param {CoberturaClass} c - The class element.
-   * @returns {CoverageMetrics} An array of branch coverage details.
    * @memberof CoberturaParser
+   * @param c - The class element.
+   * @returns An array of branch coverage details.
+   * @private
+   * @example
+   * const branches = this.getBranchCoverage(classElement);
    */
   private getBranchCoverage(c: CoberturaClass): CoverageMetrics {
     if (!c.lines || !c.lines[0].line) {

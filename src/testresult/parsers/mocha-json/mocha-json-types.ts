@@ -1,3 +1,7 @@
+/**
+ * @file Declares the types of the Mocha JSON report structure.
+ */
+
 export interface MochaJson {
   stats: MochaJsonStats;
   passes: MochaJsonTest[];

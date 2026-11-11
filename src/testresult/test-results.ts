@@ -1,3 +1,7 @@
+/**
+ * @file Defines the in-memory model of test runs, suites, groups and cases.
+ */
+
 import { DEFAULT_LOCALE } from './utils/node-utils.js';
 
 export class TestRunResult {

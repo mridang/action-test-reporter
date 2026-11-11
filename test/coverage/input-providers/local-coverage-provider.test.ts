@@ -1,6 +1,10 @@
-import { promises as fs } from 'fs';
-import path from 'path';
-import { tmpdir } from 'os';
+/**
+ * @file Tests that the local coverage provider finds the coverage files it is pointed at.
+ */
+
+import { promises as fs } from 'node:fs';
+import path from 'node:path';
+import { tmpdir } from 'node:os';
 import { LocalCoverageProvider } from '../../../src/coverage/input-providers/local-coverage-provider.js';
 
 describe('LocalCoverageProvider', () => {

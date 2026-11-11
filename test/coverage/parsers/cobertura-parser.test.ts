@@ -1,22 +1,26 @@
-import * as fs from 'fs';
-import * as path from 'path';
+/**
+ * @file Tests the Cobertura coverage parser and its summary output.
+ */
+
+import { mkdir, readFile, writeFile } from 'node:fs/promises';
+import path from 'node:path';
 
 import { SummaryFormatter } from '../../../src/coverage/formatter/summary-formatter.js';
 import { CoberturaParser } from '../../../src/coverage/parsers/cobertura/cobertura-parser.js';
 import { getDirname } from '../helpers/dir.js';
 
-const __dirname = getDirname(import.meta.url);
-const outputDir = path.join(__dirname, '..', '__outputs__');
+const testDir = getDirname(import.meta.url);
+const outputDir = path.join(testDir, '..', '__outputs__');
 
 describe('cobertura parser', () => {
   test('parses cobertura xml content', async () => {
     const fixturePath = path.join(
-      __dirname,
+      testDir,
       '..',
       '__fixtures__',
       'cobertura.xml',
     );
-    const content = fs.readFileSync(fixturePath, 'utf8');
+    const content = await readFile(fixturePath, 'utf8');
 
     const parser = new CoberturaParser();
     const data = await parser.parse(content);
@@ -30,8 +34,8 @@ describe('cobertura parser', () => {
       rootDir: '/tmp',
     });
 
-    fs.mkdirSync(outputDir, { recursive: true });
+    await mkdir(outputDir, { recursive: true });
     const outputPath = path.join(outputDir, 'cobertura.md');
-    fs.writeFileSync(outputPath, summary, 'utf8');
+    await writeFile(outputPath, summary, 'utf8');
   });
 });

@@ -1,3 +1,7 @@
+/**
+ * @file Declares the types used while building per-file LCOV coverage records.
+ */
+
 export type LcovFileBuilder = {
   file: string;
   functions: { total: number; covered: number };

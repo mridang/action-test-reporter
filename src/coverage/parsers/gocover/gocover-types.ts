@@ -1,6 +1,10 @@
 /**
+ * @file Declares the types of a parsed Go cover profile.
+ */
+
+/**
  * Represents a single coverage block from Go coverage output.
- * Format: file:startLine.startCol,endLine.endCol numStatements count
+ * Format: file:startLine.startCol,endLine.endCol numStatements count.
  */
 export type GocoverBlock = {
   startLine: number;

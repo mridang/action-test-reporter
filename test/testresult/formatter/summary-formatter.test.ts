@@ -1,3 +1,7 @@
+/**
+ * @file Tests the test result badge and the Markdown summary formatter.
+ */
+
 import {
   getBadge,
   DEFAULT_OPTIONS,

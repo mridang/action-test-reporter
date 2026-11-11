@@ -1,4 +1,8 @@
-import path from 'path';
+/**
+ * @file Formats coverage results as a Markdown summary for the GitHub Actions job summary.
+ */
+
+import path from 'node:path';
 import { CoverageFormatter } from './coverage-formatter.js';
 import {
   CoverageData,
@@ -8,9 +12,9 @@ import {
 import { formatUncoveredLines } from './index.js';
 
 /**
- * @internal
  * Represents a node in the file coverage tree. It can be a directory
  * or a file.
+ * @internal
  */
 type CoverageNode = {
   children: Map<string, CoverageNode>;
@@ -19,8 +23,8 @@ type CoverageNode = {
 };
 
 /**
- * @internal
  * Options required for building the GitHub summary.
+ * @internal
  */
 interface SummaryOptions {
   repoUrl: string;
@@ -30,13 +34,17 @@ interface SummaryOptions {
 
 /**
  * A formatter that generates a rich Markdown summary for GitHub Actions.
- * @export
  * @class SummaryFormatter
  * @implements {CoverageFormatter}
  */
 export class SummaryFormatter implements CoverageFormatter<SummaryOptions> {
   /**
-   * {@inheritDoc CoverageFormatter.format}
+   * Formats the coverage data as a Markdown summary table.
+   * @param coverageData - The coverage data to format.
+   * @param options - The options, such as the repository and commit used for links.
+   * @returns The Markdown summary as a single string.
+   * @example
+   * const markdown = new SummaryFormatter().format(coverageData, { rootDir: process.cwd() });
    */
   public format(coverageData: CoverageData, options: SummaryOptions): string {
     const tree = this.buildTree(coverageData.details, options.rootDir);
@@ -69,10 +77,10 @@ export class SummaryFormatter implements CoverageFormatter<SummaryOptions> {
 
   /**
    * Builds the file and directory tree from a flat list of file details.
+   * @param details - A flat list of file coverage data.
+   * @param [rootDir] - The project's root directory for making paths relative.
+   * @returns The root node of the constructed file tree.
    * @private
-   * @param {FileCoverageDetails[]} details - A flat list of file coverage data.
-   * @param {string} [rootDir] - The project's root directory for making paths relative.
-   * @returns {CoverageNode} The root node of the constructed file tree.
    */
   private buildTree(
     details: FileCoverageDetails[],
@@ -97,7 +105,7 @@ export class SummaryFormatter implements CoverageFormatter<SummaryOptions> {
         currentNode = currentNode.children.get(part)!;
       }
 
-      const fileName = pathParts[pathParts.length - 1];
+      const [fileName] = pathParts.slice(-1);
       currentNode.children.set(fileName, {
         children: new Map(),
         _coverage: detail,
@@ -109,9 +117,9 @@ export class SummaryFormatter implements CoverageFormatter<SummaryOptions> {
 
   /**
    * Recursively calculates aggregate coverage for all directories in the tree.
+   * @param node - The current node in the tree to process.
+   * @returns A flat list of all descendant file coverages.
    * @private
-   * @param {CoverageNode} node - The current node in the tree to process.
-   * @returns {FileCoverageDetails[]} A flat list of all descendant file coverages.
    */
   private calculateAggregates(node: CoverageNode): FileCoverageDetails[] {
     const descendantFiles: FileCoverageDetails[] = [];
@@ -148,12 +156,12 @@ export class SummaryFormatter implements CoverageFormatter<SummaryOptions> {
 
   /**
    * Recursively renders the coverage tree into an array of Markdown table rows.
+   * @param node - The current node of the tree to render.
+   * @param options - The options containing repo and commit info.
+   * @param [indent] - The current indentation level.
+   * @param [prefix] - The current path prefix.
+   * @returns An array of formatted Markdown table rows.
    * @private
-   * @param {CoverageNode} node - The current node of the tree to render.
-   * @param {SummaryOptions} options - The options containing repo and commit info.
-   * @param {number} [indent=0] - The current indentation level.
-   * @param {string} [prefix=''] - The current path prefix.
-   * @returns {string[]} An array of formatted Markdown table rows.
    */
   private renderTree(
     node: CoverageNode,
@@ -162,7 +170,9 @@ export class SummaryFormatter implements CoverageFormatter<SummaryOptions> {
     prefix: string = '',
   ): string[] {
     let rows: string[] = [];
-    const sortedKeys = [...node.children.keys()].sort();
+    const sortedKeys = [...node.children.keys()].toSorted((a, b) =>
+      a.localeCompare(b),
+    );
 
     for (const key of sortedKeys) {
       const child = node.children.get(key)!;
@@ -181,8 +191,10 @@ export class SummaryFormatter implements CoverageFormatter<SummaryOptions> {
         );
       } else {
         const dirName = `**${key}/**`;
-        rows.push(this.buildRow(dirName, child._coverage!, options, indent));
-        rows.push(...this.renderTree(child, options, indent + 2, currentPath));
+        rows.push(
+          this.buildRow(dirName, child._coverage!, options, indent),
+          ...this.renderTree(child, options, indent + 2, currentPath),
+        );
       }
     }
     return rows;
@@ -190,8 +202,8 @@ export class SummaryFormatter implements CoverageFormatter<SummaryOptions> {
 
   /**
    * Builds a single formatted Markdown table row.
+   * @returns The fully formatted Markdown table row string.
    * @private
-   * @returns {string} The fully formatted Markdown table row string.
    */
   private buildRow(
     name: string,
@@ -225,9 +237,9 @@ export class SummaryFormatter implements CoverageFormatter<SummaryOptions> {
 
   /**
    * Formats a single metric cell with a progress bar and percentage.
+   * @param metric - The metric data to format.
+   * @returns The formatted Markdown string for the cell.
    * @private
-   * @param {CoverageMetrics} metric - The metric data to format.
-   * @returns {string} The formatted Markdown string for the cell.
    */
   private formatMetric(metric: CoverageMetrics): string {
     const pct =
@@ -238,8 +250,8 @@ export class SummaryFormatter implements CoverageFormatter<SummaryOptions> {
 
   /**
    * Creates the Markdown for the "Uncovered Lines" cell, including links.
+   * @returns The formatted Markdown string for the cell.
    * @private
-   * @returns {string} The formatted Markdown string for the cell.
    */
   private formatUncoveredCell(
     data: FileCoverageDetails | CoverageData['overall'],
@@ -278,7 +290,13 @@ export class SummaryFormatter implements CoverageFormatter<SummaryOptions> {
 
   private buildProgressBar(percentage: number): string {
     const pct = Math.round(percentage);
-    const color = pct < 50 ? 'red' : pct < 80 ? 'yellow' : 'green';
+    let color = 'green';
+    if (pct < 80) {
+      color = 'yellow';
+    }
+    if (pct < 50) {
+      color = 'red';
+    }
 
     const padded = String(Math.round(pct / 5) * 5).padStart(3, '0');
 

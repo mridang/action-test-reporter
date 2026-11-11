@@ -1,17 +1,29 @@
+/**
+ * @file Rollup configuration that bundles the action into a single CommonJS file and writes the progress bar SVGs.
+ */
+
 import resolve from '@rollup/plugin-node-resolve';
 import commonjs from '@rollup/plugin-commonjs';
 import typescript from '@rollup/plugin-typescript';
-import * as nodules from 'node:module';
+import { builtinModules } from 'node:module';
 import json from '@rollup/plugin-json';
-import path from 'path';
-import * as fs from 'node:fs';
+import path from 'node:path';
+import { mkdir, writeFile } from 'node:fs/promises';
 
-const NODE_BUILTINS = nodules.builtinModules.reduce(
-  (acc, name) => acc.concat([name, `node:${name}`]),
+const NODE_BUILTINS = builtinModules.reduce(
+  (acc, name) => [...acc, name, `node:${name}`],
   [],
 );
 
-// noinspection JSUnusedGlobalSymbols
+/**
+ * Emits one progress bar SVG per colour and percentage into the output directory.
+ * @param {object} [options] - Plugin options.
+ * @param {string} [options.outputDir] - The folder that the SVG files are written to.
+ * @param {number} [options.maxPct] - The highest percentage to generate, capped at 100.
+ * @returns {object} A Rollup plugin that writes the SVGs when the build starts.
+ * @example
+ * export default { plugins: [progressBarSvgs({ outputDir: 'dist/res' })] };
+ */
 const progressBarSvgs = ({ outputDir = 'dist/res', maxPct = 100 } = {}) => ({
   name: 'progress-bar-svgs',
   async buildStart() {
@@ -21,7 +33,7 @@ const progressBarSvgs = ({ outputDir = 'dist/res', maxPct = 100 } = {}) => ({
       H = 16,
       R = 4;
     const target = path.resolve(outputDir);
-    fs.mkdirSync(target, { recursive: true });
+    await mkdir(target, { recursive: true });
     const files = Object.entries(colors).flatMap(([n, hex]) =>
       Array.from({ length: Math.min(maxPct, 100) + 1 }, (_, p) => ({
         filename: `progress-${n}-${String(p).padStart(3, '0')}.svg`,
@@ -36,14 +48,20 @@ const progressBarSvgs = ({ outputDir = 'dist/res', maxPct = 100 } = {}) => ({
     );
     await Promise.all(
       files.map(({ filename, content }) =>
-        fs.writeFileSync(path.join(target, filename), content),
+        writeFile(path.join(target, filename), content),
       ),
     );
   },
 });
 
-// noinspection JSUnusedGlobalSymbols,SpellCheckingInspection
-export default (configOverrides = {}) => ({
+/**
+ * Builds the Rollup configuration that bundles the action into a CommonJS file.
+ * @param {object} [configOverrides] - Overrides merged into the plugin options, such as the typescript options.
+ * @returns {object} The Rollup input and output options.
+ * @example
+ * export default rollupConfig({ typescript: { sourceMap: false } });
+ */
+const rollupConfig = (configOverrides = {}) => ({
   input: 'src/main.ts',
   output: {
     file: 'dist/main.cjs',
@@ -65,10 +83,12 @@ export default (configOverrides = {}) => ({
   onwarn(warning, warn) {
     switch (warning.code) {
       case 'CIRCULAR_DEPENDENCY':
-      case 'THIS_IS_UNDEFINED':
+      case 'THIS_IS_UNDEFINED': {
         return;
-      default:
+      }
+      default: {
         warn(warning);
+      }
     }
   },
   plugins: [
@@ -100,3 +120,5 @@ export default (configOverrides = {}) => ({
   ],
   external: NODE_BUILTINS,
 });
+
+export default rollupConfig;

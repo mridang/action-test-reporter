@@ -1,4 +1,8 @@
-import { promises as fs } from 'fs';
+/**
+ * @file Detects the coverage format of a report and dispatches it to the matching parser.
+ */
+
+import { promises as fs } from 'node:fs';
 import { CoverageData, CoverageParser } from './coverage-parser.js';
 import { CloverParser } from './clover/clover-parser.js';
 import { CoberturaParser } from './cobertura/cobertura-parser.js';
@@ -24,6 +28,14 @@ const availableParsers: CoverageParser[] = [
 
 type DetectedCoverage = { parser: CoverageParser; data: CoverageData };
 
+/**
+ * Detects the format of a coverage report by trying each available parser in turn.
+ * @param content - The raw text of the coverage report.
+ * @returns The parser that understood the report and the parsed coverage data.
+ * @rejects {Error} When none of the available parsers can read the report.
+ * @example
+ * const { parser, data } = await detectCoverage(lcovText);
+ */
 export async function detectCoverage(
   content: string,
 ): Promise<DetectedCoverage> {
@@ -43,8 +55,10 @@ export async function detectCoverage(
 
 /**
  * Reads a file, detects the appropriate parser, and parses the content.
- * @param {string} filePath - The path to the coverage report file.
- * @returns {Promise<DetectedCoverage>} The detected parser and parsed data.
+ * @param filePath - The path to the coverage report file.
+ * @returns The detected parser and parsed data.
+ * @example
+ * const { data } = await parseCoverageFile('coverage/lcov.info');
  */
 export async function parseCoverageFile(
   filePath: string,

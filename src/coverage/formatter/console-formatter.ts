@@ -1,4 +1,8 @@
-import path from 'path';
+/**
+ * @file Formats coverage results as a coloured, tree-shaped table for the console.
+ */
+
+import path from 'node:path';
 import { CoverageFormatter } from './coverage-formatter.js';
 import {
   CoverageData,
@@ -8,20 +12,20 @@ import {
 import { formatUncoveredLines } from './index.js';
 
 /**
- * @internal
  * ANSI color codes for console output.
+ * @internal
  */
 const colors = {
-  red: '\x1b[31m',
-  green: '\x1b[32m',
-  yellow: '\x1b[33m',
-  reset: '\x1b[0m',
+  red: '\u001B[31m',
+  green: '\u001B[32m',
+  yellow: '\u001B[33m',
+  reset: '\u001B[0m',
 };
 
 /**
- * @internal
  * Represents a node in the file coverage tree. It can be a directory
  * or a file. Using a Map for children avoids TypeScript index signature issues.
+ * @internal
  */
 type CoverageNode = {
   children: Map<string, CoverageNode>;
@@ -32,7 +36,6 @@ type CoverageNode = {
 /**
  * A formatter that generates a console summary similar to Jest's output,
  * including a hierarchical file tree view with relative paths.
- * @export
  * @class ConsoleFormatter
  * @implements {CoverageFormatter}
  */
@@ -40,7 +43,13 @@ export class ConsoleFormatter implements CoverageFormatter<{
   rootDir?: string;
 }> {
   /**
-   * {@inheritDoc CoverageFormatter.format}
+   * Formats the coverage data as a hierarchical console table.
+   * @param coverageData - The coverage data to format.
+   * @param options - The options for the formatter.
+   * @param options.rootDir - The root directory used to make file paths relative.
+   * @returns The console table as a single string.
+   * @example
+   * const table = new ConsoleFormatter().format(coverageData, { rootDir: process.cwd() });
    */
   public format(
     coverageData: CoverageData,
@@ -73,10 +82,10 @@ export class ConsoleFormatter implements CoverageFormatter<{
   /**
    * Builds the file and directory tree from a flat list of file details,
    * making paths relative to the provided root directory.
+   * @param details - A flat list of file coverage data.
+   * @param [rootDir] - The project's root directory.
+   * @returns The root node of the constructed file tree.
    * @private
-   * @param {FileCoverageDetails[]} details - A flat list of file coverage data.
-   * @param {string} [rootDir] - The project's root directory.
-   * @returns {CoverageNode} The root node of the constructed file tree.
    */
   private buildTree(
     details: FileCoverageDetails[],
@@ -99,7 +108,7 @@ export class ConsoleFormatter implements CoverageFormatter<{
         }
         currentNode = currentNode.children.get(part)!;
       }
-      const fileName = pathParts[pathParts.length - 1];
+      const fileName = pathParts.at(-1)!;
       currentNode.children.set(fileName, {
         children: new Map(),
         _coverage: detail,
@@ -111,9 +120,9 @@ export class ConsoleFormatter implements CoverageFormatter<{
 
   /**
    * Recursively calculates aggregate coverage for all directories in the tree.
+   * @param node - The current node in the tree to process.
+   * @returns A flat list of all descendant file coverages.
    * @private
-   * @param {CoverageNode} node - The current node in the tree to process.
-   * @returns {FileCoverageDetails[]} A flat list of all descendant file coverages.
    */
   private calculateAggregates(node: CoverageNode): FileCoverageDetails[] {
     const descendantFiles: FileCoverageDetails[] = [];
@@ -150,11 +159,11 @@ export class ConsoleFormatter implements CoverageFormatter<{
 
   /**
    * Recursively renders the coverage tree into an array of formatted table rows.
+   * @param node - The current node of the tree to render.
+   * @param fileWidth - The calculated max width for the file column.
+   * @param [indent] - The current indentation level.
+   * @returns An array of formatted strings for each table row.
    * @private
-   * @param {CoverageNode} node - The current node of the tree to render.
-   * @param {number} fileWidth - The calculated max width for the file column.
-   * @param {number} [indent=0] - The current indentation level.
-   * @returns {string[]} An array of formatted strings for each table row.
    */
   private renderTree(
     node: CoverageNode,
@@ -162,7 +171,9 @@ export class ConsoleFormatter implements CoverageFormatter<{
     indent: number = 0,
   ): string[] {
     const rows: string[] = [];
-    const sortedKeys = [...node.children.keys()].sort();
+    const sortedKeys = [...node.children.keys()].toSorted((a, b) =>
+      a.localeCompare(b),
+    );
 
     for (const key of sortedKeys) {
       const child = node.children.get(key)!;
@@ -170,8 +181,10 @@ export class ConsoleFormatter implements CoverageFormatter<{
         rows.push(this.buildRow(key, child._coverage!, fileWidth, indent));
       } else {
         const dirName = `${key}${path.sep}`;
-        rows.push(this.buildRow(dirName, child._coverage!, fileWidth, indent));
-        rows.push(...this.renderTree(child, fileWidth, indent + 2));
+        rows.push(
+          this.buildRow(dirName, child._coverage!, fileWidth, indent),
+          ...this.renderTree(child, fileWidth, indent + 2),
+        );
       }
     }
     return rows;
@@ -179,12 +192,12 @@ export class ConsoleFormatter implements CoverageFormatter<{
 
   /**
    * Builds a single formatted and colorized table row.
+   * @param name - The name of the file or directory.
+   * @param data - Coverage data for the row.
+   * @param fileWidth - The max width of the file column.
+   * @param [indent] - The indentation level for the name.
+   * @returns The fully formatted and colorized table row string.
    * @private
-   * @param {string} name - The name of the file or directory.
-   * @param {FileCoverageDetails | CoverageData['overall']} data - Coverage data for the row.
-   * @param {number} fileWidth - The max width of the file column.
-   * @param {number} [indent=0] - The indentation level for the name.
-   * @returns {string} The fully formatted and colorized table row string.
    */
   private buildRow(
     name: string,
@@ -196,7 +209,13 @@ export class ConsoleFormatter implements CoverageFormatter<{
     const getPct = (m: CoverageMetrics) =>
       m.total === 0 ? 100 : (m.covered / m.total) * 100;
     const colorize = (p: number, t: string) => {
-      const color = p < 50 ? colors.red : p < 80 ? colors.yellow : colors.green;
+      let color = colors.green;
+      if (p < 80) {
+        color = colors.yellow;
+      }
+      if (p < 50) {
+        color = colors.red;
+      }
       return `${color}${t}${colors.reset}`;
     };
     const pcts = {
@@ -224,9 +243,9 @@ export class ConsoleFormatter implements CoverageFormatter<{
 
   /**
    * Builds the header and separator lines for the table.
+   * @param fileWidth - The max width for the file column.
+   * @returns The header components.
    * @private
-   * @param {number} fileWidth - The max width for the file column.
-   * @returns {{ separator: string; header: string }} The header components.
    */
   private buildHeader(fileWidth: number): {
     separator: string;
@@ -246,11 +265,11 @@ export class ConsoleFormatter implements CoverageFormatter<{
 
   /**
    * Calculates the required width for the file column.
+   * @param node - The current node to process.
+   * @param [indent] - The current indentation level.
+   * @param [currentMax] - The maximum length found so far.
+   * @returns The maximum required width for the file column.
    * @private
-   * @param {CoverageNode} node - The current node to process.
-   * @param {number} [indent=0] - The current indentation level.
-   * @param {number} [currentMax=0] - The maximum length found so far.
-   * @returns {number} The maximum required width for the file column.
    */
   private calculateFileColumnWidth(
     node: CoverageNode,

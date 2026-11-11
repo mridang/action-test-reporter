@@ -1,5 +1,9 @@
-import * as fs from 'fs';
-import * as path from 'path';
+/**
+ * @file Tests the Python xUnit test result parser against its fixtures.
+ */
+
+import { mkdir, readFile, writeFile } from 'node:fs/promises';
+import path from 'node:path';
 
 import { PythonXunitParser } from '../../../src/testresult/parsers/python-xunit/python-xunit-parser.js';
 import { ParseOptions } from '../../../src/testresult/test-parser.js';
@@ -10,7 +14,7 @@ import {
 import { normalizeFilePath } from '../../../src/testresult/utils/path-utils.js';
 import { getDirname } from '../helpers/dir.js';
 
-const __dirname = getDirname(import.meta.url);
+const testDir = getDirname(import.meta.url);
 
 const defaultOpts: ParseOptions = {
   parseErrors: true,
@@ -19,17 +23,21 @@ const defaultOpts: ParseOptions = {
 
 describe('python-xunit unittest report', () => {
   const fixturePath = path.join(
-    __dirname,
+    testDir,
     '..',
     '__fixtures__',
     'python-xunit-unittest.xml',
   );
   const filePath = normalizeFilePath(
-    path.relative(path.join(__dirname, '..'), fixturePath),
+    path.relative(path.join(testDir, '..'), fixturePath),
   );
-  const fileContent = fs.readFileSync(fixturePath, { encoding: 'utf8' });
+  let fileContent = '';
+
+  beforeAll(async () => {
+    fileContent = await readFile(fixturePath, { encoding: 'utf8' });
+  });
   const outputPath = path.join(
-    __dirname,
+    testDir,
     '..',
     '__outputs__',
     'python-xunit-unittest.md',
@@ -47,8 +55,8 @@ describe('python-xunit unittest report', () => {
     expect(result).toMatchSnapshot();
 
     const report = getReport([result]);
-    fs.mkdirSync(path.dirname(outputPath), { recursive: true });
-    fs.writeFileSync(outputPath, report);
+    await mkdir(path.dirname(outputPath), { recursive: true });
+    await writeFile(outputPath, report);
   });
 
   test('report does not include a title by default', async () => {
@@ -89,17 +97,21 @@ describe('python-xunit unittest report', () => {
 
 describe('python-xunit pytest report', () => {
   const fixturePath = path.join(
-    __dirname,
+    testDir,
     '..',
     '__fixtures__',
     'python-xunit-pytest.xml',
   );
   const filePath = normalizeFilePath(
-    path.relative(path.join(__dirname, '..'), fixturePath),
+    path.relative(path.join(testDir, '..'), fixturePath),
   );
-  const fileContent = fs.readFileSync(fixturePath, { encoding: 'utf8' });
+  let fileContent = '';
+
+  beforeAll(async () => {
+    fileContent = await readFile(fixturePath, { encoding: 'utf8' });
+  });
   const outputPath = path.join(
-    __dirname,
+    testDir,
     '..',
     '__outputs__',
     'python-xunit-pytest.md',
@@ -117,7 +129,7 @@ describe('python-xunit pytest report', () => {
     expect(result).toMatchSnapshot();
 
     const report = getReport([result]);
-    fs.mkdirSync(path.dirname(outputPath), { recursive: true });
-    fs.writeFileSync(outputPath, report);
+    await mkdir(path.dirname(outputPath), { recursive: true });
+    await writeFile(outputPath, report);
   });
 });

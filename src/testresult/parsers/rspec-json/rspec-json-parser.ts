@@ -1,3 +1,7 @@
+/**
+ * @file Parses the JSON report written by RSpec.
+ */
+
 import { ParseOptions, TestParser } from '../../test-parser.js';
 import {
   TestCaseError,
@@ -19,14 +23,14 @@ export class RspecJsonParser implements TestParser {
     const mocha = this.getRspecJson(path, content);
     const result = this.getTestRunResult(path, mocha);
     result.sort(true);
-    return Promise.resolve(result);
+    return result;
   }
 
   private getRspecJson(path: string, content: string): RspecJson {
     try {
       return JSON.parse(content);
-    } catch (e) {
-      throw new Error(`Invalid JSON at ${path}\n\n${e}`);
+    } catch (error) {
+      throw new Error(`Invalid JSON at ${path}\n\n${error}`);
     }
   }
 
@@ -45,12 +49,23 @@ export class RspecJsonParser implements TestParser {
 
     for (const test of rspec.examples) {
       const suite = getSuite(test);
-      if (test.status === 'failed') {
-        this.processTest(suite, test, 'failed');
-      } else if (test.status === 'passed') {
-        this.processTest(suite, test, 'success');
-      } else if (test.status === 'pending') {
-        this.processTest(suite, test, 'skipped');
+      switch (test.status) {
+        case 'failed': {
+          this.processTest(suite, test, 'failed');
+
+          break;
+        }
+        case 'passed': {
+          this.processTest(suite, test, 'success');
+
+          break;
+        }
+        case 'pending': {
+          this.processTest(suite, test, 'skipped');
+
+          break;
+        }
+        // No default
       }
     }
 
@@ -64,11 +79,11 @@ export class RspecJsonParser implements TestParser {
     result: TestExecutionResult,
   ): void {
     const groupName =
-      test.full_description !== test.description
-        ? test.full_description
+      test.full_description === test.description
+        ? null
+        : test.full_description
             .slice(0, test.full_description.length - test.description.length)
-            .trimEnd()
-        : null;
+            .trimEnd();
 
     let group = suite.groups.find((grp) => grp.name === groupName);
     if (group === undefined) {
@@ -117,11 +132,11 @@ export class RspecJsonParser implements TestParser {
     const re = /^(.*?):(\d+):/;
 
     for (const str of backtrace) {
-      const match = str.match(re);
+      const match = re.exec(str);
       if (match !== null) {
         const [, path, lineStr] = match;
         if (path.startsWith('./')) {
-          const line = parseInt(lineStr);
+          const line = Number.parseInt(lineStr);
           return { path, line };
         }
       }

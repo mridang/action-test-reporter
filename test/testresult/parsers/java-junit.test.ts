@@ -1,5 +1,9 @@
-import * as fs from 'fs';
-import * as path from 'path';
+/**
+ * @file Tests the JUnit test result parser against its fixtures.
+ */
+
+import { mkdir, readFile, writeFile } from 'node:fs/promises';
+import path from 'node:path';
 
 import { JavaJunitParser } from '../../../src/testresult/parsers/java-junit/java-junit-parser.js';
 import { ParseOptions } from '../../../src/testresult/test-parser.js';
@@ -10,21 +14,22 @@ import {
 import { normalizeFilePath } from '../../../src/testresult/utils/path-utils.js';
 import { getDirname } from '../helpers/dir.js';
 
-const __dirname = getDirname(import.meta.url);
+const testDir = getDirname(import.meta.url);
 
+// eslint-disable-next-line sonarjs/max-lines-per-function -- one suite groups every fixture of this parser
 describe('java-junit tests', () => {
   test('produces empty test run result when there are no test cases', async () => {
     const fixturePath = path.join(
-      __dirname,
+      testDir,
       '..',
       '__fixtures__',
       'empty',
       'java-junit.xml',
     );
     const filePath = normalizeFilePath(
-      path.relative(path.join(__dirname, '..'), fixturePath),
+      path.relative(path.join(testDir, '..'), fixturePath),
     );
-    const fileContent = fs.readFileSync(fixturePath, { encoding: 'utf8' });
+    const fileContent = await readFile(fixturePath, { encoding: 'utf8' });
 
     const opts: ParseOptions = {
       parseErrors: true,
@@ -39,7 +44,7 @@ describe('java-junit tests', () => {
 
   test('report from apache/pulsar single suite test results matches snapshot', async () => {
     const fixturePath = path.join(
-      __dirname,
+      testDir,
       '..',
       '__fixtures__',
       'external',
@@ -47,7 +52,7 @@ describe('java-junit tests', () => {
       'TEST-org.apache.pulsar.AddMissingPatchVersionTest.xml',
     );
     const trackedFilesPath = path.join(
-      __dirname,
+      testDir,
       '..',
       '__fixtures__',
       'external',
@@ -55,19 +60,20 @@ describe('java-junit tests', () => {
       'files.txt',
     );
     const outputPath = path.join(
-      __dirname,
+      testDir,
       '..',
       '__outputs__',
       'pulsar-test-results-no-merge.md',
     );
     const filePath = normalizeFilePath(
-      path.relative(path.join(__dirname, '..'), fixturePath),
+      path.relative(path.join(testDir, '..'), fixturePath),
     );
-    const fileContent = fs.readFileSync(fixturePath, { encoding: 'utf8' });
+    const fileContent = await readFile(fixturePath, { encoding: 'utf8' });
 
-    const trackedFiles = fs
-      .readFileSync(trackedFilesPath, { encoding: 'utf8' })
-      .split(/\n\r?/g);
+    const rawTrackedFiles = await readFile(trackedFilesPath, {
+      encoding: 'utf8',
+    });
+    const trackedFiles = rawTrackedFiles.split(/\n\r?/g);
     const opts: ParseOptions = {
       parseErrors: true,
       trackedFiles,
@@ -78,13 +84,13 @@ describe('java-junit tests', () => {
     expect(result).toMatchSnapshot();
 
     const report = getReport([result]);
-    fs.mkdirSync(path.dirname(outputPath), { recursive: true });
-    fs.writeFileSync(outputPath, report);
+    await mkdir(path.dirname(outputPath), { recursive: true });
+    await writeFile(outputPath, report);
   });
 
   test('report from apache/pulsar test results matches snapshot', async () => {
     const fixturePath = path.join(
-      __dirname,
+      testDir,
       '..',
       '__fixtures__',
       'external',
@@ -92,7 +98,7 @@ describe('java-junit tests', () => {
       'pulsar-test-report.xml',
     );
     const trackedFilesPath = path.join(
-      __dirname,
+      testDir,
       '..',
       '__fixtures__',
       'external',
@@ -100,19 +106,20 @@ describe('java-junit tests', () => {
       'files.txt',
     );
     const outputPath = path.join(
-      __dirname,
+      testDir,
       '..',
       '__outputs__',
       'pulsar-test-results.md',
     );
     const filePath = normalizeFilePath(
-      path.relative(path.join(__dirname, '..'), fixturePath),
+      path.relative(path.join(testDir, '..'), fixturePath),
     );
-    const fileContent = fs.readFileSync(fixturePath, { encoding: 'utf8' });
+    const fileContent = await readFile(fixturePath, { encoding: 'utf8' });
 
-    const trackedFiles = fs
-      .readFileSync(trackedFilesPath, { encoding: 'utf8' })
-      .split(/\n\r?/g);
+    const rawTrackedFiles = await readFile(trackedFilesPath, {
+      encoding: 'utf8',
+    });
+    const trackedFiles = rawTrackedFiles.split(/\n\r?/g);
     const opts: ParseOptions = {
       parseErrors: true,
       trackedFiles,
@@ -123,13 +130,13 @@ describe('java-junit tests', () => {
     expect(result).toMatchSnapshot();
 
     const report = getReport([result]);
-    fs.mkdirSync(path.dirname(outputPath), { recursive: true });
-    fs.writeFileSync(outputPath, report);
+    await mkdir(path.dirname(outputPath), { recursive: true });
+    await writeFile(outputPath, report);
   });
 
   test('parses empty failures in test results', async () => {
     const fixturePath = path.join(
-      __dirname,
+      testDir,
       '..',
       '__fixtures__',
       'external',
@@ -137,9 +144,9 @@ describe('java-junit tests', () => {
       'empty_failures.xml',
     );
     const filePath = normalizeFilePath(
-      path.relative(path.join(__dirname, '..'), fixturePath),
+      path.relative(path.join(testDir, '..'), fixturePath),
     );
-    const fileContent = fs.readFileSync(fixturePath, { encoding: 'utf8' });
+    const fileContent = await readFile(fixturePath, { encoding: 'utf8' });
 
     const trackedFiles: string[] = [];
     const opts: ParseOptions = {
@@ -150,21 +157,21 @@ describe('java-junit tests', () => {
     const parser = new JavaJunitParser(opts);
     const result = await parser.parse(filePath, fileContent);
 
-    expect(result.result === 'failed');
-    expect(result.failed === 1);
+    expect(result.result).toBe('failed');
+    expect(result.failed).toBe(1);
   });
 
   test('report does not include a title by default', async () => {
     const fixturePath = path.join(
-      __dirname,
+      testDir,
       '..',
       '__fixtures__',
       'junit-with-message.xml',
     );
     const filePath = normalizeFilePath(
-      path.relative(path.join(__dirname, '..'), fixturePath),
+      path.relative(path.join(testDir, '..'), fixturePath),
     );
-    const fileContent = fs.readFileSync(fixturePath, { encoding: 'utf8' });
+    const fileContent = await readFile(fixturePath, { encoding: 'utf8' });
 
     const opts: ParseOptions = {
       parseErrors: true,
@@ -186,15 +193,15 @@ describe('java-junit tests', () => {
     'report does not include a title when configured value is %s',
     async (_, reportTitle) => {
       const fixturePath = path.join(
-        __dirname,
+        testDir,
         '..',
         '__fixtures__',
         'junit-with-message.xml',
       );
       const filePath = normalizeFilePath(
-        path.relative(path.join(__dirname, '..'), fixturePath),
+        path.relative(path.join(testDir, '..'), fixturePath),
       );
-      const fileContent = fs.readFileSync(fixturePath, { encoding: 'utf8' });
+      const fileContent = await readFile(fixturePath, { encoding: 'utf8' });
 
       const opts: ParseOptions = {
         parseErrors: true,
@@ -213,16 +220,16 @@ describe('java-junit tests', () => {
 
   test('report includes a custom report title', async () => {
     const fixturePath = path.join(
-      __dirname,
+      testDir,
       '..',
       '__fixtures__',
       'empty',
       'java-junit.xml',
     );
     const filePath = normalizeFilePath(
-      path.relative(path.join(__dirname, '..'), fixturePath),
+      path.relative(path.join(testDir, '..'), fixturePath),
     );
-    const fileContent = fs.readFileSync(fixturePath, { encoding: 'utf8' });
+    const fileContent = await readFile(fixturePath, { encoding: 'utf8' });
 
     const opts: ParseOptions = {
       parseErrors: true,
@@ -240,21 +247,21 @@ describe('java-junit tests', () => {
 
   test('parses nested phpunit suites with leaf testcases', async () => {
     const fixturePath = path.join(
-      __dirname,
+      testDir,
       '..',
       '__fixtures__',
       'phpunit-nested.xml',
     );
     const outputPath = path.join(
-      __dirname,
+      testDir,
       '..',
       '__outputs__',
       'phpunit-nested.md',
     );
     const filePath = normalizeFilePath(
-      path.relative(path.join(__dirname, '..'), fixturePath),
+      path.relative(path.join(testDir, '..'), fixturePath),
     );
-    const fileContent = fs.readFileSync(fixturePath, { encoding: 'utf8' });
+    const fileContent = await readFile(fixturePath, { encoding: 'utf8' });
 
     const opts: ParseOptions = {
       parseErrors: true,
@@ -267,10 +274,10 @@ describe('java-junit tests', () => {
     expect(result.passed).toBe(33);
     expect(result.failed).toBe(0);
     expect(result.skipped).toBe(0);
-    expect(result.suites.length).toBe(5);
+    expect(result.suites).toHaveLength(5);
 
     const report = getReport([result]);
-    fs.mkdirSync(path.dirname(outputPath), { recursive: true });
-    fs.writeFileSync(outputPath, report);
+    await mkdir(path.dirname(outputPath), { recursive: true });
+    await writeFile(outputPath, report);
   });
 });

@@ -1,5 +1,9 @@
-import * as fs from 'fs';
-import * as path from 'path';
+/**
+ * @file Tests the action end to end with the GitHub Actions core module mocked.
+ */
+
+import { mkdir, writeFile } from 'node:fs/promises';
+import path from 'node:path';
 
 import { jest } from '@jest/globals';
 
@@ -40,6 +44,12 @@ jest.unstable_mockModule('@actions/core', () => coreMock);
 
 const { run } = await import('../src/index.js');
 
+/**
+ * Replaces the mocked action inputs and clears the summary and log buffers.
+ * @param map - The inputs to expose through the mocked core module.
+ * @example
+ * setInputs({ 'results-path': 'results.xml' });
+ */
 function setInputs(map: Inputs): void {
   Object.keys(inputs).forEach((key) => delete inputs[key]);
   Object.assign(inputs, map);
@@ -48,9 +58,15 @@ function setInputs(map: Inputs): void {
   infoLogs = [];
 }
 
-function ensureFixtureDir(): string {
+/**
+ * Creates the fixture directory used by the action tests and returns its path.
+ * @returns The absolute path of the fixture directory.
+ * @example
+ * const dir = await ensureFixtureDir();
+ */
+async function ensureFixtureDir(): Promise<string> {
   const dir = path.join(process.cwd(), 'test', '__fixtures__', 'main');
-  fs.mkdirSync(dir, { recursive: true });
+  await mkdir(dir, { recursive: true });
   return dir;
 }
 
@@ -60,7 +76,7 @@ beforeEach(() => {
 });
 
 test('combines test and coverage reports into a single summary', async () => {
-  const fixtureDir = ensureFixtureDir();
+  const fixtureDir = await ensureFixtureDir();
   const junitPath = path.join(fixtureDir, 'project-junit.xml');
   const lcovPath = path.join(fixtureDir, 'coverage.lcov');
 
@@ -88,7 +104,7 @@ test('combines test and coverage reports into a single summary', async () => {
   }
 
   const summaryPath = path.join(fixtureDir, 'summary.md');
-  fs.writeFileSync(summaryPath, recordedSummary, 'utf8');
+  await writeFile(summaryPath, recordedSummary, 'utf8');
   console.log(`Combined summary saved to ${summaryPath}`);
 
   expect(coreMock.setFailed).not.toHaveBeenCalled();
@@ -101,7 +117,7 @@ test('combines test and coverage reports into a single summary', async () => {
 });
 
 test('reports only coverage when results path is not provided', async () => {
-  const fixtureDir = ensureFixtureDir();
+  const fixtureDir = await ensureFixtureDir();
   const lcovPath = path.join(fixtureDir, 'coverage.lcov');
 
   setInputs({
@@ -126,7 +142,7 @@ test('reports only coverage when results path is not provided', async () => {
 });
 
 test('reports only test results when coverage path is not provided', async () => {
-  const fixtureDir = ensureFixtureDir();
+  const fixtureDir = await ensureFixtureDir();
   const junitPath = path.join(fixtureDir, 'project-junit.xml');
 
   setInputs({

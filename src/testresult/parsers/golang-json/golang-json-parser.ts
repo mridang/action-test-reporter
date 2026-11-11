@@ -1,3 +1,7 @@
+/**
+ * @file Parses the JSON event stream written by go test -json.
+ */
+
 import { ParseOptions, TestParser } from '../../test-parser.js';
 
 import { GoTestEvent } from './golang-json-types.js';
@@ -10,6 +14,14 @@ import {
   TestCaseResult,
   TestCaseError,
 } from '../../test-results.js';
+
+/**
+ * Maps the final action of a Go test to the result that is reported for it.
+ */
+const RESULT_BY_ACTION = new Map<string, TestExecutionResult>([
+  ['pass', 'success'],
+  ['skip', 'skipped'],
+]);
 
 /**
  * Parser for Go test JSON output produced with `go test -json`.
@@ -32,8 +44,10 @@ export class GolangJsonParser implements TestParser {
       .map((line, index) => {
         try {
           return JSON.parse(line) as GoTestEvent;
-        } catch (e) {
-          throw new Error(`Invalid JSON at ${path} line ${index + 1}\n\n${e}`);
+        } catch (error) {
+          throw new Error(
+            `Invalid JSON at ${path} line ${index + 1}\n\n${error}`,
+          );
         }
       });
   }
@@ -86,17 +100,13 @@ export class GolangJsonParser implements TestParser {
       const lastEvent = eventGroup.at(-1)!;
 
       const result: TestExecutionResult =
-        lastEvent.Action === 'pass'
-          ? 'success'
-          : lastEvent.Action === 'skip'
-            ? 'skipped'
-            : 'failed';
+        RESULT_BY_ACTION.get(lastEvent.Action) ?? 'failed';
       if (lastEvent.Elapsed === undefined) {
         throw new Error('missing elapsed on final test event');
       }
       const time: number = lastEvent.Elapsed * 1000;
 
-      let error: TestCaseError | undefined = undefined;
+      let error: TestCaseError | undefined;
       if (result !== 'success') {
         const outputEvents = eventGroup
           .filter((e) => e.Action === 'output')

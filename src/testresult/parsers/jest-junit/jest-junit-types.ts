@@ -1,3 +1,7 @@
+/**
+ * @file Declares the types of the Jest JUnit XML test result structure.
+ */
+
 export interface JunitReport {
   testsuites: TestSuites;
 }

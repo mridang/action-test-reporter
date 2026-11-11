@@ -1,3 +1,7 @@
+/**
+ * @file Parses Go cover profiles into the shared coverage model.
+ */
+
 import {
   CoverageParser,
   CoverageData,
@@ -7,31 +11,30 @@ import { GocoverBlock, GocoverFileData } from './gocover-types.js';
 
 /**
  * A parser for Go coverage profile files (output of `go test -coverprofile`).
- * @export
  * @class GocoverParser
  * @implements {CoverageParser}
  */
 export class GocoverParser implements CoverageParser {
   /**
    * Regular expression to match the mode line at the start of Go coverage files.
-   * Valid modes are: set, count, atomic
+   * Valid modes are: set, count, atomic.
    */
   private static readonly MODE_REGEX = /^mode:\s*(set|count|atomic)\s*$/;
 
   /**
    * Regular expression to match coverage block lines.
-   * Format: file:startLine.startCol,endLine.endCol numStatements count
+   * Format: file:startLine.startCol,endLine.endCol numStatements count.
    */
   private static readonly BLOCK_REGEX =
     /^(.+):(\d+)\.(\d+),(\d+)\.(\d+)\s+(\d+)\s+(\d+)$/;
 
   /**
    * Parses Go coverage profile content.
-   * @param {string} content - The Go coverage profile content.
-   * @returns {Promise<CoverageData>} A promise that resolves to the
+   * @memberof GocoverParser
+   * @param content - The Go coverage profile content.
+   * @returns A promise that resolves to the
    * structured coverage data.
    * @throws {Error} If the content is not valid Go coverage format.
-   * @memberof GocoverParser
    */
   public async parse(content: string): Promise<CoverageData> {
     const lines = content.split('\n').filter((line) => line.trim() !== '');
@@ -53,7 +56,7 @@ export class GocoverParser implements CoverageParser {
       const line = lines[i].trim();
       if (line === '') continue;
 
-      const match = line.match(GocoverParser.BLOCK_REGEX);
+      const match = GocoverParser.BLOCK_REGEX.exec(line);
       if (!match) {
         throw new Error(`Invalid Go coverage format at line ${i + 1}: ${line}`);
       }
@@ -70,12 +73,12 @@ export class GocoverParser implements CoverageParser {
       ] = match;
 
       const block: GocoverBlock = {
-        startLine: parseInt(startLine, 10),
-        startCol: parseInt(startCol, 10),
-        endLine: parseInt(endLine, 10),
-        endCol: parseInt(endCol, 10),
-        numStatements: parseInt(numStmts, 10),
-        count: parseInt(count, 10),
+        startLine: Number.parseInt(startLine, 10),
+        startCol: Number.parseInt(startCol, 10),
+        endLine: Number.parseInt(endLine, 10),
+        endCol: Number.parseInt(endCol, 10),
+        numStatements: Number.parseInt(numStmts, 10),
+        count: Number.parseInt(count, 10),
       };
 
       if (!fileDataMap.has(filename)) {
@@ -88,7 +91,7 @@ export class GocoverParser implements CoverageParser {
       throw new Error('No valid Go coverage data found in content');
     }
 
-    const details = Array.from(fileDataMap.values()).map((fileData) =>
+    const details = [...fileDataMap.values()].map((fileData) =>
       this.processFileToDetails(fileData),
     );
     const overall = this.aggregateOverallCoverage(details);
@@ -98,10 +101,10 @@ export class GocoverParser implements CoverageParser {
 
   /**
    * Converts Go coverage file data into standardized coverage details.
-   * @private
-   * @param {GocoverFileData} fileData - The parsed Go coverage file data.
-   * @returns {FileCoverageDetails} The standardized coverage details.
    * @memberof GocoverParser
+   * @param fileData - The parsed Go coverage file data.
+   * @returns The standardized coverage details.
+   * @private
    */
   private processFileToDetails(fileData: GocoverFileData): FileCoverageDetails {
     // Track coverage per line: Map<lineNumber, wasCovered>
@@ -110,24 +113,18 @@ export class GocoverParser implements CoverageParser {
     for (const block of fileData.blocks) {
       // Mark all lines in the block
       for (let line = block.startLine; line <= block.endLine; line++) {
-        const currentCoverage = lineCoverage.get(line);
         // A line is covered if any block covering it has count > 0
-        if (currentCoverage === undefined) {
-          lineCoverage.set(line, block.count > 0);
-        } else if (block.count > 0) {
-          lineCoverage.set(line, true);
-        }
+        const currentCoverage = lineCoverage.get(line) ?? false;
+        lineCoverage.set(line, currentCoverage || block.count > 0);
       }
     }
 
     const totalLines = lineCoverage.size;
-    const coveredLines = Array.from(lineCoverage.values()).filter(
-      (covered) => covered,
-    ).length;
-    const uncoveredLines = Array.from(lineCoverage.entries())
+    const coveredLines = [...lineCoverage.values()].filter(Boolean).length;
+    const uncoveredLines = [...lineCoverage.entries()]
       .filter(([, covered]) => !covered)
       .map(([lineNum]) => lineNum)
-      .sort((a, b) => a - b);
+      .toSorted((a, b) => a - b);
 
     // Calculate statement coverage from blocks
     let totalStatements = 0;
@@ -163,10 +160,10 @@ export class GocoverParser implements CoverageParser {
 
   /**
    * Aggregates the details from all files to create an overall summary.
-   * @private
-   * @param {FileCoverageDetails[]} details - The details for all files.
-   * @returns {CoverageData['overall']} The project-wide coverage summary.
    * @memberof GocoverParser
+   * @param details - The details for all files.
+   * @returns The project-wide coverage summary.
+   * @private
    */
   private aggregateOverallCoverage(
     details: FileCoverageDetails[],

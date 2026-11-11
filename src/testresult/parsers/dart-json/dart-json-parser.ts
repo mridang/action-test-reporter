@@ -1,3 +1,7 @@
+/**
+ * @file Parses the JSON event stream written by the Dart test runner.
+ */
+
 import { ParseOptions, TestParser } from '../../test-parser.js';
 
 import { getBasePath, normalizeFilePath } from '../../utils/path-utils.js';
@@ -28,6 +32,54 @@ import {
   TestCaseError,
 } from '../../test-results.js';
 
+/**
+ * Captures the exception text of a Flutter test print. A single whitespace character separates the text from its
+ * surroundings in the pattern, which keeps the scan linear, so callers trim the leading whitespace of the capture.
+ */
+export const FLUTTER_EXCEPTION_PRINT =
+  /^══╡ EXCEPTION CAUGHT BY FLUTTER TEST FRAMEWORK ╞═+\s(.*)\sWhen the exception was thrown, this was the stack:/ms;
+
+/**
+ * Extracts the file path and line number from a Dart stack trace line such as
+ * `lib/main.dart 12:5  main`. A single whitespace character must precede the line number, because the greedy
+ * path group already absorbs any further whitespace and the scan then stays linear.
+ * @param line - A single line of the stack trace.
+ * @returns The file path and the line number text, or undefined when the line is not a project frame.
+ * @example
+ * const match = matchDartFrame('test/a_test.dart 12:5  main');
+ */
+export function matchDartFrame(
+  line: string,
+): [path: string, line: string] | undefined {
+  const match = /^(?!package:)(.*)\s(\d+):\d+\s/.exec(line);
+  return match === null ? undefined : [match[1], match[2]];
+}
+
+/**
+ * Extracts the file path and line number from a Flutter stack trace line such as
+ * `#0      main (file:///work/test/a_test.dart:12:5)`. The text between the frame number and the location is
+ * matched once, and the opening parenthesis in front of the path is then found from the right, skipping the ones
+ * that start a package location.
+ * @param line - A single line of the stack trace.
+ * @returns The file path and the line number text, or undefined when the line is not a project frame.
+ * @example
+ * const match = matchFlutterFrame('#0 main (file:///work/test/a_test.dart:12:5)');
+ */
+export function matchFlutterFrame(
+  line: string,
+): [path: string, line: string] | undefined {
+  const match = /^(#\d+\s)(.*):(\d+):\d+\)$/.exec(line);
+  if (match === null) {
+    return undefined;
+  }
+  const [, head, middle, lineStr] = match;
+  let open = middle.lastIndexOf('(');
+  while (open !== -1 && line.startsWith('package:', head.length + open + 1)) {
+    open = open === 0 ? -1 : middle.lastIndexOf('(', open - 1);
+  }
+  return open === -1 ? undefined : [middle.slice(open + 1), lineStr];
+}
+
 class TestRun {
   constructor(
     readonly path: string,
@@ -49,7 +101,7 @@ class TestGroup {
 
 class TestCase {
   constructor(readonly testStart: TestStartEvent) {
-    this.groupId = testStart.test.groupIDs[testStart.test.groupIDs.length - 1];
+    this.groupId = testStart.test.groupIDs.at(-1)!;
   }
   readonly groupId: number;
   readonly print: MessageEvent[] = [];
@@ -75,9 +127,9 @@ class TestCase {
   }
 
   get time(): number {
-    return this.testDone !== undefined
-      ? this.testDone.time - this.testStart.time
-      : 0;
+    return this.testDone === undefined
+      ? 0
+      : this.testDone.time - this.testStart.time;
   }
 }
 
@@ -92,8 +144,7 @@ export class DartJsonParser implements TestParser {
 
   async parse(path: string, content: string): Promise<TestRunResult> {
     const tr = this.getTestRun(path, content);
-    const result = this.getTestRunResult(tr);
-    return Promise.resolve(result);
+    return this.getTestRunResult(tr);
   }
 
   private getTestRun(path: string, content: string): TestRun {
@@ -105,13 +156,13 @@ export class DartJsonParser implements TestParser {
         }
         try {
           return JSON.parse(str);
-        } catch (e) {
-          const errWithCol = e as { columnNumber?: number };
+        } catch (error) {
+          const errWithCol = error as { columnNumber?: number };
           const col =
-            errWithCol.columnNumber !== undefined
-              ? `:${errWithCol.columnNumber}`
-              : '';
-          throw new Error(`Invalid JSON at ${path}:${i + 1}${col}\n\n${e}`);
+            errWithCol.columnNumber === undefined
+              ? ''
+              : `:${errWithCol.columnNumber}`;
+          throw new Error(`Invalid JSON at ${path}:${i + 1}${col}\n\n${error}`);
         }
       })
       .filter((evt) => evt != null) as ReportEvent[];
@@ -131,8 +182,8 @@ export class DartJsonParser implements TestParser {
       } else if (isTestStartEvent(evt) && evt.test.url !== null) {
         const test: TestCase = new TestCase(evt);
         const suite = suites[evt.test.suiteID];
-        const group =
-          suite.groups[evt.test.groupIDs[evt.test.groupIDs.length - 1]];
+        const groupIndex = evt.test.groupIDs.length - 1;
+        const group = suite.groups[evt.test.groupIDs[groupIndex]];
         group.tests.push(test);
         tests[evt.test.id] = test;
       } else if (isTestDoneEvent(evt) && tests[evt.testID]) {
@@ -144,6 +195,8 @@ export class DartJsonParser implements TestParser {
       } else if (isDoneEvent(evt)) {
         success = evt.success;
         totalTime = evt.time;
+      } else {
+        // Start, suite and group events do not contribute to the totals.
       }
     }
 
@@ -206,10 +259,7 @@ export class DartJsonParser implements TestParser {
     let path;
     let line;
 
-    if (src !== undefined) {
-      path = src.path;
-      line = src.line;
-    } else {
+    if (src === undefined) {
       const testStartPath = this.getRelativePath(testSuite.suite.path);
       if (trackedFiles.includes(testStartPath)) {
         path = testStartPath;
@@ -218,6 +268,9 @@ export class DartJsonParser implements TestParser {
           test.testStart.test.line ??
           undefined;
       }
+    } else {
+      path = src.path;
+      line = src.line;
     }
 
     return {
@@ -232,12 +285,10 @@ export class DartJsonParser implements TestParser {
     // Try Flutter-specific error extraction (works for both Dart and Flutter)
     const uselessMessageRe =
       /^Test failed\. See exception logs above\.\nThe test description was:/m;
-    const flutterPrintRe =
-      /^══╡ EXCEPTION CAUGHT BY FLUTTER TEST FRAMEWORK ╞═+\s+(.*)\s+When the exception was thrown, this was the stack:/ms;
     if (uselessMessageRe.test(message)) {
-      const match = print.match(flutterPrintRe);
+      const match = FLUTTER_EXCEPTION_PRINT.exec(print);
       if (match !== null) {
-        return match[1];
+        return match[1].trimStart();
       }
     }
 
@@ -250,24 +301,42 @@ export class DartJsonParser implements TestParser {
   ): { path: string; line: number } | undefined {
     const lines = ex.split(/\r?\n/g);
 
-    // Try both Dart and Flutter stack trace patterns
-    const dartRe = /^(?!package:)(.*)\s+(\d+):\d+\s+/;
-    const flutterRe = /^#\d+\s+.*\((?!package:)(.*):(\d+):\d+\)$/;
-    const patterns = [dartRe, flutterRe];
+    // Try both Dart and Flutter stack trace patterns.
+    const matchers = [matchDartFrame, matchFlutterFrame];
 
-    for (const re of patterns) {
-      for (const str of lines) {
-        const match = str.match(re);
-        if (match !== null) {
-          const [, pathStr, lineStr] = match;
-          const path = normalizeFilePath(this.getRelativePath(pathStr));
-          if (trackedFiles.includes(path)) {
-            const line = parseInt(lineStr);
-            return { path, line };
-          }
+    for (const matcher of matchers) {
+      const found = this.findTrackedFrame(lines, matcher, trackedFiles);
+      if (found) {
+        return found;
+      }
+    }
+  }
+
+  /**
+   * Finds the first stack trace line that matches a pattern and points to a tracked file.
+   * @param lines - The lines of the stack trace.
+   * @param matcher - The function that extracts the file path and the line number from a line.
+   * @param trackedFiles - The files tracked by Git.
+   * @returns The relative path and line of the frame, or undefined when none matches.
+   * @example
+   * const frame = this.findTrackedFrame(lines, matchDartFrame, trackedFiles);
+   */
+  private findTrackedFrame(
+    lines: string[],
+    matcher: (line: string) => [path: string, line: string] | undefined,
+    trackedFiles: string[],
+  ): { path: string; line: number } | undefined {
+    for (const str of lines) {
+      const match = matcher(str);
+      if (match !== undefined) {
+        const [pathStr, lineStr] = match;
+        const path = normalizeFilePath(this.getRelativePath(pathStr));
+        if (trackedFiles.includes(path)) {
+          return { path, line: Number.parseInt(lineStr) };
         }
       }
     }
+    return undefined;
   }
 
   private getRelativePath(path: string): string {

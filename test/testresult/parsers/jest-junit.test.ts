@@ -1,5 +1,9 @@
-import * as fs from 'fs';
-import * as path from 'path';
+/**
+ * @file Tests the Jest JUnit test result parser against its fixtures.
+ */
+
+import { mkdir, readFile, writeFile } from 'node:fs/promises';
+import path from 'node:path';
 
 import { JestJunitParser } from '../../../src/testresult/parsers/jest-junit/jest-junit-parser.js';
 import { ParseOptions } from '../../../src/testresult/test-parser.js';
@@ -10,20 +14,21 @@ import {
 import { normalizeFilePath } from '../../../src/testresult/utils/path-utils.js';
 import { getDirname } from '../helpers/dir.js';
 
-const __dirname = getDirname(import.meta.url);
+const testDir = getDirname(import.meta.url);
 
+// eslint-disable-next-line sonarjs/max-lines-per-function -- one suite groups every fixture of this parser
 describe('jest-junit tests', () => {
   test('rejects nested junit suites (e.g. phpunit structure)', async () => {
     const fixturePath = path.join(
-      __dirname,
+      testDir,
       '..',
       '__fixtures__',
       'phpunit-nested.xml',
     );
     const filePath = normalizeFilePath(
-      path.relative(path.join(__dirname, '..'), fixturePath),
+      path.relative(path.join(testDir, '..'), fixturePath),
     );
-    const fileContent = fs.readFileSync(fixturePath, { encoding: 'utf8' });
+    const fileContent = await readFile(fixturePath, { encoding: 'utf8' });
 
     const opts: ParseOptions = {
       parseErrors: true,
@@ -38,16 +43,16 @@ describe('jest-junit tests', () => {
 
   test('produces empty test run result when there are no test cases in the testsuites element', async () => {
     const fixturePath = path.join(
-      __dirname,
+      testDir,
       '..',
       '__fixtures__',
       'empty',
       'jest-junit.xml',
     );
     const filePath = normalizeFilePath(
-      path.relative(path.join(__dirname, '..'), fixturePath),
+      path.relative(path.join(testDir, '..'), fixturePath),
     );
-    const fileContent = fs.readFileSync(fixturePath, { encoding: 'utf8' });
+    const fileContent = await readFile(fixturePath, { encoding: 'utf8' });
 
     const opts: ParseOptions = {
       parseErrors: true,
@@ -62,16 +67,16 @@ describe('jest-junit tests', () => {
 
   test('produces empty test run result when there are no test cases in a nested testsuite element', async () => {
     const fixturePath = path.join(
-      __dirname,
+      testDir,
       '..',
       '__fixtures__',
       'empty',
       'jest-junit-empty-testsuite.xml',
     );
     const filePath = normalizeFilePath(
-      path.relative(path.join(__dirname, '..'), fixturePath),
+      path.relative(path.join(testDir, '..'), fixturePath),
     );
-    const fileContent = fs.readFileSync(fixturePath, { encoding: 'utf8' });
+    const fileContent = await readFile(fixturePath, { encoding: 'utf8' });
 
     const opts: ParseOptions = {
       parseErrors: true,
@@ -85,16 +90,12 @@ describe('jest-junit tests', () => {
   });
 
   test('report from ./reports/jest test results matches snapshot', async () => {
-    const fixturePath = path.join(
-      __dirname,
-      '../__fixtures__',
-      'jest-junit.xml',
-    );
-    const outputPath = path.join(__dirname, '../__outputs__', 'jest-junit.md');
+    const fixturePath = path.join(testDir, '../__fixtures__', 'jest-junit.xml');
+    const outputPath = path.join(testDir, '../__outputs__', 'jest-junit.md');
     const filePath = normalizeFilePath(
-      path.relative(path.join(__dirname, '..'), fixturePath),
+      path.relative(path.join(testDir, '..'), fixturePath),
     );
-    const fileContent = fs.readFileSync(fixturePath, { encoding: 'utf8' });
+    const fileContent = await readFile(fixturePath, { encoding: 'utf8' });
 
     const opts: ParseOptions = {
       parseErrors: true,
@@ -110,13 +111,13 @@ describe('jest-junit tests', () => {
     expect(result).toMatchSnapshot();
 
     const report = getReport([result]);
-    fs.mkdirSync(path.dirname(outputPath), { recursive: true });
-    fs.writeFileSync(outputPath, report);
+    await mkdir(path.dirname(outputPath), { recursive: true });
+    await writeFile(outputPath, report);
   });
 
   test('report from facebook/jest test results matches snapshot', async () => {
     const fixturePath = path.join(
-      __dirname,
+      testDir,
       '..',
       '__fixtures__',
       'external',
@@ -124,7 +125,7 @@ describe('jest-junit tests', () => {
       'jest-test-results.xml',
     );
     const trackedFilesPath = path.join(
-      __dirname,
+      testDir,
       '..',
       '__fixtures__',
       'external',
@@ -132,19 +133,20 @@ describe('jest-junit tests', () => {
       'files.txt',
     );
     const outputPath = path.join(
-      __dirname,
+      testDir,
       '..',
       '__outputs__',
       'jest-test-results.md',
     );
     const filePath = normalizeFilePath(
-      path.relative(path.join(__dirname, '..'), fixturePath),
+      path.relative(path.join(testDir, '..'), fixturePath),
     );
-    const fileContent = fs.readFileSync(fixturePath, { encoding: 'utf8' });
+    const fileContent = await readFile(fixturePath, { encoding: 'utf8' });
 
-    const trackedFiles = fs
-      .readFileSync(trackedFilesPath, { encoding: 'utf8' })
-      .split(/\n\r?/g);
+    const rawTrackedFiles = await readFile(trackedFilesPath, {
+      encoding: 'utf8',
+    });
+    const trackedFiles = rawTrackedFiles.split(/\n\r?/g);
     const opts: ParseOptions = {
       parseErrors: true,
       trackedFiles,
@@ -155,13 +157,13 @@ describe('jest-junit tests', () => {
     expect(result).toMatchSnapshot();
 
     const report = getReport([result]);
-    fs.mkdirSync(path.dirname(outputPath), { recursive: true });
-    fs.writeFileSync(outputPath, report);
+    await mkdir(path.dirname(outputPath), { recursive: true });
+    await writeFile(outputPath, report);
   });
 
   test('report from #235 testing react components named <ComponentName />', async () => {
     const fixturePath = path.join(
-      __dirname,
+      testDir,
       '..',
       '__fixtures__',
       'external',
@@ -169,7 +171,7 @@ describe('jest-junit tests', () => {
       'jest-react-component-test-results.xml',
     );
     const trackedFilesPath = path.join(
-      __dirname,
+      testDir,
       '..',
       '__fixtures__',
       'external',
@@ -177,19 +179,20 @@ describe('jest-junit tests', () => {
       'files.txt',
     );
     const outputPath = path.join(
-      __dirname,
+      testDir,
       '..',
       '__outputs__',
       'jest-react-component-test-results.md',
     );
     const filePath = normalizeFilePath(
-      path.relative(path.join(__dirname, '..'), fixturePath),
+      path.relative(path.join(testDir, '..'), fixturePath),
     );
-    const fileContent = fs.readFileSync(fixturePath, { encoding: 'utf8' });
+    const fileContent = await readFile(fixturePath, { encoding: 'utf8' });
 
-    const trackedFiles = fs
-      .readFileSync(trackedFilesPath, { encoding: 'utf8' })
-      .split(/\n\r?/g);
+    const rawTrackedFiles = await readFile(trackedFilesPath, {
+      encoding: 'utf8',
+    });
+    const trackedFiles = rawTrackedFiles.split(/\n\r?/g);
     const opts: ParseOptions = {
       parseErrors: true,
       trackedFiles,
@@ -200,27 +203,27 @@ describe('jest-junit tests', () => {
     expect(result).toMatchSnapshot();
 
     const report = getReport([result]);
-    fs.mkdirSync(path.dirname(outputPath), { recursive: true });
-    fs.writeFileSync(outputPath, report);
+    await mkdir(path.dirname(outputPath), { recursive: true });
+    await writeFile(outputPath, report);
   });
 
   test('parsing ESLint report without timing information works - PR #134', async () => {
     const fixturePath = path.join(
-      __dirname,
+      testDir,
       '..',
       '__fixtures__',
       'jest-junit-eslint.xml',
     );
     const outputPath = path.join(
-      __dirname,
+      testDir,
       '..',
       '__outputs__',
       'jest-junit-eslint.md',
     );
     const filePath = normalizeFilePath(
-      path.relative(path.join(__dirname, '..'), fixturePath),
+      path.relative(path.join(testDir, '..'), fixturePath),
     );
-    const fileContent = fs.readFileSync(fixturePath, { encoding: 'utf8' });
+    const fileContent = await readFile(fixturePath, { encoding: 'utf8' });
 
     const opts: ParseOptions = {
       parseErrors: true,
@@ -232,27 +235,27 @@ describe('jest-junit tests', () => {
     expect(result).toMatchSnapshot();
 
     const report = getReport([result]);
-    fs.mkdirSync(path.dirname(outputPath), { recursive: true });
-    fs.writeFileSync(outputPath, report);
+    await mkdir(path.dirname(outputPath), { recursive: true });
+    await writeFile(outputPath, report);
   });
 
   test('parsing junit report with message succeeds', async () => {
     const fixturePath = path.join(
-      __dirname,
+      testDir,
       '..',
       '__fixtures__',
       'junit-with-message.xml',
     );
     const outputPath = path.join(
-      __dirname,
+      testDir,
       '..',
       '__outputs__',
       'junit-with-message.md',
     );
     const filePath = normalizeFilePath(
-      path.relative(path.join(__dirname, '..'), fixturePath),
+      path.relative(path.join(testDir, '..'), fixturePath),
     );
-    const fileContent = fs.readFileSync(fixturePath, { encoding: 'utf8' });
+    const fileContent = await readFile(fixturePath, { encoding: 'utf8' });
 
     const opts: ParseOptions = {
       parseErrors: true,
@@ -264,20 +267,16 @@ describe('jest-junit tests', () => {
     expect(result).toMatchSnapshot();
 
     const report = getReport([result]);
-    fs.mkdirSync(path.dirname(outputPath), { recursive: true });
-    fs.writeFileSync(outputPath, report);
+    await mkdir(path.dirname(outputPath), { recursive: true });
+    await writeFile(outputPath, report);
   });
 
   test('report does not include a title by default', async () => {
-    const fixturePath = path.join(
-      __dirname,
-      '../__fixtures__',
-      'jest-junit.xml',
-    );
+    const fixturePath = path.join(testDir, '../__fixtures__', 'jest-junit.xml');
     const filePath = normalizeFilePath(
-      path.relative(path.join(__dirname, '..'), fixturePath),
+      path.relative(path.join(testDir, '..'), fixturePath),
     );
-    const fileContent = fs.readFileSync(fixturePath, { encoding: 'utf8' });
+    const fileContent = await readFile(fixturePath, { encoding: 'utf8' });
 
     const opts: ParseOptions = {
       parseErrors: true,
@@ -299,14 +298,14 @@ describe('jest-junit tests', () => {
     'report does not include a title when configured value is %s',
     async (_, reportTitle) => {
       const fixturePath = path.join(
-        __dirname,
+        testDir,
         '../__fixtures__',
         'jest-junit.xml',
       );
       const filePath = normalizeFilePath(
-        path.relative(path.join(__dirname, '..'), fixturePath),
+        path.relative(path.join(testDir, '..'), fixturePath),
       );
-      const fileContent = fs.readFileSync(fixturePath, { encoding: 'utf8' });
+      const fileContent = await readFile(fixturePath, { encoding: 'utf8' });
 
       const opts: ParseOptions = {
         parseErrors: true,
@@ -324,15 +323,11 @@ describe('jest-junit tests', () => {
   );
 
   test('report includes a custom report title', async () => {
-    const fixturePath = path.join(
-      __dirname,
-      '../__fixtures__',
-      'jest-junit.xml',
-    );
+    const fixturePath = path.join(testDir, '../__fixtures__', 'jest-junit.xml');
     const filePath = normalizeFilePath(
-      path.relative(path.join(__dirname, '..'), fixturePath),
+      path.relative(path.join(testDir, '..'), fixturePath),
     );
-    const fileContent = fs.readFileSync(fixturePath, { encoding: 'utf8' });
+    const fileContent = await readFile(fixturePath, { encoding: 'utf8' });
 
     const opts: ParseOptions = {
       parseErrors: true,
@@ -349,15 +344,11 @@ describe('jest-junit tests', () => {
   });
 
   test('report ignores collapsed setting when configured to always', async () => {
-    const fixturePath = path.join(
-      __dirname,
-      '../__fixtures__',
-      'jest-junit.xml',
-    );
+    const fixturePath = path.join(testDir, '../__fixtures__', 'jest-junit.xml');
     const filePath = normalizeFilePath(
-      path.relative(path.join(__dirname, '..'), fixturePath),
+      path.relative(path.join(testDir, '..'), fixturePath),
     );
-    const fileContent = fs.readFileSync(fixturePath, { encoding: 'utf8' });
+    const fileContent = await readFile(fixturePath, { encoding: 'utf8' });
 
     const opts: ParseOptions = {
       parseErrors: true,
@@ -377,15 +368,11 @@ describe('jest-junit tests', () => {
   });
 
   test('report is not collapsed when configured to never', async () => {
-    const fixturePath = path.join(
-      __dirname,
-      '../__fixtures__',
-      'jest-junit.xml',
-    );
+    const fixturePath = path.join(testDir, '../__fixtures__', 'jest-junit.xml');
     const filePath = normalizeFilePath(
-      path.relative(path.join(__dirname, '..'), fixturePath),
+      path.relative(path.join(testDir, '..'), fixturePath),
     );
-    const fileContent = fs.readFileSync(fixturePath, { encoding: 'utf8' });
+    const fileContent = await readFile(fixturePath, { encoding: 'utf8' });
 
     const opts: ParseOptions = {
       parseErrors: true,
@@ -406,15 +393,15 @@ describe('jest-junit tests', () => {
 
   test('report stays expanded when all tests pass even with auto collapse', async () => {
     const fixturePath = path.join(
-      __dirname,
+      testDir,
       '..',
       '__fixtures__',
       'jest-junit-eslint.xml',
     );
     const filePath = normalizeFilePath(
-      path.relative(path.join(__dirname, '..'), fixturePath),
+      path.relative(path.join(testDir, '..'), fixturePath),
     );
-    const fileContent = fs.readFileSync(fixturePath, { encoding: 'utf8' });
+    const fileContent = await readFile(fixturePath, { encoding: 'utf8' });
 
     const opts: ParseOptions = {
       parseErrors: true,
@@ -438,15 +425,11 @@ describe('jest-junit tests', () => {
   });
 
   test('report stays expanded when tests fail even with auto collapse', async () => {
-    const fixturePath = path.join(
-      __dirname,
-      '../__fixtures__',
-      'jest-junit.xml',
-    );
+    const fixturePath = path.join(testDir, '../__fixtures__', 'jest-junit.xml');
     const filePath = normalizeFilePath(
-      path.relative(path.join(__dirname, '..'), fixturePath),
+      path.relative(path.join(testDir, '..'), fixturePath),
     );
-    const fileContent = fs.readFileSync(fixturePath, { encoding: 'utf8' });
+    const fileContent = await readFile(fixturePath, { encoding: 'utf8' });
 
     const opts: ParseOptions = {
       parseErrors: true,
@@ -470,15 +453,11 @@ describe('jest-junit tests', () => {
   });
 
   test('report includes the short summary', async () => {
-    const fixturePath = path.join(
-      __dirname,
-      '../__fixtures__',
-      'jest-junit.xml',
-    );
+    const fixturePath = path.join(testDir, '../__fixtures__', 'jest-junit.xml');
     const filePath = normalizeFilePath(
-      path.relative(path.join(__dirname, '..'), fixturePath),
+      path.relative(path.join(testDir, '..'), fixturePath),
     );
-    const fileContent = fs.readFileSync(fixturePath, { encoding: 'utf8' });
+    const fileContent = await readFile(fixturePath, { encoding: 'utf8' });
 
     const opts: ParseOptions = {
       parseErrors: true,
@@ -493,15 +472,11 @@ describe('jest-junit tests', () => {
   });
 
   test('report includes a custom report title and short summary', async () => {
-    const fixturePath = path.join(
-      __dirname,
-      '../__fixtures__',
-      'jest-junit.xml',
-    );
+    const fixturePath = path.join(testDir, '../__fixtures__', 'jest-junit.xml');
     const filePath = normalizeFilePath(
-      path.relative(path.join(__dirname, '..'), fixturePath),
+      path.relative(path.join(testDir, '..'), fixturePath),
     );
-    const fileContent = fs.readFileSync(fixturePath, { encoding: 'utf8' });
+    const fileContent = await readFile(fixturePath, { encoding: 'utf8' });
 
     const opts: ParseOptions = {
       parseErrors: true,

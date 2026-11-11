@@ -1,7 +1,15 @@
-import * as fs from 'fs';
-import * as path from 'path';
+/**
+ * @file Tests the TRX test result parser against its fixtures.
+ */
 
-import { DotnetTrxParser } from '../../../src/testresult/parsers/dotnet-trx/dotnet-trx-parser.js';
+import { mkdir, readFile, writeFile } from 'node:fs/promises';
+import path from 'node:path';
+
+import {
+  DotnetTrxParser,
+  STACK_TRACE_LINE_BREAK,
+} from '../../../src/testresult/parsers/dotnet-trx/dotnet-trx-parser.js';
+import { randomStrings, referencePattern } from '../helpers/fuzz.js';
 import { ParseOptions } from '../../../src/testresult/test-parser.js';
 import {
   DEFAULT_OPTIONS,
@@ -11,21 +19,22 @@ import {
 import { normalizeFilePath } from '../../../src/testresult/utils/path-utils.js';
 import { getDirname } from '../helpers/dir.js';
 
-const __dirname = getDirname(import.meta.url);
+const testDir = getDirname(import.meta.url);
 
+// eslint-disable-next-line sonarjs/max-lines-per-function -- one suite groups every fixture of this parser
 describe('dotnet-trx tests', () => {
   test('produces empty test run result when there are no test cases', async () => {
     const fixturePath = path.join(
-      __dirname,
+      testDir,
       '..',
       '__fixtures__',
       'empty',
       'dotnet-trx.trx',
     );
     const filePath = normalizeFilePath(
-      path.relative(path.join(__dirname, '..'), fixturePath),
+      path.relative(path.join(testDir, '..'), fixturePath),
     );
-    const fileContent = fs.readFileSync(fixturePath, { encoding: 'utf8' });
+    const fileContent = await readFile(fixturePath, { encoding: 'utf8' });
 
     const opts: ParseOptions = {
       parseErrors: true,
@@ -40,16 +49,16 @@ describe('dotnet-trx tests', () => {
 
   test('produces empty test run result when TestDefinitions is empty', async () => {
     const fixturePath = path.join(
-      __dirname,
+      testDir,
       '..',
       '__fixtures__',
       'empty',
       'dotnet-trx-empty-test-definitions.trx',
     );
     const filePath = normalizeFilePath(
-      path.relative(path.join(__dirname, '..'), fixturePath),
+      path.relative(path.join(testDir, '..'), fixturePath),
     );
-    const fileContent = fs.readFileSync(fixturePath, { encoding: 'utf8' });
+    const fileContent = await readFile(fixturePath, { encoding: 'utf8' });
 
     const opts: ParseOptions = {
       parseErrors: true,
@@ -66,19 +75,15 @@ describe('dotnet-trx tests', () => {
     'matches %s report snapshot',
     async (reportName) => {
       const fixturePath = path.join(
-        __dirname,
+        testDir,
         '../__fixtures__',
         `${reportName}.trx`,
       );
-      const outputPath = path.join(
-        __dirname,
-        '__outputs__',
-        `${reportName}.md`,
-      );
+      const outputPath = path.join(testDir, '__outputs__', `${reportName}.md`);
       const filePath = normalizeFilePath(
-        path.relative(path.join(__dirname, '..'), fixturePath),
+        path.relative(path.join(testDir, '..'), fixturePath),
       );
-      const fileContent = fs.readFileSync(fixturePath, { encoding: 'utf8' });
+      const fileContent = await readFile(fixturePath, { encoding: 'utf8' });
 
       const opts: ParseOptions = {
         parseErrors: true,
@@ -94,27 +99,23 @@ describe('dotnet-trx tests', () => {
       expect(result).toMatchSnapshot();
 
       const report = getReport([result]);
-      fs.mkdirSync(path.dirname(outputPath), { recursive: true });
-      fs.writeFileSync(outputPath, report);
+      await mkdir(path.dirname(outputPath), { recursive: true });
+      await writeFile(outputPath, report);
     },
   );
 
   test('matches report snapshot (only failed tests)', async () => {
-    const fixturePath = path.join(
-      __dirname,
-      '../__fixtures__',
-      'dotnet-trx.trx',
-    );
+    const fixturePath = path.join(testDir, '../__fixtures__', 'dotnet-trx.trx');
     const outputPath = path.join(
-      __dirname,
+      testDir,
       '..',
       '__outputs__',
       'dotnet-trx-only-failed.md',
     );
     const filePath = normalizeFilePath(
-      path.relative(path.join(__dirname, '..'), fixturePath),
+      path.relative(path.join(testDir, '..'), fixturePath),
     );
-    const fileContent = fs.readFileSync(fixturePath, { encoding: 'utf8' });
+    const fileContent = await readFile(fixturePath, { encoding: 'utf8' });
 
     const opts: ParseOptions = {
       parseErrors: true,
@@ -134,28 +135,28 @@ describe('dotnet-trx tests', () => {
       listTests: 'failed',
     };
     const report = getReport([result], reportOptions);
-    fs.mkdirSync(path.dirname(outputPath), { recursive: true });
-    fs.writeFileSync(outputPath, report);
+    await mkdir(path.dirname(outputPath), { recursive: true });
+    await writeFile(outputPath, report);
   });
 
   test('report from FluentValidation test results matches snapshot', async () => {
     const fixturePath = path.join(
-      __dirname,
+      testDir,
       '..',
       '__fixtures__',
       'external',
       'FluentValidation.Tests.trx',
     );
     const outputPath = path.join(
-      __dirname,
+      testDir,
       '..',
       '__outputs__',
       'fluent-validation-test-results.md',
     );
     const filePath = normalizeFilePath(
-      path.relative(path.join(__dirname, '..'), fixturePath),
+      path.relative(path.join(testDir, '..'), fixturePath),
     );
-    const fileContent = fs.readFileSync(fixturePath, { encoding: 'utf8' });
+    const fileContent = await readFile(fixturePath, { encoding: 'utf8' });
 
     const opts: ParseOptions = {
       trackedFiles: [],
@@ -167,28 +168,28 @@ describe('dotnet-trx tests', () => {
     expect(result).toMatchSnapshot();
 
     const report = getReport([result]);
-    fs.mkdirSync(path.dirname(outputPath), { recursive: true });
-    fs.writeFileSync(outputPath, report);
+    await mkdir(path.dirname(outputPath), { recursive: true });
+    await writeFile(outputPath, report);
   });
 
   test('report from SilentNotes test results matches snapshot', async () => {
     const fixturePath = path.join(
-      __dirname,
+      testDir,
       '..',
       '__fixtures__',
       'external',
       'SilentNotes.trx',
     );
     const outputPath = path.join(
-      __dirname,
+      testDir,
       '..',
       '__outputs__',
       'silent-notes-test-results.md',
     );
     const filePath = normalizeFilePath(
-      path.relative(path.join(__dirname, '..'), fixturePath),
+      path.relative(path.join(testDir, '..'), fixturePath),
     );
-    const fileContent = fs.readFileSync(fixturePath, { encoding: 'utf8' });
+    const fileContent = await readFile(fixturePath, { encoding: 'utf8' });
 
     const opts: ParseOptions = {
       trackedFiles: [],
@@ -200,20 +201,16 @@ describe('dotnet-trx tests', () => {
     expect(result).toMatchSnapshot();
 
     const report = getReport([result]);
-    fs.mkdirSync(path.dirname(outputPath), { recursive: true });
-    fs.writeFileSync(outputPath, report);
+    await mkdir(path.dirname(outputPath), { recursive: true });
+    await writeFile(outputPath, report);
   });
 
   test('report does not include a title by default', async () => {
-    const fixturePath = path.join(
-      __dirname,
-      '../__fixtures__',
-      'dotnet-trx.trx',
-    );
+    const fixturePath = path.join(testDir, '../__fixtures__', 'dotnet-trx.trx');
     const filePath = normalizeFilePath(
-      path.relative(path.join(__dirname, '..'), fixturePath),
+      path.relative(path.join(testDir, '..'), fixturePath),
     );
-    const fileContent = fs.readFileSync(fixturePath, { encoding: 'utf8' });
+    const fileContent = await readFile(fixturePath, { encoding: 'utf8' });
 
     const opts: ParseOptions = {
       parseErrors: true,
@@ -235,14 +232,14 @@ describe('dotnet-trx tests', () => {
     'report does not include a title when configured value is %s',
     async (_, reportTitle) => {
       const fixturePath = path.join(
-        __dirname,
+        testDir,
         '../__fixtures__',
         'dotnet-trx.trx',
       );
       const filePath = normalizeFilePath(
-        path.relative(path.join(__dirname, '..'), fixturePath),
+        path.relative(path.join(testDir, '..'), fixturePath),
       );
-      const fileContent = fs.readFileSync(fixturePath, { encoding: 'utf8' });
+      const fileContent = await readFile(fixturePath, { encoding: 'utf8' });
 
       const opts: ParseOptions = {
         parseErrors: true,
@@ -260,15 +257,11 @@ describe('dotnet-trx tests', () => {
   );
 
   test('report includes a custom report title', async () => {
-    const fixturePath = path.join(
-      __dirname,
-      '../__fixtures__',
-      'dotnet-trx.trx',
-    );
+    const fixturePath = path.join(testDir, '../__fixtures__', 'dotnet-trx.trx');
     const filePath = normalizeFilePath(
-      path.relative(path.join(__dirname, '..'), fixturePath),
+      path.relative(path.join(testDir, '..'), fixturePath),
     );
-    const fileContent = fs.readFileSync(fixturePath, { encoding: 'utf8' });
+    const fileContent = await readFile(fixturePath, { encoding: 'utf8' });
 
     const opts: ParseOptions = {
       parseErrors: true,
@@ -282,5 +275,32 @@ describe('dotnet-trx tests', () => {
       reportTitle: 'My Custom Title',
     });
     expect(report).toMatch(/^# My Custom Title\n/);
+  });
+});
+
+describe('stack trace line break pattern matches the original pattern', () => {
+  const originalBreak = referencePattern('', String.raw`\r*`, String.raw`\n`);
+
+  test('splits random texts the same way', () => {
+    const samples = randomStrings(
+      ['a', '\r', '\r', '\n', '\n', ' '],
+      150_000,
+      14,
+    );
+    for (const sample of samples) {
+      expect({ sample, parts: sample.split(STACK_TRACE_LINE_BREAK) }).toEqual({
+        sample,
+        parts: sample.split(originalBreak),
+      });
+    }
+  });
+
+  test('stays fast on a long run of carriage returns', () => {
+    const started = Date.now();
+    const text = `${'\r'.repeat(200_000)}a`;
+    expect(text.split(STACK_TRACE_LINE_BREAK)).toEqual([text]);
+    expect(Date.now() - started).toBeLessThan(1000);
+    const shortText = `${'\r'.repeat(3000)}a`;
+    expect(shortText.split(originalBreak)).toEqual([shortText]);
   });
 });

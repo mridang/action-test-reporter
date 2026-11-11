@@ -1,3 +1,7 @@
+/**
+ * @file Parses Visual Studio TRX test results from .NET test runs.
+ */
+
 import { parseStringPromise } from 'xml2js';
 
 import {
@@ -21,6 +25,12 @@ import {
   TestSuiteResult,
 } from '../../test-results.js';
 
+/**
+ * Matches a line break together with the carriage returns in front of it. The lookbehind makes the match start at
+ * the first carriage return of a run, so a long run of carriage returns without a line feed is scanned only once.
+ */
+export const STACK_TRACE_LINE_BREAK = /(?<!\r)\r*\n/;
+
 class TestClass {
   constructor(readonly name: string) {}
   readonly tests: Test[] = [];
@@ -36,14 +46,18 @@ class Test {
 
   get result(): TestExecutionResult | undefined {
     switch (this.outcome) {
-      case 'Passed':
+      case 'Passed': {
         return 'success';
-      case 'NotExecuted':
+      }
+      case 'NotExecuted': {
         return 'skipped';
-      case 'Failed':
+      }
+      case 'Failed': {
         return 'failed';
-      default:
+      }
+      default: {
         return undefined;
+      }
     }
   }
 }
@@ -70,8 +84,8 @@ export class DotnetTrxParser implements TestParser {
   ): Promise<TrxReport> {
     try {
       return (await parseStringPromise(content)) as TrxReport;
-    } catch (e) {
-      throw new Error(`Invalid XML at ${path}\n\n${e}`);
+    } catch (error) {
+      throw new Error(`Invalid XML at ${path}\n\n${error}`);
     }
   }
 
@@ -103,7 +117,7 @@ export class DotnetTrxParser implements TestParser {
     const testClasses: { [name: string]: TestClass } = {};
     for (const r of unitTestsResults) {
       const className = r.test.TestMethod[0].$.className ?? 'Unclassified';
-      let tc = testClasses[className];
+      let tc = testClasses[className] as TestClass | undefined;
       if (tc === undefined) {
         tc = new TestClass(className);
         testClasses[tc.name] = tc;
@@ -196,22 +210,20 @@ export class DotnetTrxParser implements TestParser {
   private exceptionThrowSource(
     stackTrace: string,
   ): { path: string; line: number } | undefined {
-    const lines = stackTrace.split(/\r*\n/);
+    const lines = stackTrace.split(STACK_TRACE_LINE_BREAK);
     const re = / in (.+):line (\d+)$/;
     const { trackedFiles } = this.options;
 
     for (const str of lines) {
-      const match = str.match(re);
+      const match = re.exec(str);
       if (match !== null) {
         const [, fileStr, lineStr] = match;
         const filePath = normalizeFilePath(fileStr);
         const workDir = this.getWorkDir(filePath);
-        if (workDir) {
-          const file = filePath.slice(workDir.length);
-          if (trackedFiles.includes(file)) {
-            const line = parseInt(lineStr);
-            return { path: file, line };
-          }
+        const file = workDir ? filePath.slice(workDir.length) : undefined;
+        if (file !== undefined && trackedFiles.includes(file)) {
+          const line = Number.parseInt(lineStr);
+          return { path: file, line };
         }
       }
     }

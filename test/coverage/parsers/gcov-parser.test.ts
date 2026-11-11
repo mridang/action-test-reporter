@@ -1,17 +1,21 @@
-import * as fs from 'fs';
-import * as path from 'path';
+/**
+ * @file Tests the gcov coverage parser and its summary output.
+ */
+
+import { mkdir, readFile, writeFile } from 'node:fs/promises';
+import path from 'node:path';
 
 import { SummaryFormatter } from '../../../src/coverage/formatter/summary-formatter.js';
 import { GcovParser } from '../../../src/coverage/parsers/gcov/gcov-parser.js';
 import { getDirname } from '../helpers/dir.js';
 
-const __dirname = getDirname(import.meta.url);
-const outputDir = path.join(__dirname, '..', '__outputs__');
+const testDir = getDirname(import.meta.url);
+const outputDir = path.join(testDir, '..', '__outputs__');
 
 describe('gcov parser', () => {
   test('parses gcov text content', async () => {
-    const fixturePath = path.join(__dirname, '..', '__fixtures__', 'gcov.out');
-    const content = fs.readFileSync(fixturePath, 'utf8');
+    const fixturePath = path.join(testDir, '..', '__fixtures__', 'gcov.out');
+    const content = await readFile(fixturePath, 'utf8');
 
     const parser = new GcovParser();
     const data = await parser.parse(content);
@@ -24,8 +28,8 @@ describe('gcov parser', () => {
       sha: 'abc123',
     });
 
-    fs.mkdirSync(outputDir, { recursive: true });
+    await mkdir(outputDir, { recursive: true });
     const outputPath = path.join(outputDir, 'gcov.md');
-    fs.writeFileSync(outputPath, summary, 'utf8');
+    await writeFile(outputPath, summary, 'utf8');
   });
 });

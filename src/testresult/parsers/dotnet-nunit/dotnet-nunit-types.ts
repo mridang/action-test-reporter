@@ -1,3 +1,7 @@
+/**
+ * @file Declares the types of the NUnit XML test result structure.
+ */
+
 export interface NunitReport {
   'test-run': TestRun;
 }

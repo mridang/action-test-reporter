@@ -1,5 +1,9 @@
-import { promises as fs } from 'fs';
-import path from 'path';
+/**
+ * @file Tests the detection of the coverage format of a report.
+ */
+
+import { promises as fs } from 'node:fs';
+import path from 'node:path';
 import { detectCoverage } from '../../../src/coverage/parsers/index.js';
 import { LlvmCovParser } from '../../../src/coverage/parsers/llvm-cov/llvm-cov-parser.js';
 

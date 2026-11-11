@@ -1,3 +1,7 @@
+/**
+ * @file Declares the types of the RSpec JSON report structure.
+ */
+
 export interface RspecJson {
   version: number;
   examples: RspecExample[];

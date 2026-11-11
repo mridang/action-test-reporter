@@ -1,3 +1,7 @@
+/**
+ * @file Declares the types of the JaCoCo XML coverage report structure.
+ */
+
 export type JacocoCounter = {
   $: { type: string; missed: string; covered: string };
 };

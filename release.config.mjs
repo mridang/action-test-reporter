@@ -1,4 +1,7 @@
-// noinspection JSUnusedGlobalSymbols
+/**
+ * @file The semantic-release configuration that publishes new versions of the action from the default branch.
+ */
+
 export default {
   plugins: [
     '@semantic-release/commit-analyzer',

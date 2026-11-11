@@ -1,22 +1,21 @@
-import * as fs from 'fs';
-import * as path from 'path';
+/**
+ * @file Tests the Clover coverage parser and its summary output.
+ */
+
+import { mkdir, readFile, writeFile } from 'node:fs/promises';
+import path from 'node:path';
 
 import { SummaryFormatter } from '../../../src/coverage/formatter/summary-formatter.js';
 import { CloverParser } from '../../../src/coverage/parsers/clover/clover-parser.js';
 import { getDirname } from '../helpers/dir.js';
 
-const __dirname = getDirname(import.meta.url);
-const outputDir = path.join(__dirname, '..', '__outputs__');
+const testDir = getDirname(import.meta.url);
+const outputDir = path.join(testDir, '..', '__outputs__');
 
 describe('clover parser', () => {
   test('parses clover xml content', async () => {
-    const fixturePath = path.join(
-      __dirname,
-      '..',
-      '__fixtures__',
-      'clover.xml',
-    );
-    const content = fs.readFileSync(fixturePath, 'utf8');
+    const fixturePath = path.join(testDir, '..', '__fixtures__', 'clover.xml');
+    const content = await readFile(fixturePath, 'utf8');
 
     const parser = new CloverParser();
     const data = await parser.parse(content);
@@ -30,8 +29,8 @@ describe('clover parser', () => {
       rootDir: '/tmp',
     });
 
-    fs.mkdirSync(outputDir, { recursive: true });
+    await mkdir(outputDir, { recursive: true });
     const outputPath = path.join(outputDir, 'clover.md');
-    fs.writeFileSync(outputPath, summary, 'utf8');
+    await writeFile(outputPath, summary, 'utf8');
   });
 });
