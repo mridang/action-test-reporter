@@ -22,7 +22,6 @@ export interface CoverageRunOutput {
   consoleOutputs: string[];
 }
 
-
 /**
  * Loads the coverage files that match the configured patterns and formats each one.
  * @param options - The glob patterns of the coverage files to read.

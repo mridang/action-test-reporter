@@ -136,7 +136,6 @@ export class DartJsonParser implements TestParser {
         const test: TestCase = new TestCase(evt);
         const suite = suites[evt.test.suiteID];
         const groupIndex = evt.test.groupIDs.length - 1;
-        // eslint-disable-next-line unicorn/prefer-at -- .at() would widen the element type to include undefined
         const group = suite.groups[evt.test.groupIDs[groupIndex]];
         group.tests.push(test);
         tests[evt.test.id] = test;

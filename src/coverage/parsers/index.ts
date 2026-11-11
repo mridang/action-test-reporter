@@ -28,7 +28,6 @@ const availableParsers: CoverageParser[] = [
 
 type DetectedCoverage = { parser: CoverageParser; data: CoverageData };
 
-
 /**
  * Detects the format of a coverage report by trying each available parser in turn.
  * @param content - The raw text of the coverage report.

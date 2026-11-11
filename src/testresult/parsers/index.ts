@@ -53,7 +53,6 @@ export interface DetectedTestResult {
   format: string;
 }
 
-
 /**
  * Detects the test result format by trying each parser in order.
  * Returns the first parser that successfully parses the content.

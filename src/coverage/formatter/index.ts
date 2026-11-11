@@ -45,7 +45,6 @@ export function formatUncoveredLines(
 
     const fullRangeString = groupedRanges
       .map((group: number[]) => {
-        // eslint-disable-next-line unicorn/prefer-at -- .at() would widen the element type to include undefined
         return group.length > 1 ? `${group[0]}-${group.at(-1)}` : `${group[0]}`;
       })
       .join(',');

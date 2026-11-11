@@ -14,6 +14,13 @@
     "test:watch": "npm run test -- --watch"
   },
   "main": "dist/main.cjs",
+  "exports": {
+    ".": {
+      "default": "./dist/main.cjs"
+    },
+    "./package.json": "./package.json"
+  },
+  "sideEffects": true,
   "keywords": [
     "github",
     "github-actions",
