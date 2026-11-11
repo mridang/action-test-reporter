@@ -1,12 +1,16 @@
-import * as fs from 'node:fs';
-import * as path from 'node:path';
+/**
+ * @file Tests the Markdown coverage summary formatter against the expected output.
+ */
+
+import { mkdir, readFile, writeFile } from 'node:fs/promises';
+import path from 'node:path';
 
 import { SummaryFormatter } from '../../../src/coverage/formatter/summary-formatter.js';
 import { detectCoverage } from '../../../src/coverage/parsers/index.js';
 import { getDirname } from '../helpers/dir.js';
 
-const __dirname = getDirname(import.meta.url);
-const outputDir = path.join(__dirname, '..', '__outputs__');
+const testDir = getDirname(import.meta.url);
+const outputDir = path.join(testDir, '..', '__outputs__');
 
 describe('coverage summary formatter', () => {
   test('renders coverage table from fixture', async () => {
@@ -17,7 +21,7 @@ describe('coverage summary formatter', () => {
       'main',
       'coverage.lcov',
     );
-    const content = fs.readFileSync(fixturePath, 'utf8');
+    const content = await readFile(fixturePath, 'utf8');
     const { data } = await detectCoverage(content);
 
     const formatter = new SummaryFormatter();
@@ -27,9 +31,9 @@ describe('coverage summary formatter', () => {
       rootDir: process.cwd(),
     });
 
-    fs.mkdirSync(outputDir, { recursive: true });
+    await mkdir(outputDir, { recursive: true });
     const outputPath = path.join(outputDir, 'summary-formatter.md');
-    fs.writeFileSync(outputPath, summary, 'utf8');
+    await writeFile(outputPath, summary, 'utf8');
 
     expect(summary).toMatchSnapshot();
   });

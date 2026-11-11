@@ -1,3 +1,7 @@
+/**
+ * @file Provides the shared base class for coverage parsers, with common path and file handling.
+ */
+
 import { parseStringPromise } from 'xml2js';
 import { CoverageParser, CoverageData } from './coverage-parser.js';
 
@@ -8,7 +12,6 @@ import { CoverageParser, CoverageData } from './coverage-parser.js';
  * @class BaseParser
  * @implements {CoverageParser}
  * @abstract
- * @export
  */
 export abstract class BaseParser<T> implements CoverageParser {
   /**

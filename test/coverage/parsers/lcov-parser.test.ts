@@ -1,17 +1,21 @@
-import * as fs from 'node:fs';
-import * as path from 'node:path';
+/**
+ * @file Tests the LCOV coverage parser and its summary output.
+ */
+
+import { mkdir, readFile, writeFile } from 'node:fs/promises';
+import path from 'node:path';
 
 import { SummaryFormatter } from '../../../src/coverage/formatter/summary-formatter.js';
 import { LcovParser } from '../../../src/coverage/parsers/lcov/lcov-parser.js';
 import { getDirname } from '../helpers/dir.js';
 
-const __dirname = getDirname(import.meta.url);
-const outputDir = path.join(__dirname, '..', '__outputs__');
+const testDir = getDirname(import.meta.url);
+const outputDir = path.join(testDir, '..', '__outputs__');
 
 describe('lcov parser', () => {
   test('parses lcov info content', async () => {
-    const fixturePath = path.join(__dirname, '..', '__fixtures__', 'lcov.info');
-    const content = fs.readFileSync(fixturePath, 'utf8');
+    const fixturePath = path.join(testDir, '..', '__fixtures__', 'lcov.info');
+    const content = await readFile(fixturePath, 'utf8');
 
     const parser = new LcovParser();
     const data = await parser.parse(content);
@@ -25,8 +29,8 @@ describe('lcov parser', () => {
       rootDir: '/tmp',
     });
 
-    fs.mkdirSync(outputDir, { recursive: true });
+    await mkdir(outputDir, { recursive: true });
     const outputPath = path.join(outputDir, 'lcov.md');
-    fs.writeFileSync(outputPath, summary, 'utf8');
+    await writeFile(outputPath, summary, 'utf8');
   });
 });

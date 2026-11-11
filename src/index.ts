@@ -1,18 +1,25 @@
-import * as core from '@actions/core';
+/**
+ * @file Runs the test result and coverage reporters together when the action is invoked with both kinds of input.
+ */
+
+import { getInput, setFailed, summary } from '@actions/core';
 
 import { run as runTestReporter } from './testresult/main.js';
 import { run as runCoverageReporter } from './coverage/main.js';
 
+/**
+ * Runs the test result and coverage reporters for the inputs given to the action and writes one combined summary.
+ * @example
+ * await run();
+ */
 export async function run(): Promise<void> {
-  const resultsPath = core.getInput('results-path', { required: false }).trim();
-  const coveragePath = core
-    .getInput('coverage-path', { required: false })
-    .trim();
+  const resultsPath = getInput('results-path', { required: false }).trim();
+  const coveragePath = getInput('coverage-path', { required: false }).trim();
   const hasResults = resultsPath.length > 0;
   const hasCoverage = coveragePath.length > 0;
 
   if (!hasResults && !hasCoverage) {
-    core.setFailed(
+    setFailed(
       "Either 'results-path' or 'coverage-path' must be provided to generate a report.",
     );
     return;
@@ -31,7 +38,8 @@ export async function run(): Promise<void> {
     }
 
     if (sections.length > 0) {
-      await (await core.summary.clear()).addRaw(sections.join('\n\n')).write();
+      const cleared = await summary.clear();
+      await cleared.addRaw(sections.join('\n\n')).write();
     }
     return;
   }

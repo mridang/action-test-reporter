@@ -1,3 +1,7 @@
+/**
+ * @file Parses llvm-cov JSON exports into the shared coverage model.
+ */
+
 import {
   CoverageParser,
   CoverageData,
@@ -56,7 +60,6 @@ const DEPENDENCY_PATH = /(^|[\\/])\.build[\\/]/;
  * (dependencies) are ignored.
  * @class LlvmCovParser
  * @implements {CoverageParser}
- * @export
  */
 export class LlvmCovParser implements CoverageParser {
   /**

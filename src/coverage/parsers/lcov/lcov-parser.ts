@@ -1,3 +1,7 @@
+/**
+ * @file Parses LCOV tracefiles into the shared coverage model.
+ */
+
 import {
   CoverageParser,
   CoverageData,
@@ -9,7 +13,6 @@ import { LcovFileBuilder } from './lcov-types.js';
  * A parser for LCOV string-based coverage reports.
  * @class LcovParser
  * @implements {CoverageParser}
- * @export
  */
 export class LcovParser implements CoverageParser {
   /**

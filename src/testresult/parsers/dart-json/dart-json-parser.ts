@@ -1,3 +1,7 @@
+/**
+ * @file Parses the JSON event stream written by the Dart test runner.
+ */
+
 import { ParseOptions, TestParser } from '../../test-parser.js';
 
 import { getBasePath, normalizeFilePath } from '../../utils/path-utils.js';
@@ -49,6 +53,7 @@ class TestGroup {
 
 class TestCase {
   constructor(readonly testStart: TestStartEvent) {
+    // eslint-disable-next-line unicorn/prefer-at -- .at() would widen the element type to include undefined
     this.groupId = testStart.test.groupIDs[testStart.test.groupIDs.length - 1];
   }
   readonly groupId: number;
@@ -75,9 +80,9 @@ class TestCase {
   }
 
   get time(): number {
-    return this.testDone !== undefined
-      ? this.testDone.time - this.testStart.time
-      : 0;
+    return this.testDone === undefined
+      ? 0
+      : this.testDone.time - this.testStart.time;
   }
 }
 
@@ -92,8 +97,7 @@ export class DartJsonParser implements TestParser {
 
   async parse(path: string, content: string): Promise<TestRunResult> {
     const tr = this.getTestRun(path, content);
-    const result = this.getTestRunResult(tr);
-    return Promise.resolve(result);
+    return this.getTestRunResult(tr);
   }
 
   private getTestRun(path: string, content: string): TestRun {
@@ -105,13 +109,13 @@ export class DartJsonParser implements TestParser {
         }
         try {
           return JSON.parse(str);
-        } catch (e) {
-          const errWithCol = e as { columnNumber?: number };
+        } catch (error) {
+          const errWithCol = error as { columnNumber?: number };
           const col =
-            errWithCol.columnNumber !== undefined
-              ? `:${errWithCol.columnNumber}`
-              : '';
-          throw new Error(`Invalid JSON at ${path}:${i + 1}${col}\n\n${e}`);
+            errWithCol.columnNumber === undefined
+              ? ''
+              : `:${errWithCol.columnNumber}`;
+          throw new Error(`Invalid JSON at ${path}:${i + 1}${col}\n\n${error}`);
         }
       })
       .filter((evt) => evt != null) as ReportEvent[];
@@ -131,8 +135,9 @@ export class DartJsonParser implements TestParser {
       } else if (isTestStartEvent(evt) && evt.test.url !== null) {
         const test: TestCase = new TestCase(evt);
         const suite = suites[evt.test.suiteID];
-        const group =
-          suite.groups[evt.test.groupIDs[evt.test.groupIDs.length - 1]];
+        const groupIndex = evt.test.groupIDs.length - 1;
+        // eslint-disable-next-line unicorn/prefer-at -- .at() would widen the element type to include undefined
+        const group = suite.groups[evt.test.groupIDs[groupIndex]];
         group.tests.push(test);
         tests[evt.test.id] = test;
       } else if (isTestDoneEvent(evt) && tests[evt.testID]) {
@@ -144,6 +149,8 @@ export class DartJsonParser implements TestParser {
       } else if (isDoneEvent(evt)) {
         success = evt.success;
         totalTime = evt.time;
+      } else {
+        // Start, suite and group events do not contribute to the totals.
       }
     }
 
@@ -206,10 +213,7 @@ export class DartJsonParser implements TestParser {
     let path;
     let line;
 
-    if (src !== undefined) {
-      path = src.path;
-      line = src.line;
-    } else {
+    if (src === undefined) {
       const testStartPath = this.getRelativePath(testSuite.suite.path);
       if (trackedFiles.includes(testStartPath)) {
         path = testStartPath;
@@ -218,6 +222,9 @@ export class DartJsonParser implements TestParser {
           test.testStart.test.line ??
           undefined;
       }
+    } else {
+      path = src.path;
+      line = src.line;
     }
 
     return {
@@ -233,9 +240,10 @@ export class DartJsonParser implements TestParser {
     const uselessMessageRe =
       /^Test failed\. See exception logs above\.\nThe test description was:/m;
     const flutterPrintRe =
+      // eslint-disable-next-line sonarjs/super-linear-regex -- applied to a single test print
       /^══╡ EXCEPTION CAUGHT BY FLUTTER TEST FRAMEWORK ╞═+\s+(.*)\s+When the exception was thrown, this was the stack:/ms;
     if (uselessMessageRe.test(message)) {
-      const match = print.match(flutterPrintRe);
+      const match = flutterPrintRe.exec(print);
       if (match !== null) {
         return match[1];
       }
@@ -250,24 +258,46 @@ export class DartJsonParser implements TestParser {
   ): { path: string; line: number } | undefined {
     const lines = ex.split(/\r?\n/g);
 
-    // Try both Dart and Flutter stack trace patterns
+    // Try both Dart and Flutter stack trace patterns.
+    // eslint-disable-next-line sonarjs/super-linear-regex -- applied to single stack trace lines
     const dartRe = /^(?!package:)(.*)\s+(\d+):\d+\s+/;
+    // eslint-disable-next-line sonarjs/super-linear-regex -- applied to single stack trace lines
     const flutterRe = /^#\d+\s+.*\((?!package:)(.*):(\d+):\d+\)$/;
     const patterns = [dartRe, flutterRe];
 
     for (const re of patterns) {
-      for (const str of lines) {
-        const match = str.match(re);
-        if (match !== null) {
-          const [, pathStr, lineStr] = match;
-          const path = normalizeFilePath(this.getRelativePath(pathStr));
-          if (trackedFiles.includes(path)) {
-            const line = parseInt(lineStr);
-            return { path, line };
-          }
+      const found = this.findTrackedFrame(lines, re, trackedFiles);
+      if (found) {
+        return found;
+      }
+    }
+  }
+
+  /**
+   * Finds the first stack trace line that matches a pattern and points to a tracked file.
+   * @param lines - The lines of the stack trace.
+   * @param re - The pattern that captures the file path and the line number.
+   * @param trackedFiles - The files tracked by Git.
+   * @returns The relative path and line of the frame, or undefined when none matches.
+   * @example
+   * const frame = this.findTrackedFrame(lines, dartRe, trackedFiles);
+   */
+  private findTrackedFrame(
+    lines: string[],
+    re: RegExp,
+    trackedFiles: string[],
+  ): { path: string; line: number } | undefined {
+    for (const str of lines) {
+      const match = re.exec(str);
+      if (match !== null) {
+        const [, pathStr, lineStr] = match;
+        const path = normalizeFilePath(this.getRelativePath(pathStr));
+        if (trackedFiles.includes(path)) {
+          return { path, line: Number.parseInt(lineStr) };
         }
       }
     }
+    return undefined;
   }
 
   private getRelativePath(path: string): string {

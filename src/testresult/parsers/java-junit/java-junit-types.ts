@@ -1,3 +1,7 @@
+/**
+ * @file Declares the types of the JUnit XML test result structure.
+ */
+
 export interface JunitReport {
   testsuites: TestSuites;
 }

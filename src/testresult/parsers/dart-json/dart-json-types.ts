@@ -1,4 +1,8 @@
 /**
+ * @file Declares the event types emitted by the Dart test runner JSON reporter.
+ */
+
+/**
  * Reflects documentation at https://github.com/dart-lang/test/blob/master/pkgs/test/doc/json_reporter.md.
  */
 
@@ -14,18 +18,20 @@ export type ReportEvent =
   | MessageEvent
   | ErrorEvent;
 
+type EventType =
+  | 'start'
+  | 'allSuites'
+  | 'suite'
+  | 'debug'
+  | 'group'
+  | 'testStart'
+  | 'print'
+  | 'error'
+  | 'testDone'
+  | 'done';
+
 interface Event {
-  type:
-    | 'start'
-    | 'allSuites'
-    | 'suite'
-    | 'debug'
-    | 'group'
-    | 'testStart'
-    | 'print'
-    | 'error'
-    | 'testDone'
-    | 'done';
+  type: EventType;
   time: number;
 }
 
@@ -121,24 +127,79 @@ interface Test {
   root_url: string | undefined;
 }
 
+/**
+ * Tells whether a Dart test event describes a suite.
+ * @param event - The event to check.
+ * @returns True when the event is a suite event.
+ * @example
+ * if (isSuiteEvent(event)) { suites.push(event); }
+ */
 export function isSuiteEvent(event: ReportEvent): event is SuiteEvent {
   return event.type === 'suite';
 }
+
+/**
+ * Tells whether a Dart test event describes a group.
+ * @param event - The event to check.
+ * @returns True when the event is a group event.
+ * @example
+ * if (isGroupEvent(event)) { groups.push(event); }
+ */
 export function isGroupEvent(event: ReportEvent): event is GroupEvent {
   return event.type === 'group';
 }
+
+/**
+ * Tells whether a Dart test event marks the start of a test.
+ * @param event - The event to check.
+ * @returns True when the event is a test start event.
+ * @example
+ * if (isTestStartEvent(event)) { starts.set(event.test.id, event); }
+ */
 export function isTestStartEvent(event: ReportEvent): event is TestStartEvent {
   return event.type === 'testStart';
 }
+
+/**
+ * Tells whether a Dart test event marks the end of a test.
+ * @param event - The event to check.
+ * @returns True when the event is a test done event.
+ * @example
+ * if (isTestDoneEvent(event)) { results.push(event); }
+ */
 export function isTestDoneEvent(event: ReportEvent): event is TestDoneEvent {
   return event.type === 'testDone';
 }
+
+/**
+ * Tells whether a Dart test event carries an error raised by a test.
+ * @param event - The event to check.
+ * @returns True when the event is an error event.
+ * @example
+ * if (isErrorEvent(event)) { errors.push(event.error); }
+ */
 export function isErrorEvent(event: ReportEvent): event is ErrorEvent {
   return event.type === 'error';
 }
+
+/**
+ * Tells whether a Dart test event marks the end of the whole run.
+ * @param event - The event to check.
+ * @returns True when the event is the done event.
+ * @example
+ * if (isDoneEvent(event)) { finished = true; }
+ */
 export function isDoneEvent(event: ReportEvent): event is DoneEvent {
   return event.type === 'done';
 }
+
+/**
+ * Tells whether a Dart test event is a message printed by the test runner.
+ * @param event - The event to check.
+ * @returns True when the event is a print event.
+ * @example
+ * if (isMessageEvent(event)) { messages.push(event.message); }
+ */
 export function isMessageEvent(event: ReportEvent): event is MessageEvent {
   return event.type === 'print';
 }

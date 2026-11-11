@@ -1,3 +1,7 @@
+/**
+ * @file Parses Clover XML coverage reports into the shared coverage model.
+ */
+
 import { BaseParser } from '../base-parser.js';
 import { CoverageData, FileCoverageDetails } from '../coverage-parser.js';
 import { CloverFile, CloverXml } from './clover-types.js';
@@ -6,7 +10,6 @@ import { CloverFile, CloverXml } from './clover-types.js';
  * A parser for Clover XML coverage reports.
  * @class CloverParser
  * @augments {BaseParser}
- * @export
  */
 export class CloverParser extends BaseParser<CloverXml> {
   /**
@@ -16,6 +19,8 @@ export class CloverParser extends BaseParser<CloverXml> {
    * @returns A promise that resolves to the
    * structured file coverage data.
    * @protected
+   * @example
+   * const data = await parser.parse(xml);
    */
   protected process(xml: CloverXml): Promise<CoverageData> {
     const project = xml.coverage.project[0];

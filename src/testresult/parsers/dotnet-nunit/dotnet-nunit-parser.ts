@@ -1,3 +1,7 @@
+/**
+ * @file Parses NUnit XML test results from .NET test runs.
+ */
+
 import { ParseOptions, TestParser } from '../../test-parser.js';
 import { parseStringPromise } from 'xml2js';
 
@@ -33,14 +37,14 @@ export class DotnetNunitParser implements TestParser {
   ): Promise<NunitReport> {
     try {
       return (await parseStringPromise(content)) as NunitReport;
-    } catch (e) {
-      throw new Error(`Invalid XML at ${path}\n\n${e}`);
+    } catch (error) {
+      throw new Error(`Invalid XML at ${path}\n\n${error}`);
     }
   }
 
   private getTestRunResult(path: string, nunit: NunitReport): TestRunResult {
     const suites: TestSuiteResult[] = [];
-    const time = parseFloat(nunit['test-run'].$.duration) * 1000;
+    const time = Number.parseFloat(nunit['test-run'].$.duration) * 1000;
 
     this.populateTestCasesRecursive(
       suites,
@@ -85,10 +89,11 @@ export class DotnetNunitParser implements TestParser {
       (suite) => suite.$.type !== 'Theory',
     );
     const suiteName = suitesWithoutTheories
-      .slice(0, suitesWithoutTheories.length - 1)
+      .slice(0, -1)
       .map((suite) => suite.$.name)
       .join('.');
     const groupName =
+      // eslint-disable-next-line unicorn/prefer-at -- .at() would widen the element type to include undefined
       suitesWithoutTheories[suitesWithoutTheories.length - 1].$.name;
 
     let existingSuite = result.find((suite) => suite.name === suiteName);
@@ -109,7 +114,7 @@ export class DotnetNunitParser implements TestParser {
       new TestCaseResult(
         testCase.$.name,
         this.getTestExecutionResult(testCase),
-        parseFloat(testCase.$.duration) * 1000,
+        Number.parseFloat(testCase.$.duration) * 1000,
         this.getTestCaseError(testCase),
       ),
     );

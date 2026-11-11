@@ -1,22 +1,21 @@
-import * as fs from 'node:fs';
-import * as path from 'node:path';
+/**
+ * @file Tests the JaCoCo coverage parser and its summary output.
+ */
+
+import { mkdir, readFile, writeFile } from 'node:fs/promises';
+import path from 'node:path';
 
 import { SummaryFormatter } from '../../../src/coverage/formatter/summary-formatter.js';
 import { JacocoParser } from '../../../src/coverage/parsers/jacoco/jacoco-parser.js';
 import { getDirname } from '../helpers/dir.js';
 
-const __dirname = getDirname(import.meta.url);
-const outputDir = path.join(__dirname, '..', '__outputs__');
+const testDir = getDirname(import.meta.url);
+const outputDir = path.join(testDir, '..', '__outputs__');
 
 describe('jacoco parser', () => {
   test('parses jacoco xml content', async () => {
-    const fixturePath = path.join(
-      __dirname,
-      '..',
-      '__fixtures__',
-      'jacoco.xml',
-    );
-    const content = fs.readFileSync(fixturePath, 'utf8');
+    const fixturePath = path.join(testDir, '..', '__fixtures__', 'jacoco.xml');
+    const content = await readFile(fixturePath, 'utf8');
 
     const parser = new JacocoParser();
     const data = await parser.parse(content);
@@ -29,8 +28,8 @@ describe('jacoco parser', () => {
       sha: 'abc123',
     });
 
-    fs.mkdirSync(outputDir, { recursive: true });
+    await mkdir(outputDir, { recursive: true });
     const outputPath = path.join(outputDir, 'jacoco.md');
-    fs.writeFileSync(outputPath, summary, 'utf8');
+    await writeFile(outputPath, summary, 'utf8');
   });
 });

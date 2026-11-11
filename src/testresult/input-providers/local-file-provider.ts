@@ -1,4 +1,8 @@
-import * as fs from 'node:fs';
+/**
+ * @file Reads test result files from the local disk using the configured glob patterns.
+ */
+
+import { readFile } from 'node:fs/promises';
 import glob from 'fast-glob';
 import { FileContent, InputProvider, ReportInput } from './input-provider.js';
 import { listFiles } from '../utils/git.js';
@@ -14,7 +18,7 @@ export class LocalFileProvider implements InputProvider {
     for (const pat of this.pattern) {
       const paths = await glob(pat, { dot: true });
       for (const file of paths) {
-        const content = await fs.promises.readFile(file, { encoding: 'utf8' });
+        const content = await readFile(file, { encoding: 'utf8' });
         result.push({ file, content });
       }
     }

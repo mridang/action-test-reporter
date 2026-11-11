@@ -1,3 +1,7 @@
+/**
+ * @file Runs the coverage pipeline for a set of inputs and collects the formatted summaries.
+ */
+
 import { detectCoverage } from './parsers/index.js';
 import { SummaryFormatter } from './formatter/summary-formatter.js';
 import { ConsoleFormatter } from './formatter/console-formatter.js';
@@ -18,6 +22,16 @@ export interface CoverageRunOutput {
   consoleOutputs: string[];
 }
 
+/* eslint-disable jsdoc/check-tag-names -- @rejects is required for async functions but the preset tag list omits it */
+
+/**
+ * Loads the coverage files that match the configured patterns and formats each one.
+ * @param options - The glob patterns of the coverage files to read.
+ * @returns The formatted summaries and the console output for every file.
+ * @rejects {Error} When no coverage file matches the patterns.
+ * @example
+ * const output = await runCoverage({ patterns: ['coverage/lcov.info'] });
+ */
 export async function runCoverage(
   options: CoverageRunOptions,
 ): Promise<CoverageRunOutput> {
@@ -49,3 +63,4 @@ export async function runCoverage(
 
   return { summaries, consoleOutputs };
 }
+/* eslint-enable jsdoc/check-tag-names -- end of the @rejects documentation block */

@@ -1,4 +1,8 @@
-import * as path from 'node:path';
+/**
+ * @file Parses JUnit XML test results produced by Java test runners.
+ */
+
+import path from 'node:path';
 import { ParseOptions, TestParser } from '../../test-parser.js';
 import { parseStringPromise } from 'xml2js';
 
@@ -38,7 +42,8 @@ export class JavaJunitParser implements TestParser {
 
   async parse(filePath: string, content: string): Promise<TestRunResult> {
     const reportOrSuite = await this.getJunitReport(filePath, content);
-    const isReport = (reportOrSuite as JunitReport).testsuites !== undefined;
+    const isReport =
+      (reportOrSuite as { testsuites?: unknown }).testsuites !== undefined;
 
     let ju: JunitReport;
     if (isReport) {
@@ -76,7 +81,7 @@ export class JavaJunitParser implements TestParser {
       : [];
 
     const seconds = Number.parseFloat(junit.testsuites.$?.time);
-    const time = isNaN(seconds) ? undefined : seconds * 1000;
+    const time = Number.isNaN(seconds) ? undefined : seconds * 1000;
     return new TestRunResult(filePath, suites, time);
   }
 
@@ -193,7 +198,7 @@ export class JavaJunitParser implements TestParser {
   }
 
   private getFilePath(tracePath: string, fileName: string): string | undefined {
-    const files = this.trackedFiles[fileName];
+    const files = this.trackedFiles[fileName] as string[] | undefined;
     if (files === undefined) {
       return undefined;
     }

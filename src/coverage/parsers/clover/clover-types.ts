@@ -1,3 +1,7 @@
+/**
+ * @file Declares the types of the Clover XML coverage report structure.
+ */
+
 export type CloverMetricsAttributes = {
   statements: string;
   coveredstatements: string;

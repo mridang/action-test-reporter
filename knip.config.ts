@@ -1,3 +1,7 @@
+/**
+ * @file Knip configuration that reports unused files, dependencies and exports in this repository.
+ */
+
 export default {
   entry: [
     'src/index.ts',

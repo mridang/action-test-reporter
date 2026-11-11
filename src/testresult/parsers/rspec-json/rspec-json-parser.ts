@@ -1,3 +1,7 @@
+/**
+ * @file Parses the JSON report written by RSpec.
+ */
+
 import { ParseOptions, TestParser } from '../../test-parser.js';
 import {
   TestCaseError,
@@ -128,7 +132,7 @@ export class RspecJsonParser implements TestParser {
     const re = /^(.*?):(\d+):/;
 
     for (const str of backtrace) {
-      const match = str.match(re);
+      const match = re.exec(str);
       if (match !== null) {
         const [, path, lineStr] = match;
         if (path.startsWith('./')) {

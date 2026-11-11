@@ -1,3 +1,7 @@
+/**
+ * @file Parses gcov text output into the shared coverage model.
+ */
+
 import {
   CoverageParser,
   CoverageData,
@@ -10,7 +14,6 @@ import { GcovFileSection, GcovLine } from './gcov-types.js';
  * A parser for gcov text output files.
  * @class GcovParser
  * @implements {CoverageParser}
- * @export
  */
 export class GcovParser implements CoverageParser {
   /**
@@ -47,102 +50,21 @@ export class GcovParser implements CoverageParser {
     const sections: GcovFileSection[] = [];
     let currentSection: GcovFileSection | null = null;
 
-    for (const line_ of lines) {
-      const line = line_.trim();
+    for (const rawLine of lines) {
+      const line = rawLine.trim();
+      const filename = parseSectionFilename(line);
 
-      const fileMatch = line.match(/^File\s+'(.+)'$/);
-      const creatingMatch = line.match(/^Creating\s+'(.+)'$/);
-
-      if (fileMatch || creatingMatch) {
+      if (filename !== undefined) {
         if (currentSection) {
           sections.push(currentSection);
         }
-
-        const filename = fileMatch
-          ? fileMatch[1]
-          : creatingMatch![1].replace(/\.gcov$/, '');
-        currentSection = {
-          filename,
-          lines: [],
-        };
-        continue;
+        currentSection = { filename, lines: [] };
       }
-
-      if (currentSection) {
-        const linesMatch = line.match(/^Lines executed:(\d+\.\d+)% of (\d+)$/);
-        const branchesMatch = line.match(
-          /^Branches executed:(\d+\.\d+)% of (\d+)$/,
-        );
-        const functionsMatch = line.match(
-          /^Functions executed:(\d+\.\d+)% of (\d+)$/,
-        );
-
-        if (linesMatch) {
-          const percentage = Number.parseFloat(linesMatch[1]);
-          const total = Number.parseInt(linesMatch[2], 10);
-          const covered = Math.round((percentage / 100) * total);
-
-          if (!currentSection.summary) {
-            currentSection.summary = {
-              linesExecuted: { covered: 0, total: 0 },
-            };
-          }
-          currentSection.summary.linesExecuted = { covered, total };
-          continue;
+      if (currentSection && !applySummaryLine(currentSection, line)) {
+        const sourceLine = parseSourceLine(line);
+        if (sourceLine) {
+          currentSection.lines.push(sourceLine);
         }
-
-        if (branchesMatch) {
-          const percentage = Number.parseFloat(branchesMatch[1]);
-          const total = Number.parseInt(branchesMatch[2], 10);
-          const covered = Math.round((percentage / 100) * total);
-
-          if (!currentSection.summary) {
-            currentSection.summary = {
-              linesExecuted: { covered: 0, total: 0 },
-            };
-          }
-          currentSection.summary.branchesExecuted = { covered, total };
-          continue;
-        }
-
-        if (functionsMatch) {
-          const percentage = Number.parseFloat(functionsMatch[1]);
-          const total = Number.parseInt(functionsMatch[2], 10);
-          const covered = Math.round((percentage / 100) * total);
-
-          if (!currentSection.summary) {
-            currentSection.summary = {
-              linesExecuted: { covered: 0, total: 0 },
-            };
-          }
-          currentSection.summary.functionsExecuted = { covered, total };
-          continue;
-        }
-      }
-
-      const lineMatch = line.match(/^\s*([#\d-]+):\s*(\d+):\s*(.*)/);
-      if (lineMatch && currentSection) {
-        const [, countStr, lineNumberStr, sourceCode] = lineMatch;
-        const lineNumber = Number.parseInt(lineNumberStr, 10);
-
-        let executionCount: number | null = null;
-
-        if (countStr.trim() === '-') {
-          executionCount = null;
-        } else if (countStr.trim() === '#####') {
-          executionCount = 0;
-        } else {
-          const count = Number.parseInt(countStr.trim(), 10);
-          if (!isNaN(count)) {
-            executionCount = count;
-          }
-        }
-
-        currentSection.lines.push({
-          lineNumber,
-          executionCount,
-          sourceCode: sourceCode || '',
-        });
       }
     }
 
@@ -177,12 +99,10 @@ export class GcovParser implements CoverageParser {
     const branches: CoverageMetrics = { total: 0, covered: 0 };
     const methods: CoverageMetrics = { total: 0, covered: 0 };
 
-    lines = section.summary?.linesExecuted
-      ? section.summary.linesExecuted
-      : {
-          total: executableLines.length,
-          covered: coveredLines.length,
-        };
+    lines = section.summary?.linesExecuted ?? {
+      total: executableLines.length,
+      covered: coveredLines.length,
+    };
 
     if (section.summary?.branchesExecuted) {
       branches.total = section.summary.branchesExecuted.total;
@@ -234,4 +154,95 @@ export class GcovParser implements CoverageParser {
       },
     );
   }
+}
+
+/**
+ * Reads the source file name from a gcov section header line.
+ * @param line - The trimmed line to inspect.
+ * @returns The source file name, or undefined when the line is not a header.
+ * @example
+ * const name = parseSectionFilename("File 'src/index.ts'"); // 'src/index.ts'
+ */
+function parseSectionFilename(line: string): string | undefined {
+  const fileMatch = /^File\s+'(.+)'$/.exec(line);
+  if (fileMatch) {
+    return fileMatch[1];
+  }
+  const creatingMatch = /^Creating\s+'(.+)'$/.exec(line);
+  if (creatingMatch) {
+    return creatingMatch[1].replace(/\.gcov$/, '');
+  }
+  return undefined;
+}
+
+/**
+ * Stores the lines, branches or functions percentage from a gcov summary line in the section.
+ * @param section - The section that receives the summary value.
+ * @param line - The trimmed line to inspect.
+ * @returns True when the line was a summary line and has been applied.
+ * @example
+ * const applied = applySummaryLine(section, 'Lines executed:50.00% of 4');
+ */
+function applySummaryLine(section: GcovFileSection, line: string): boolean {
+  const summaryPatterns = [
+    { key: 'linesExecuted', re: /^Lines executed:(\d+\.\d+)% of (\d+)$/ },
+    { key: 'branchesExecuted', re: /^Branches executed:(\d+\.\d+)% of (\d+)$/ },
+    {
+      key: 'functionsExecuted',
+      re: /^Functions executed:(\d+\.\d+)% of (\d+)$/,
+    },
+  ] as const;
+
+  for (const { key, re } of summaryPatterns) {
+    const match = re.exec(line);
+    if (match) {
+      const percentage = Number.parseFloat(match[1]);
+      const total = Number.parseInt(match[2], 10);
+      const covered = Math.round((percentage / 100) * total);
+
+      section.summary ??= { linesExecuted: { covered: 0, total: 0 } };
+      section.summary[key] = { covered, total };
+      return true;
+    }
+  }
+  return false;
+}
+
+/**
+ * Parses a gcov source line that starts with an execution count and a line number.
+ * @param line - The trimmed line to parse.
+ * @returns The parsed line, or undefined when the line has no count and number.
+ * @example
+ * const parsed = parseSourceLine('5: 12: return value;');
+ */
+function parseSourceLine(line: string): GcovLine | undefined {
+  const lineMatch = /^\s*([#\d-]+):\s*(\d+):\s*(.*)/.exec(line);
+  if (!lineMatch) {
+    return undefined;
+  }
+  const [, countStr, lineNumberStr, sourceCode] = lineMatch;
+  return {
+    lineNumber: Number.parseInt(lineNumberStr, 10),
+    executionCount: parseExecutionCount(countStr),
+    sourceCode: sourceCode || '',
+  };
+}
+
+/**
+ * Converts the execution count column of a gcov source line into a number.
+ * @param countStr - The raw count column, such as '5', '#####' or '-'.
+ * @returns The execution count, or null when the line is not executable.
+ * @example
+ * const count = parseExecutionCount('#####'); // 0
+ */
+function parseExecutionCount(countStr: string): number | null {
+  const trimmed = countStr.trim();
+  if (trimmed === '-') {
+    return null;
+  }
+  if (trimmed === '#####') {
+    return 0;
+  }
+  const count = Number.parseInt(trimmed, 10);
+  return Number.isNaN(count) ? null : count;
 }

@@ -1,3 +1,7 @@
+/**
+ * @file Tests that the local file provider reads the test result files it matches.
+ */
+
 import { promises as fs } from 'node:fs';
 import path from 'node:path';
 import { tmpdir } from 'node:os';

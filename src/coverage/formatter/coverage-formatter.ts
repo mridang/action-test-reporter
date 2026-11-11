@@ -1,10 +1,13 @@
+/**
+ * @file Defines the contract that every coverage output formatter implements.
+ */
+
 import { CoverageData } from '../parsers/coverage-parser.js';
 
 /**
  * Defines the contract for a coverage report formatter.
  * @template T - Optional formatting options.
  * @interface CoverageFormatter
- * @export
  */
 export interface CoverageFormatter<T = void> {
   /**

@@ -1,3 +1,7 @@
+/**
+ * @file Jest configuration that runs the TypeScript test suite under ESM with coverage thresholds.
+ */
+
 export default {
   preset: 'ts-jest/presets/default-esm',
   transform: {

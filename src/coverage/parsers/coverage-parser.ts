@@ -1,7 +1,10 @@
 /**
+ * @file Declares the shared coverage data model and the parser contract.
+ */
+
+/**
  * Represents coverage data for a specific metric (e.g., lines, branches).
  * @interface CoverageMetrics
- * @export
  */
 export interface CoverageMetrics {
   covered: number;
@@ -11,7 +14,6 @@ export interface CoverageMetrics {
 /**
  * Contains detailed coverage information for a single source file.
  * @interface FileCoverageDetails
- * @export
  */
 export interface FileCoverageDetails {
   file: string;
@@ -26,7 +28,6 @@ export interface FileCoverageDetails {
  * Represents the complete, standardized coverage data extracted from a report,
  * including an overall summary and detailed per-file data.
  * @interface CoverageData
- * @export
  */
 export interface CoverageData {
   overall: {
@@ -41,7 +42,6 @@ export interface CoverageData {
 /**
  * Defines the contract for all coverage report parsers.
  * @interface CoverageParser
- * @export
  */
 export interface CoverageParser {
   /**

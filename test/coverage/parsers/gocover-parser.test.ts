@@ -1,22 +1,21 @@
-import * as fs from 'node:fs';
-import * as path from 'node:path';
+/**
+ * @file Tests the Go cover profile parser and its summary output.
+ */
+
+import { mkdir, readFile, writeFile } from 'node:fs/promises';
+import path from 'node:path';
 
 import { SummaryFormatter } from '../../../src/coverage/formatter/summary-formatter.js';
 import { GocoverParser } from '../../../src/coverage/parsers/gocover/gocover-parser.js';
 import { getDirname } from '../helpers/dir.js';
 
-const __dirname = getDirname(import.meta.url);
-const outputDir = path.join(__dirname, '..', '__outputs__');
+const testDir = getDirname(import.meta.url);
+const outputDir = path.join(testDir, '..', '__outputs__');
 
 describe('gocover parser', () => {
   test('parses go coverage profile content', async () => {
-    const fixturePath = path.join(
-      __dirname,
-      '..',
-      '__fixtures__',
-      'gocover.out',
-    );
-    const content = fs.readFileSync(fixturePath, 'utf8');
+    const fixturePath = path.join(testDir, '..', '__fixtures__', 'gocover.out');
+    const content = await readFile(fixturePath, 'utf8');
 
     const parser = new GocoverParser();
     const data = await parser.parse(content);
@@ -29,9 +28,9 @@ describe('gocover parser', () => {
       sha: 'abc123',
     });
 
-    fs.mkdirSync(outputDir, { recursive: true });
+    await mkdir(outputDir, { recursive: true });
     const outputPath = path.join(outputDir, 'gocover.md');
-    fs.writeFileSync(outputPath, summary, 'utf8');
+    await writeFile(outputPath, summary, 'utf8');
   });
 
   test('throws on empty content', async () => {
@@ -39,36 +38,30 @@ describe('gocover parser', () => {
     await expect(parser.parse('')).rejects.toThrow('Empty Go coverage content');
   });
 
-  test('throws on missing mode line', async () => {
+  test.each([
+    {
+      name: 'missing mode line',
+      content: 'github.com/example/file.go:1.1,2.2 1 1',
+      message: 'Invalid Go coverage format: missing or invalid mode line',
+    },
+    {
+      name: 'invalid mode',
+      content: 'mode: invalid\ngithub.com/example/file.go:1.1,2.2 1 1',
+      message: 'Invalid Go coverage format: missing or invalid mode line',
+    },
+    {
+      name: 'invalid block line',
+      content: 'mode: set\ninvalid line format',
+      message: 'Invalid Go coverage format at line 2',
+    },
+    {
+      name: 'no coverage data after mode line',
+      content: 'mode: set\n',
+      message: 'No valid Go coverage data found in content',
+    },
+  ])('throws on $name', async ({ content, message }) => {
     const parser = new GocoverParser();
-    const content = 'github.com/example/file.go:1.1,2.2 1 1';
-    await expect(parser.parse(content)).rejects.toThrow(
-      'Invalid Go coverage format: missing or invalid mode line',
-    );
-  });
-
-  test('throws on invalid mode', async () => {
-    const parser = new GocoverParser();
-    const content = 'mode: invalid\ngithub.com/example/file.go:1.1,2.2 1 1';
-    await expect(parser.parse(content)).rejects.toThrow(
-      'Invalid Go coverage format: missing or invalid mode line',
-    );
-  });
-
-  test('throws on invalid block line', async () => {
-    const parser = new GocoverParser();
-    const content = 'mode: set\ninvalid line format';
-    await expect(parser.parse(content)).rejects.toThrow(
-      'Invalid Go coverage format at line 2',
-    );
-  });
-
-  test('throws when no coverage data after mode line', async () => {
-    const parser = new GocoverParser();
-    const content = 'mode: set\n';
-    await expect(parser.parse(content)).rejects.toThrow(
-      'No valid Go coverage data found in content',
-    );
+    await expect(parser.parse(content)).rejects.toThrow(message);
   });
 
   test('parses all valid modes', async () => {

@@ -1,5 +1,9 @@
-import * as fs from 'node:fs';
-import * as path from 'node:path';
+/**
+ * @file Tests the Dart JSON test result parser against its fixtures.
+ */
+
+import { mkdir, readFile, writeFile } from 'node:fs/promises';
+import path from 'node:path';
 
 import { DartJsonParser } from '../../../src/testresult/parsers/dart-json/dart-json-parser.js';
 import { ParseOptions } from '../../../src/testresult/test-parser.js';
@@ -10,21 +14,21 @@ import {
 import { normalizeFilePath } from '../../../src/testresult/utils/path-utils.js';
 import { getDirname } from '../helpers/dir.js';
 
-const __dirname = getDirname(import.meta.url);
+const testDir = getDirname(import.meta.url);
 
 describe('dart-json tests', () => {
   test('produces empty test run result when there are no test cases', async () => {
     const fixturePath = path.join(
-      __dirname,
+      testDir,
       '..',
       '__fixtures__',
       'empty',
       'dart-json.json',
     );
     const filePath = normalizeFilePath(
-      path.relative(path.join(__dirname, '..'), fixturePath),
+      path.relative(path.join(testDir, '..'), fixturePath),
     );
-    const fileContent = fs.readFileSync(fixturePath, { encoding: 'utf8' });
+    const fileContent = await readFile(fixturePath, { encoding: 'utf8' });
 
     const opts: ParseOptions = {
       parseErrors: true,
@@ -47,29 +51,25 @@ describe('dart-json tests', () => {
       ],
     };
 
-    const fixturePath = path.join(
-      __dirname,
-      '../__fixtures__',
-      'dart-json.json',
-    );
-    const outputPath = path.join(__dirname, '../__outputs__', 'dart-json.md');
+    const fixturePath = path.join(testDir, '../__fixtures__', 'dart-json.json');
+    const outputPath = path.join(testDir, '../__outputs__', 'dart-json.md');
     const filePath = normalizeFilePath(
-      path.relative(path.join(__dirname, '..'), fixturePath),
+      path.relative(path.join(testDir, '..'), fixturePath),
     );
-    const fileContent = fs.readFileSync(fixturePath, { encoding: 'utf8' });
+    const fileContent = await readFile(fixturePath, { encoding: 'utf8' });
 
     const parser = new DartJsonParser(opts);
     const result = await parser.parse(filePath, fileContent);
     expect(result).toMatchSnapshot();
 
     const report = getReport([result]);
-    fs.mkdirSync(path.dirname(outputPath), { recursive: true });
-    fs.writeFileSync(outputPath, report);
+    await mkdir(path.dirname(outputPath), { recursive: true });
+    await writeFile(outputPath, report);
   });
 
   test('report from rrousselGit/provider test results matches snapshot', async () => {
     const fixturePath = path.join(
-      __dirname,
+      testDir,
       '..',
       '__fixtures__',
       'external',
@@ -77,7 +77,7 @@ describe('dart-json tests', () => {
       'provider-test-results.json',
     );
     const trackedFilesPath = path.join(
-      __dirname,
+      testDir,
       '..',
       '__fixtures__',
       'external',
@@ -85,19 +85,20 @@ describe('dart-json tests', () => {
       'files.txt',
     );
     const outputPath = path.join(
-      __dirname,
+      testDir,
       '..',
       '__outputs__',
       'provider-test-results.md',
     );
     const filePath = normalizeFilePath(
-      path.relative(path.join(__dirname, '..'), fixturePath),
+      path.relative(path.join(testDir, '..'), fixturePath),
     );
-    const fileContent = fs.readFileSync(fixturePath, { encoding: 'utf8' });
+    const fileContent = await readFile(fixturePath, { encoding: 'utf8' });
 
-    const trackedFiles = fs
-      .readFileSync(trackedFilesPath, { encoding: 'utf8' })
-      .split(/\n\r?/g);
+    const rawTrackedFiles = await readFile(trackedFilesPath, {
+      encoding: 'utf8',
+    });
+    const trackedFiles = rawTrackedFiles.split(/\n\r?/g);
     const opts: ParseOptions = {
       trackedFiles,
       parseErrors: true,
@@ -108,20 +109,16 @@ describe('dart-json tests', () => {
     expect(result).toMatchSnapshot();
 
     const report = getReport([result]);
-    fs.mkdirSync(path.dirname(outputPath), { recursive: true });
-    fs.writeFileSync(outputPath, report);
+    await mkdir(path.dirname(outputPath), { recursive: true });
+    await writeFile(outputPath, report);
   });
 
   test('report does not include a title by default', async () => {
-    const fixturePath = path.join(
-      __dirname,
-      '../__fixtures__',
-      'dart-json.json',
-    );
+    const fixturePath = path.join(testDir, '../__fixtures__', 'dart-json.json');
     const filePath = normalizeFilePath(
-      path.relative(path.join(__dirname, '..'), fixturePath),
+      path.relative(path.join(testDir, '..'), fixturePath),
     );
-    const fileContent = fs.readFileSync(fixturePath, { encoding: 'utf8' });
+    const fileContent = await readFile(fixturePath, { encoding: 'utf8' });
 
     const opts: ParseOptions = {
       parseErrors: true,
@@ -143,14 +140,14 @@ describe('dart-json tests', () => {
     'report does not include a title when configured value is %s',
     async (_, reportTitle) => {
       const fixturePath = path.join(
-        __dirname,
+        testDir,
         '../__fixtures__',
         'dart-json.json',
       );
       const filePath = normalizeFilePath(
-        path.relative(path.join(__dirname, '..'), fixturePath),
+        path.relative(path.join(testDir, '..'), fixturePath),
       );
-      const fileContent = fs.readFileSync(fixturePath, { encoding: 'utf8' });
+      const fileContent = await readFile(fixturePath, { encoding: 'utf8' });
 
       const opts: ParseOptions = {
         parseErrors: true,
@@ -168,15 +165,11 @@ describe('dart-json tests', () => {
   );
 
   test('report includes a custom report title', async () => {
-    const fixturePath = path.join(
-      __dirname,
-      '../__fixtures__',
-      'dart-json.json',
-    );
+    const fixturePath = path.join(testDir, '../__fixtures__', 'dart-json.json');
     const filePath = normalizeFilePath(
-      path.relative(path.join(__dirname, '..'), fixturePath),
+      path.relative(path.join(testDir, '..'), fixturePath),
     );
-    const fileContent = fs.readFileSync(fixturePath, { encoding: 'utf8' });
+    const fileContent = await readFile(fixturePath, { encoding: 'utf8' });
 
     const opts: ParseOptions = {
       parseErrors: true,

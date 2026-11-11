@@ -1,3 +1,7 @@
+/**
+ * @file Declares the types used while reading gcov text output.
+ */
+
 export type GcovLine = {
   executionCount: number | null;
   lineNumber: number;

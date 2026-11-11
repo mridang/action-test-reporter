@@ -1,3 +1,7 @@
+/**
+ * @file Registers the test result parsers and detects the format of a results file.
+ */
+
 import { ParseOptions, TestParser } from '../test-parser.js';
 import { TestRunResult } from '../test-results.js';
 import { DartJsonParser } from './dart-json/dart-json-parser.js';
@@ -49,6 +53,8 @@ export interface DetectedTestResult {
   format: string;
 }
 
+/* eslint-disable jsdoc/check-tag-names -- @rejects is required for async functions but the preset tag list omits it */
+
 /**
  * Detects the test result format by trying each parser in order.
  * Returns the first parser that successfully parses the content.
@@ -56,7 +62,9 @@ export interface DetectedTestResult {
  * @param content - The raw file content to parse.
  * @param options - Parse options including workDir and trackedFiles.
  * @returns The detected parser, parsed result, and format name.
- * @throws Error if no parser can handle the content.
+ * @rejects {Error} When no parser can handle the content.
+ * @example
+ * const { format, result } = await detectTestFormat('results.xml', content, options);
  */
 export async function detectTestFormat(
   path: string,
@@ -77,3 +85,4 @@ export async function detectTestFormat(
     'Could not determine test result format. None of the available parsers succeeded.',
   );
 }
+/* eslint-enable jsdoc/check-tag-names -- end of the @rejects documentation block */

@@ -1,3 +1,7 @@
+/**
+ * @file Declares the types of the TRX test result structure.
+ */
+
 export interface TrxReport {
   TestRun: TestRun;
 }

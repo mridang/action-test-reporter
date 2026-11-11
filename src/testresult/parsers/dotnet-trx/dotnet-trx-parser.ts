@@ -1,3 +1,7 @@
+/**
+ * @file Parses Visual Studio TRX test results from .NET test runs.
+ */
+
 import { parseStringPromise } from 'xml2js';
 
 import {
@@ -107,7 +111,7 @@ export class DotnetTrxParser implements TestParser {
     const testClasses: { [name: string]: TestClass } = {};
     for (const r of unitTestsResults) {
       const className = r.test.TestMethod[0].$.className ?? 'Unclassified';
-      let tc = testClasses[className];
+      let tc = testClasses[className] as TestClass | undefined;
       if (tc === undefined) {
         tc = new TestClass(className);
         testClasses[tc.name] = tc;
@@ -200,22 +204,21 @@ export class DotnetTrxParser implements TestParser {
   private exceptionThrowSource(
     stackTrace: string,
   ): { path: string; line: number } | undefined {
+    // eslint-disable-next-line sonarjs/super-linear-regex -- splits a single stack trace text, so backtracking is bounded
     const lines = stackTrace.split(/\r*\n/);
     const re = / in (.+):line (\d+)$/;
     const { trackedFiles } = this.options;
 
     for (const str of lines) {
-      const match = str.match(re);
+      const match = re.exec(str);
       if (match !== null) {
         const [, fileStr, lineStr] = match;
         const filePath = normalizeFilePath(fileStr);
         const workDir = this.getWorkDir(filePath);
-        if (workDir) {
-          const file = filePath.slice(workDir.length);
-          if (trackedFiles.includes(file)) {
-            const line = Number.parseInt(lineStr);
-            return { path: file, line };
-          }
+        const file = workDir ? filePath.slice(workDir.length) : undefined;
+        if (file !== undefined && trackedFiles.includes(file)) {
+          const line = Number.parseInt(lineStr);
+          return { path: file, line };
         }
       }
     }

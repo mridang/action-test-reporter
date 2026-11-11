@@ -1,9 +1,13 @@
+/**
+ * @file Tests the parsing of Java stack trace lines.
+ */
+
 import { parseStackTraceElement } from '../../../src/testresult/parsers/java-junit/java-stack-trace-element-parser.js';
 
 describe('parseStackTraceLine tests', () => {
   test('empty line is not parsed', async () => {
     const line = '';
-    expect(parseStackTraceElement(line)).toBe(undefined);
+    expect(parseStackTraceElement(line)).toBeUndefined();
   });
 
   describe('java class', () => {
@@ -55,7 +59,6 @@ describe('parseStackTraceLine tests', () => {
         const line = 'at com.foo.loader//com.foo.Main.run(Main.java:101)';
         expect(parseStackTraceElement(line)).toEqual({
           classLoader: 'com.foo.loader',
-          moduleNameAndVersion: undefined,
           tracePath: 'com.foo.Main.run',
           fileName: 'Main.java',
           lineStr: '101',

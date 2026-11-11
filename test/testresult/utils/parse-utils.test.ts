@@ -1,3 +1,7 @@
+/**
+ * @file Tests the duration, date and stack trace helpers in the parse utilities.
+ */
+
 import { parseNetDuration } from '../../../src/testresult/utils/parse-utils.js';
 
 describe('parseNetDuration', () => {

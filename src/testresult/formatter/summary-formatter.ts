@@ -1,8 +1,13 @@
-import * as core from '@actions/core';
+/**
+ * @file Formats test results as a Markdown summary for the GitHub Actions job summary.
+ */
+
+import { info, warning } from '@actions/core';
 import {
   TestExecutionResult,
   TestRunResult,
   TestSuiteResult,
+  TestCaseError,
 } from '../test-results.js';
 import {
   Align,
@@ -58,6 +63,15 @@ export class SummaryFormatter implements TestResultFormatter<ReportOptions> {
   }
 }
 
+/**
+ * Renders the test results as a Markdown report and trims it when it exceeds the GitHub size limit.
+ * @param results - The test runs to include in the report.
+ * @param options - The options that control the layout of the report.
+ * @param shortSummary - A one-line summary shown below the report title.
+ * @returns The Markdown report.
+ * @example
+ * const markdown = getReport(results, DEFAULT_OPTIONS, '3 passed, 1 failed');
+ */
 export function getReport(
   results: TestRunResult[],
   options: ReportOptions = DEFAULT_OPTIONS,
@@ -74,9 +88,7 @@ export function getReport(
   }
 
   if (opts.listTests === 'all') {
-    core.info(
-      "Test report summary is too big - setting 'listTests' to 'failed'",
-    );
+    info("Test report summary is too big - setting 'listTests' to 'failed'");
     opts.listTests = 'failed';
     view = renderReport(results, opts, shortSummary);
     report = view.join('\n');
@@ -85,18 +97,33 @@ export function getReport(
     }
   }
 
-  core.warning(
+  warning(
     `Test report summary exceeded limit of ${getMaxReportLength(options)} bytes and will be trimmed`,
   );
   return trimReport(view, options);
 }
 
+/**
+ * Returns the byte limit for a report, which depends on whether it is written to the job summary.
+ * @param options - The options that decide where the report is written.
+ * @returns The maximum number of bytes the report may take.
+ * @example
+ * const limit = getMaxReportLength(DEFAULT_OPTIONS);
+ */
 function getMaxReportLength(options: ReportOptions = DEFAULT_OPTIONS): number {
   return options.useActionsSummary
     ? MAX_ACTIONS_SUMMARY_LENGTH
     : MAX_REPORT_LENGTH;
 }
 
+/**
+ * Cuts the report lines down to the byte limit and appends a notice that the report was trimmed.
+ * @param lines - The report lines to trim.
+ * @param options - The options that decide the byte limit.
+ * @returns The trimmed report, with the notice on its last line.
+ * @example
+ * const report = trimReport(['# Results', '```', 'output', '```'], DEFAULT_OPTIONS);
+ */
 function trimReport(lines: string[], options: ReportOptions): string {
   const closingBlock = '```';
   const errorMsg = `**Report exceeded GitHub limit of ${getMaxReportLength(options)} bytes and has been trimmed**`;
@@ -128,6 +155,12 @@ function trimReport(lines: string[], options: ReportOptions): string {
   return reportLines.join('\n');
 }
 
+/**
+ * Sorts the test runs and their suites alphabetically by name, in place.
+ * @param results - The test runs to sort, which are also sorted in place.
+ * @example
+ * applySort(testRuns);
+ */
 function applySort(results: TestRunResult[]): void {
   results.sort((a, b) => a.path.localeCompare(b.path, DEFAULT_LOCALE));
   for (const res of results) {
@@ -135,10 +168,26 @@ function applySort(results: TestRunResult[]): void {
   }
 }
 
+/**
+ * Returns the length of a string in UTF-8 bytes, which is the unit GitHub uses for its limits.
+ * @param text - The text to measure.
+ * @returns The number of UTF-8 bytes in the text.
+ * @example
+ * const size = getByteLength('report');
+ */
 function getByteLength(text: string): number {
   return Buffer.byteLength(text, 'utf8');
 }
 
+/**
+ * Builds the lines of a report with its title, short summary, overall badge and per-run sections.
+ * @param results - The test runs to render.
+ * @param options - The options that control the layout of the report.
+ * @param shortSummary - A one-line summary shown below the title.
+ * @returns The lines of the report.
+ * @example
+ * const lines = renderReport(results, DEFAULT_OPTIONS, '');
+ */
 function renderReport(
   results: TestRunResult[],
   options: ReportOptions,
@@ -164,6 +213,14 @@ function renderReport(
   return sections;
 }
 
+/**
+ * Creates a single badge that summarises the results of all test runs combined.
+ * @param results - The test runs whose counts are added together.
+ * @param options - The options that control the badge title.
+ * @returns The Markdown image of the badge.
+ * @example
+ * const badge = getReportBadge(results, DEFAULT_OPTIONS);
+ */
 function getReportBadge(
   results: TestRunResult[],
   options: ReportOptions,
@@ -174,6 +231,16 @@ function getReportBadge(
   return getBadge(passed, failed, skipped, options);
 }
 
+/**
+ * Creates a Markdown badge that summarises the passed, failed and skipped test counts.
+ * @param passed - The number of passed tests.
+ * @param failed - The number of failed tests.
+ * @param skipped - The number of skipped tests.
+ * @param options - The options that control the badge title and hint.
+ * @returns The Markdown image of the badge.
+ * @example
+ * const badge = getBadge(10, 0, 1, DEFAULT_OPTIONS);
+ */
 export function getBadge(
   passed: number,
   failed: number,
@@ -193,10 +260,11 @@ export function getBadge(
   const message = text.length > 0 ? text.join(', ') : 'none';
 
   let color = 'success';
+  if (passed === 0 && failed === 0) {
+    color = 'yellow';
+  }
   if (failed > 0) {
     color = 'critical';
-  } else if (passed === 0 && failed === 0) {
-    color = 'yellow';
   }
   const hint = failed > 0 ? 'Tests failed' : 'Tests passed successfully';
   const encodedBadgeTitle = encodeImgShieldsURIComponent(options.badgeTitle);
@@ -205,6 +273,14 @@ export function getBadge(
   return `![${hint}](https://img.shields.io/badge/${encodedBadgeTitle}-${encodedMessage}-${encodedColor})`;
 }
 
+/**
+ * Renders a section for every test run, including the suites and tests that each one contains.
+ * @param testRuns - The test runs to render.
+ * @param options - The options that control which tests are listed.
+ * @returns The Markdown lines for all test runs.
+ * @example
+ * const lines = getTestRunsReport(testRuns, DEFAULT_OPTIONS);
+ */
 function getTestRunsReport(
   testRuns: TestRunResult[],
   options: ReportOptions,
@@ -243,6 +319,15 @@ function getTestRunsReport(
   return sections;
 }
 
+/**
+ * Renders the section for each suite of a single test run.
+ * @param tr - The test run that owns the suites.
+ * @param runIndex - The position of the test run in the report, used to build anchors.
+ * @param options - The options that control which tests are listed.
+ * @returns The Markdown lines for the suites of the test run.
+ * @example
+ * const lines = getSuitesReport(testRun, 0, DEFAULT_OPTIONS);
+ */
 function getSuitesReport(
   tr: TestRunResult,
   runIndex: number,
@@ -303,6 +388,16 @@ function getSuitesReport(
   return sections;
 }
 
+/**
+ * Renders the table of tests for a single suite, listing the tests that match the report options.
+ * @param ts - The suite whose tests are rendered.
+ * @param runIndex - The position of the owning test run, used to build anchors.
+ * @param suiteIndex - The position of the suite within its test run, used to build anchors.
+ * @param options - The options that control which tests are listed.
+ * @returns The Markdown lines for the tests of the suite.
+ * @example
+ * const lines = getTestsReport(suite, 0, 0, DEFAULT_OPTIONS);
+ */
 function getTestsReport(
   ts: TestSuiteResult,
   runIndex: number,
@@ -336,14 +431,7 @@ function getTestsReport(
       const result = getResultIcon(tc.result);
       sections.push(`${space}${result} ${tc.name}`);
       if (tc.error) {
-        const lines = (
-          tc.error.message ?? getFirstNonEmptyLine(tc.error.details)?.trim()
-        )
-          ?.split(/\r?\n/g)
-          .map((l) => '\t' + l);
-        if (lines) {
-          sections.push(...lines);
-        }
+        sections.push(...formatErrorLines(tc.error));
       }
     }
   }
@@ -352,6 +440,14 @@ function getTestsReport(
   return sections;
 }
 
+/**
+ * Creates the anchor identifier and link for the heading of a test run.
+ * @param runIndex - The position of the test run in the report.
+ * @param options - The options that control how the slug is built.
+ * @returns The element id and the link that points to it.
+ * @example
+ * const { id, link } = makeRunSlug(0, DEFAULT_OPTIONS);
+ */
 function makeRunSlug(
   runIndex: number,
   options: ReportOptions,
@@ -359,6 +455,15 @@ function makeRunSlug(
   return slug(`r${runIndex}`, options);
 }
 
+/**
+ * Creates the anchor identifier and link for the heading of a test suite.
+ * @param runIndex - The position of the owning test run in the report.
+ * @param suiteIndex - The position of the suite within its test run.
+ * @param options - The options that control how the slug is built.
+ * @returns The element id and the link that points to it.
+ * @example
+ * const { id, link } = makeSuiteSlug(0, 1, DEFAULT_OPTIONS);
+ */
 function makeSuiteSlug(
   runIndex: number,
   suiteIndex: number,
@@ -367,6 +472,25 @@ function makeSuiteSlug(
   return slug(`r${runIndex}s${suiteIndex}`, options);
 }
 
+/**
+ * Formats the message and details of a test error as indented Markdown lines.
+ * @param error - The error recorded for a failed test.
+ * @returns The lines to append to the report, each indented with a tab.
+ * @example
+ * const lines = formatErrorLines({ message: 'boom', details: 'stack' });
+ */
+function formatErrorLines(error: TestCaseError): string[] {
+  const text = error.message ?? getFirstNonEmptyLine(error.details)?.trim();
+  return (text?.split(/\r?\n/g) ?? []).map((l) => '\t' + l);
+}
+
+/**
+ * Returns the icon that represents a test execution result.
+ * @param result - The execution result of a test, suite or run.
+ * @returns The icon, or an empty string when the result has no icon.
+ * @example
+ * const icon = getResultIcon('failed');
+ */
 function getResultIcon(result: TestExecutionResult): string {
   switch (result) {
     case 'success': {
@@ -384,6 +508,13 @@ function getResultIcon(result: TestExecutionResult): string {
   }
 }
 
+/**
+ * Encodes a value for a shields.io badge URL, where dashes and underscores have special meaning.
+ * @param component - The text to encode.
+ * @returns The encoded text.
+ * @example
+ * const encoded = encodeImgShieldsURIComponent('2 passed');
+ */
 function encodeImgShieldsURIComponent(component: string): string {
   return encodeURIComponent(component)
     .replaceAll('-', '--')

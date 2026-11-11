@@ -1,3 +1,7 @@
+/**
+ * @file Parses the JSON report written by Mocha.
+ */
+
 import { ParseOptions, TestParser } from '../../test-parser.js';
 import {
   TestCaseError,

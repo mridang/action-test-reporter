@@ -1,3 +1,7 @@
+/**
+ * @file Parses Cobertura XML coverage reports into the shared coverage model.
+ */
+
 import path from 'node:path';
 import { BaseParser } from '../base-parser.js';
 import {
@@ -18,7 +22,6 @@ import {
  * A parser for Cobertura XML coverage reports.
  * @class CoberturaParser
  * @augments {BaseParser}
- * @export
  */
 export class CoberturaParser extends BaseParser<CoberturaXml> {
   /**
@@ -28,6 +31,8 @@ export class CoberturaParser extends BaseParser<CoberturaXml> {
    * @returns A promise that resolves to the
    * structured file coverage data.
    * @protected
+   * @example
+   * const data = await parser.parse(xml);
    */
   protected process(xml: CoberturaXml): Promise<CoverageData> {
     const coverage = xml.coverage;
@@ -80,6 +85,8 @@ export class CoberturaParser extends BaseParser<CoberturaXml> {
    * @param packages - The array of package elements.
    * @returns An array of all found class elements.
    * @private
+   * @example
+   * const classes = this.classesFromPackages(xml.coverage.packages[0].package);
    */
   private classesFromPackages(packages: CoberturaPackages[]): CoberturaClass[] {
     return (packages || []).flatMap((p) =>
@@ -95,6 +102,8 @@ export class CoberturaParser extends BaseParser<CoberturaXml> {
    * @param c - The class element.
    * @returns The structured line coverage.
    * @private
+   * @example
+   * const lines = this.getLineCoverage(classElement);
    */
   private getLineCoverage(c: CoberturaClass): CoverageMetrics {
     const lines = c.lines?.[0]?.line || [];
@@ -110,6 +119,8 @@ export class CoberturaParser extends BaseParser<CoberturaXml> {
    * @param c - The class element.
    * @returns The structured function coverage.
    * @private
+   * @example
+   * const functions = this.getFunctionCoverage(classElement);
    */
   private getFunctionCoverage(c: CoberturaClass): CoverageMetrics {
     const methods = c.methods?.[0]?.method || [];
@@ -127,6 +138,8 @@ export class CoberturaParser extends BaseParser<CoberturaXml> {
    * @param c - The class element.
    * @returns An array of branch coverage details.
    * @private
+   * @example
+   * const branches = this.getBranchCoverage(classElement);
    */
   private getBranchCoverage(c: CoberturaClass): CoverageMetrics {
     if (!c.lines || !c.lines[0].line) {

@@ -1,3 +1,7 @@
+/**
+ * @file Parses JaCoCo XML coverage reports into the shared coverage model.
+ */
+
 import { BaseParser } from '../base-parser.js';
 import {
   CoverageData,
@@ -10,7 +14,6 @@ import { JacocoCounter, JacocoReport, JacocoPackage } from './jacoco-types.js';
  * A parser for JaCoCo XML coverage reports.
  * @class JacocoParser
  * @augments {BaseParser}
- * @export
  */
 export class JacocoParser extends BaseParser<JacocoReport> {
   /**
@@ -20,6 +23,8 @@ export class JacocoParser extends BaseParser<JacocoReport> {
    * @returns A promise that resolves to the
    * structured file coverage data.
    * @protected
+   * @example
+   * const data = await parser.parse(xml);
    */
   protected process(xml: JacocoReport): Promise<CoverageData> {
     const overall = this.aggregateCounters(xml.report.counter);
@@ -36,6 +41,8 @@ export class JacocoParser extends BaseParser<JacocoReport> {
    * @param pack - The package object from the report.
    * @returns An array of file coverage details.
    * @private
+   * @example
+   * const files = this.unpackage(pack);
    */
   private unpackage(pack: JacocoPackage): FileCoverageDetails[] {
     return (pack.sourcefile || []).map((s) => {
@@ -55,8 +62,10 @@ export class JacocoParser extends BaseParser<JacocoReport> {
    * coverage metrics object.
    * @memberof JacocoParser
    * @param counters - The array of counter-elements.
-   * @returns
+   * @returns The coverage metrics summed across all of the counters.
    * @private
+   * @example
+   * const metrics = this.aggregateCounters(counters);
    */
   private aggregateCounters(
     counters: JacocoCounter[],

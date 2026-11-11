@@ -1,3 +1,7 @@
+/**
+ * @file Parses JUnit XML test results produced by Jest.
+ */
+
 import { ParseOptions, TestParser } from '../../test-parser.js';
 import { parseStringPromise } from 'xml2js';
 
@@ -76,11 +80,12 @@ export class JestJunitParser implements TestParser {
         queue.push(...suite.testsuite);
       }
       if (suite.testcase) {
-        for (const tc of suite.testcase) {
-          if (tc.$?.classname !== undefined) {
-            classNames.push(tc.$.classname);
-          }
-        }
+        const names = suite.testcase.map(
+          (tc) => tc.$?.classname as string | undefined,
+        );
+        classNames.push(
+          ...names.filter((name): name is string => name !== undefined),
+        );
       }
     }
 
@@ -97,13 +102,8 @@ export class JestJunitParser implements TestParser {
     );
     const topLevelHint = /jest/.test(topLevelName);
 
-    return (
-      suiteNameHint ||
-      classNameHint ||
-      topLevelHint ||
-      suites.length > 0 ||
-      classNames.length > 0
-    );
+    const hasNameHint = suiteNameHint || classNameHint || topLevelHint;
+    return hasNameHint || suites.length > 0 || classNames.length > 0;
   }
 
   private getGroups(suite: TestSuite): TestGroupResult[] {
