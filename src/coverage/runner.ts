@@ -22,7 +22,6 @@ export interface CoverageRunOutput {
   consoleOutputs: string[];
 }
 
-/* eslint-disable jsdoc/check-tag-names -- @rejects is required for async functions but the preset tag list omits it */
 
 /**
  * Loads the coverage files that match the configured patterns and formats each one.
@@ -63,4 +62,3 @@ export async function runCoverage(
 
   return { summaries, consoleOutputs };
 }
-/* eslint-enable jsdoc/check-tag-names -- end of the @rejects documentation block */

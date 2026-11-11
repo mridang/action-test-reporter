@@ -53,7 +53,6 @@ export interface DetectedTestResult {
   format: string;
 }
 
-/* eslint-disable jsdoc/check-tag-names -- @rejects is required for async functions but the preset tag list omits it */
 
 /**
  * Detects the test result format by trying each parser in order.
@@ -85,4 +84,3 @@ export async function detectTestFormat(
     'Could not determine test result format. None of the available parsers succeeded.',
   );
 }
-/* eslint-enable jsdoc/check-tag-names -- end of the @rejects documentation block */

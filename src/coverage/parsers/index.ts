@@ -28,7 +28,6 @@ const availableParsers: CoverageParser[] = [
 
 type DetectedCoverage = { parser: CoverageParser; data: CoverageData };
 
-/* eslint-disable jsdoc/check-tag-names -- @rejects is required for async functions but the preset tag list omits it */
 
 /**
  * Detects the format of a coverage report by trying each available parser in turn.
@@ -54,7 +53,6 @@ export async function detectCoverage(
     'Could not determine coverage report type. None of the available parsers succeeded.',
   );
 }
-/* eslint-enable jsdoc/check-tag-names -- end of the @rejects documentation block */
 
 /**
  * Reads a file, detects the appropriate parser, and parses the content.
