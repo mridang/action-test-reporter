@@ -3,7 +3,7 @@
 var os = require('os');
 var crypto = require('crypto');
 var fs$4 = require('fs');
-var path$1 = require('path');
+require('path');
 require('http');
 require('https');
 require('string_decoder');
@@ -11,6 +11,9 @@ require('events');
 require('child_process');
 require('assert');
 require('timers');
+var promises = require('node:fs/promises');
+var path$1 = require('node:path');
+require('node:fs');
 
 function _interopNamespaceDefault(e) {
     var n = Object.create(null);
@@ -32,7 +35,6 @@ function _interopNamespaceDefault(e) {
 var os__namespace = /*#__PURE__*/_interopNamespaceDefault(os);
 var crypto__namespace = /*#__PURE__*/_interopNamespaceDefault(crypto);
 var fs__namespace = /*#__PURE__*/_interopNamespaceDefault(fs$4);
-var path__namespace = /*#__PURE__*/_interopNamespaceDefault(path$1);
 
 // We use any as a valid input type
 /* eslint-disable @typescript-eslint/no-explicit-any */
@@ -38001,11 +38003,21 @@ function requireExec () {
 
 var execExports = requireExec();
 
+/**
+ * @file Lists the files tracked by Git in the working tree.
+ */
+/**
+ * Lists the files that Git tracks in the working directory.
+ * @returns The tracked file paths, relative to the repository root.
+ * @example
+ * const files = await listFiles();
+ */
 async function listFiles() {
     startGroup('Listing all files tracked by git');
     let output = '';
     try {
-        output = (await execExports.getExecOutput('git', ['ls-files', '-z'])).stdout;
+        const lsFiles = await execExports.getExecOutput('git', ['ls-files', '-z']);
+        output = lsFiles.stdout;
     }
     finally {
         fixStdOutNullTermination();
@@ -38013,10 +38025,18 @@ async function listFiles() {
     }
     return output.split('\u0000').filter((s) => s.length > 0);
 }
+/**
+ * Writes an empty informational line to the log so the grouped output ends on its own line.
+ * @example
+ * fixStdOutNullTermination(); // Logs an empty line after the git group.
+ */
 function fixStdOutNullTermination() {
     info('');
 }
 
+/**
+ * @file Reads test result files from the local disk using the configured glob patterns.
+ */
 class LocalFileProvider {
     name;
     pattern;
@@ -38029,7 +38049,7 @@ class LocalFileProvider {
         for (const pat of this.pattern) {
             const paths = await glob(pat, { dot: true });
             for (const file of paths) {
-                const content = await fs__namespace.promises.readFile(file, { encoding: 'utf8' });
+                const content = await promises.readFile(file, { encoding: 'utf8' });
                 result.push({ file, content });
             }
         }
@@ -38040,6 +38060,17 @@ class LocalFileProvider {
     }
 }
 
+/**
+ * @file Provides helpers that normalise file paths so they match Git-relative paths.
+ */
+/**
+ * Normalises a directory path and optionally makes sure it ends with a slash.
+ * @param path - The directory path to normalise.
+ * @param addTrailingSlash - Whether a trailing slash should be appended when it is missing.
+ * @returns The normalised directory path.
+ * @example
+ * const dir = normalizeDirPath('src\\utils', true); // 'src/utils/'
+ */
 function normalizeDirPath(path, addTrailingSlash) {
     if (!path) {
         return path;
@@ -38050,12 +38081,27 @@ function normalizeDirPath(path, addTrailingSlash) {
     }
     return path;
 }
+/**
+ * Normalises a file path by trimming it and using forward slashes as separators.
+ * @param path - The file path to normalise.
+ * @returns The normalised file path.
+ * @example
+ * const file = normalizeFilePath(' src\\index.ts ');
+ */
 function normalizeFilePath(path) {
     if (!path) {
         return path;
     }
-    return path.trim().replace(/\\/g, '/');
+    return path.trim().replaceAll('\\', '/');
 }
+/**
+ * Finds the part of a path that comes before the longest tracked file it ends with.
+ * @param path - The path reported by a tool.
+ * @param trackedFiles - The files tracked by Git.
+ * @returns The leading part of the path, an empty string when the path is tracked, or undefined when no file matches.
+ * @example
+ * const base = getBasePath('/work/app/src/index.ts', ['src/index.ts']); // '/work/app/'
+ */
 function getBasePath(path, trackedFiles) {
     if (trackedFiles.includes(path)) {
         return '';
@@ -38073,55 +38119,144 @@ function getBasePath(path, trackedFiles) {
 }
 
 /**
- * Reflects documentation at https://github.com/dart-lang/test/blob/master/pkgs/test/doc/json_reporter.md.
+ * @file Declares the event types emitted by the Dart test runner JSON reporter.
+ */
+/**
+ * Tells whether a Dart test event describes a suite.
+ * @param event - The event to check.
+ * @returns True when the event is a suite event.
+ * @example
+ * if (isSuiteEvent(event)) { suites.push(event); }
  */
 function isSuiteEvent(event) {
     return event.type === 'suite';
 }
+/**
+ * Tells whether a Dart test event describes a group.
+ * @param event - The event to check.
+ * @returns True when the event is a group event.
+ * @example
+ * if (isGroupEvent(event)) { groups.push(event); }
+ */
 function isGroupEvent(event) {
     return event.type === 'group';
 }
+/**
+ * Tells whether a Dart test event marks the start of a test.
+ * @param event - The event to check.
+ * @returns True when the event is a test start event.
+ * @example
+ * if (isTestStartEvent(event)) { starts.set(event.test.id, event); }
+ */
 function isTestStartEvent(event) {
     return event.type === 'testStart';
 }
+/**
+ * Tells whether a Dart test event marks the end of a test.
+ * @param event - The event to check.
+ * @returns True when the event is a test done event.
+ * @example
+ * if (isTestDoneEvent(event)) { results.push(event); }
+ */
 function isTestDoneEvent(event) {
     return event.type === 'testDone';
 }
+/**
+ * Tells whether a Dart test event carries an error raised by a test.
+ * @param event - The event to check.
+ * @returns True when the event is an error event.
+ * @example
+ * if (isErrorEvent(event)) { errors.push(event.error); }
+ */
 function isErrorEvent(event) {
     return event.type === 'error';
 }
+/**
+ * Tells whether a Dart test event marks the end of the whole run.
+ * @param event - The event to check.
+ * @returns True when the event is the done event.
+ * @example
+ * if (isDoneEvent(event)) { finished = true; }
+ */
 function isDoneEvent(event) {
     return event.type === 'done';
 }
+/**
+ * Tells whether a Dart test event is a message printed by the test runner.
+ * @param event - The event to check.
+ * @returns True when the event is a print event.
+ * @example
+ * if (isMessageEvent(event)) { messages.push(event.message); }
+ */
 function isMessageEvent(event) {
     return event.type === 'print';
 }
 
+/**
+ * @file Provides helpers that read exception details and locale settings from Node-based results.
+ */
 const DEFAULT_LOCALE = 'en-US';
+/**
+ * Finds the first stack trace frame that points to a tracked project file, skipping Node internals and dependencies.
+ * @param stackTrace - The stack trace text of the exception.
+ * @param trackedFiles - The files tracked by Git, used to choose a frame.
+ * @param getRelativePath - Converts a frame path into a path relative to the repository.
+ * @returns The relative path and line of the frame, or undefined when none matches.
+ * @example
+ * const source = getExceptionSource(error.stack ?? '', files, (p) => p);
+ */
 function getExceptionSource(stackTrace, trackedFiles, getRelativePath) {
     const lines = stackTrace.split(/\r?\n/);
-    const re = /\((.*):(\d+):\d+\)$/;
     for (const str of lines) {
-        const match = str.match(re);
-        if (match !== null) {
-            const [, fileStr, lineStr] = match;
-            const filePath = normalizeFilePath(fileStr);
-            if (filePath.startsWith('internal/') ||
-                filePath.includes('/node_modules/')) {
-                continue;
-            }
-            const path = getRelativePath(filePath);
-            if (!path) {
-                continue;
-            }
-            if (trackedFiles.includes(path)) {
-                const line = parseInt(lineStr);
-                return { path, line };
-            }
+        const frame = getTrackedFrame(str, trackedFiles, getRelativePath);
+        if (frame) {
+            return frame;
         }
     }
+    return undefined;
+}
+/**
+ * Extracts the file path and line number from the parenthesized location at the end of a stack trace line.
+ * The pattern is anchored at the start and skips to the first opening parenthesis with a negated class, so the
+ * scan stays linear on long lines.
+ * @param str - A single line of the stack trace.
+ * @returns The file path and the line number text, or undefined when the line has no location.
+ * @example
+ * const match = matchStackFrame('at run (/work/src/index.ts:10:5)');
+ */
+function matchStackFrame(str) {
+    const match = /^[^(]*\((.*):(\d+):\d+\)$/.exec(str);
+    return match === null ? undefined : [match[1], match[2]];
+}
+/**
+ * Parses one stack trace line and returns it when it points to a tracked project file.
+ * @param str - A single line of the stack trace.
+ * @param trackedFiles - The files tracked by Git.
+ * @param getRelativePath - Converts a frame path into a path relative to the repository.
+ * @returns The relative path and line of the frame, or undefined when the line does not match.
+ * @example
+ * const frame = getTrackedFrame('at run (/work/src/index.ts:10:5)', files, (p) => p);
+ */
+function getTrackedFrame(str, trackedFiles, getRelativePath) {
+    const match = matchStackFrame(str);
+    if (match === undefined) {
+        return undefined;
+    }
+    const [fileStr, lineStr] = match;
+    const filePath = normalizeFilePath(fileStr);
+    if (filePath.startsWith('internal/') || filePath.includes('/node_modules/')) {
+        return undefined;
+    }
+    const path = getRelativePath(filePath);
+    if (!path || !trackedFiles.includes(path)) {
+        return undefined;
+    }
+    return { path, line: Number.parseInt(lineStr) };
 }
 
+/**
+ * @file Defines the in-memory model of test runs, suites, groups and cases.
+ */
 class TestRunResult {
     path;
     suites;
@@ -38237,6 +38372,49 @@ class TestCaseResult {
     }
 }
 
+/**
+ * @file Parses the JSON event stream written by the Dart test runner.
+ */
+/**
+ * Captures the exception text of a Flutter test print. A single whitespace character separates the text from its
+ * surroundings in the pattern, which keeps the scan linear, so callers trim the leading whitespace of the capture.
+ */
+const FLUTTER_EXCEPTION_PRINT = /^══╡ EXCEPTION CAUGHT BY FLUTTER TEST FRAMEWORK ╞═+\s(.*)\sWhen the exception was thrown, this was the stack:/ms;
+/**
+ * Extracts the file path and line number from a Dart stack trace line such as
+ * `lib/main.dart 12:5  main`. A single whitespace character must precede the line number, because the greedy
+ * path group already absorbs any further whitespace and the scan then stays linear.
+ * @param line - A single line of the stack trace.
+ * @returns The file path and the line number text, or undefined when the line is not a project frame.
+ * @example
+ * const match = matchDartFrame('test/a_test.dart 12:5  main');
+ */
+function matchDartFrame(line) {
+    const match = /^(?!package:)(.*)\s(\d+):\d+\s/.exec(line);
+    return match === null ? undefined : [match[1], match[2]];
+}
+/**
+ * Extracts the file path and line number from a Flutter stack trace line such as
+ * `#0      main (file:///work/test/a_test.dart:12:5)`. The text between the frame number and the location is
+ * matched once, and the opening parenthesis in front of the path is then found from the right, skipping the ones
+ * that start a package location.
+ * @param line - A single line of the stack trace.
+ * @returns The file path and the line number text, or undefined when the line is not a project frame.
+ * @example
+ * const match = matchFlutterFrame('#0 main (file:///work/test/a_test.dart:12:5)');
+ */
+function matchFlutterFrame(line) {
+    const match = /^(#\d+\s)(.*):(\d+):\d+\)$/.exec(line);
+    if (match === null) {
+        return undefined;
+    }
+    const [, head, middle, lineStr] = match;
+    let open = middle.lastIndexOf('(');
+    while (open !== -1 && line.startsWith('package:', head.length + open + 1)) {
+        open = open === 0 ? -1 : middle.lastIndexOf('(', open - 1);
+    }
+    return open === -1 ? undefined : [middle.slice(open + 1), lineStr];
+}
 class TestRun {
     path;
     suites;
@@ -38267,7 +38445,7 @@ class TestCase {
     testStart;
     constructor(testStart) {
         this.testStart = testStart;
-        this.groupId = testStart.test.groupIDs[testStart.test.groupIDs.length - 1];
+        this.groupId = testStart.test.groupIDs.at(-1);
     }
     groupId;
     print = [];
@@ -38287,9 +38465,9 @@ class TestCase {
         return undefined;
     }
     get time() {
-        return this.testDone !== undefined
-            ? this.testDone.time - this.testStart.time
-            : 0;
+        return this.testDone === undefined
+            ? 0
+            : this.testDone.time - this.testStart.time;
     }
 }
 /**
@@ -38304,8 +38482,7 @@ class DartJsonParser {
     }
     async parse(path, content) {
         const tr = this.getTestRun(path, content);
-        const result = this.getTestRunResult(tr);
-        return Promise.resolve(result);
+        return this.getTestRunResult(tr);
     }
     getTestRun(path, content) {
         const lines = content.split(/\n\r?/g);
@@ -38317,12 +38494,12 @@ class DartJsonParser {
             try {
                 return JSON.parse(str);
             }
-            catch (e) {
-                const errWithCol = e;
-                const col = errWithCol.columnNumber !== undefined
-                    ? `:${errWithCol.columnNumber}`
-                    : '';
-                throw new Error(`Invalid JSON at ${path}:${i + 1}${col}\n\n${e}`);
+            catch (error) {
+                const errWithCol = error;
+                const col = errWithCol.columnNumber === undefined
+                    ? ''
+                    : `:${errWithCol.columnNumber}`;
+                throw new Error(`Invalid JSON at ${path}:${i + 1}${col}\n\n${error}`);
             }
         })
             .filter((evt) => evt != null);
@@ -38340,7 +38517,8 @@ class DartJsonParser {
             else if (isTestStartEvent(evt) && evt.test.url !== null) {
                 const test = new TestCase(evt);
                 const suite = suites[evt.test.suiteID];
-                const group = suite.groups[evt.test.groupIDs[evt.test.groupIDs.length - 1]];
+                const groupIndex = evt.test.groupIDs.length - 1;
+                const group = suite.groups[evt.test.groupIDs[groupIndex]];
                 group.tests.push(test);
                 tests[evt.test.id] = test;
             }
@@ -38357,6 +38535,7 @@ class DartJsonParser {
                 success = evt.success;
                 totalTime = evt.time;
             }
+            else ;
         }
         return new TestRun(path, Object.values(suites), success, totalTime);
     }
@@ -38399,11 +38578,7 @@ class DartJsonParser {
         const message = this.getErrorMessage(test.error?.error ?? '', print);
         let path;
         let line;
-        if (src !== undefined) {
-            path = src.path;
-            line = src.line;
-        }
-        else {
+        if (src === undefined) {
             const testStartPath = this.getRelativePath(testSuite.suite.path);
             if (trackedFiles.includes(testStartPath)) {
                 path = testStartPath;
@@ -38412,6 +38587,10 @@ class DartJsonParser {
                         test.testStart.test.line ??
                         undefined;
             }
+        }
+        else {
+            path = src.path;
+            line = src.line;
         }
         return {
             path,
@@ -38423,34 +38602,46 @@ class DartJsonParser {
     getErrorMessage(message, print) {
         // Try Flutter-specific error extraction (works for both Dart and Flutter)
         const uselessMessageRe = /^Test failed\. See exception logs above\.\nThe test description was:/m;
-        const flutterPrintRe = /^══╡ EXCEPTION CAUGHT BY FLUTTER TEST FRAMEWORK ╞═+\s+(.*)\s+When the exception was thrown, this was the stack:/ms;
         if (uselessMessageRe.test(message)) {
-            const match = print.match(flutterPrintRe);
+            const match = FLUTTER_EXCEPTION_PRINT.exec(print);
             if (match !== null) {
-                return match[1];
+                return match[1].trimStart();
             }
         }
         return message || print;
     }
     exceptionThrowSource(ex, trackedFiles) {
         const lines = ex.split(/\r?\n/g);
-        // Try both Dart and Flutter stack trace patterns
-        const dartRe = /^(?!package:)(.*)\s+(\d+):\d+\s+/;
-        const flutterRe = /^#\d+\s+.*\((?!package:)(.*):(\d+):\d+\)$/;
-        const patterns = [dartRe, flutterRe];
-        for (const re of patterns) {
-            for (const str of lines) {
-                const match = str.match(re);
-                if (match !== null) {
-                    const [, pathStr, lineStr] = match;
-                    const path = normalizeFilePath(this.getRelativePath(pathStr));
-                    if (trackedFiles.includes(path)) {
-                        const line = parseInt(lineStr);
-                        return { path, line };
-                    }
+        // Try both Dart and Flutter stack trace patterns.
+        const matchers = [matchDartFrame, matchFlutterFrame];
+        for (const matcher of matchers) {
+            const found = this.findTrackedFrame(lines, matcher, trackedFiles);
+            if (found) {
+                return found;
+            }
+        }
+    }
+    /**
+     * Finds the first stack trace line that matches a pattern and points to a tracked file.
+     * @param lines - The lines of the stack trace.
+     * @param matcher - The function that extracts the file path and the line number from a line.
+     * @param trackedFiles - The files tracked by Git.
+     * @returns The relative path and line of the frame, or undefined when none matches.
+     * @example
+     * const frame = this.findTrackedFrame(lines, matchDartFrame, trackedFiles);
+     */
+    findTrackedFrame(lines, matcher, trackedFiles) {
+        for (const str of lines) {
+            const match = matcher(str);
+            if (match !== undefined) {
+                const [pathStr, lineStr] = match;
+                const path = normalizeFilePath(this.getRelativePath(pathStr));
+                if (trackedFiles.includes(path)) {
+                    return { path, line: Number.parseInt(lineStr) };
                 }
             }
         }
+        return undefined;
     }
     getRelativePath(path) {
         const prefix = 'file://';
@@ -45528,6 +45719,9 @@ function requireXml2js () {
 var xml2jsExports = requireXml2js();
 
 /**
+ * @file Parses NUnit XML test results from .NET test runs.
+ */
+/**
  * Parser for NUnit XML reports produced by .NET test runners.
  */
 class DotnetNunitParser {
@@ -45544,13 +45738,13 @@ class DotnetNunitParser {
         try {
             return (await xml2jsExports.parseStringPromise(content));
         }
-        catch (e) {
-            throw new Error(`Invalid XML at ${path}\n\n${e}`);
+        catch (error) {
+            throw new Error(`Invalid XML at ${path}\n\n${error}`);
         }
     }
     getTestRunResult(path, nunit) {
         const suites = [];
-        const time = parseFloat(nunit['test-run'].$.duration) * 1000;
+        const time = Number.parseFloat(nunit['test-run'].$.duration) * 1000;
         this.populateTestCasesRecursive(suites, [], nunit['test-run']['test-suite']);
         return new TestRunResult(path, suites, time);
     }
@@ -45573,10 +45767,10 @@ class DotnetNunitParser {
     addTestCase(result, suitePath, testCase) {
         const suitesWithoutTheories = suitePath.filter((suite) => suite.$.type !== 'Theory');
         const suiteName = suitesWithoutTheories
-            .slice(0, suitesWithoutTheories.length - 1)
+            .slice(0, -1)
             .map((suite) => suite.$.name)
             .join('.');
-        const groupName = suitesWithoutTheories[suitesWithoutTheories.length - 1].$.name;
+        const groupName = suitesWithoutTheories.at(-1).$.name;
         let existingSuite = result.find((suite) => suite.name === suiteName);
         if (existingSuite === undefined) {
             existingSuite = new TestSuiteResult(suiteName, []);
@@ -45587,7 +45781,7 @@ class DotnetNunitParser {
             existingGroup = new TestGroupResult(groupName, []);
             existingSuite.groups.push(existingGroup);
         }
-        existingGroup.tests.push(new TestCaseResult(testCase.$.name, this.getTestExecutionResult(testCase), parseFloat(testCase.$.duration) * 1000, this.getTestCaseError(testCase)));
+        existingGroup.tests.push(new TestCaseResult(testCase.$.name, this.getTestExecutionResult(testCase), Number.parseFloat(testCase.$.duration) * 1000, this.getTestCaseError(testCase)));
     }
     getTestExecutionResult(test) {
         if (test.$.result === 'Failed' || test.failure)
@@ -45635,28 +45829,64 @@ class DotnetNunitParser {
     }
 }
 
+/**
+ * @file Provides helpers that parse durations, dates and stack traces from test reports.
+ */
+/**
+ * Parses a .NET duration in the form hh:mm:ss, with optional fractional seconds, into milliseconds.
+ * @param str - The duration text to parse.
+ * @returns The duration in milliseconds.
+ * @throws {Error} When the text is not in the expected format.
+ * @example
+ * const ms = parseNetDuration('00:01:30.5'); // 90500
+ */
 function parseNetDuration(str) {
     const durationRe = /^(\d\d):(\d\d):(\d\d(?:\.\d+)?)$/;
-    const durationMatch = str.match(durationRe);
+    const durationMatch = durationRe.exec(str);
     if (durationMatch === null) {
         throw new Error(`Invalid format: "${str}" is not NET duration`);
     }
     const [, hourStr, minStr, secStr] = durationMatch;
-    return ((parseInt(hourStr) * 3600 + parseInt(minStr) * 60 + parseFloat(secStr)) *
+    return ((Number.parseInt(hourStr) * 3600 +
+        Number.parseInt(minStr) * 60 +
+        Number.parseFloat(secStr)) *
         1000);
 }
+/**
+ * Parses an ISO 8601 date-time with a fractional second and a time zone offset.
+ * @param str - The date text to parse.
+ * @returns The parsed date.
+ * @throws {Error} When the text is not an ISO 8601 date-time.
+ * @example
+ * const date = parseIsoDate('2024-05-01T10:00:00.000Z');
+ */
 function parseIsoDate(str) {
     const isoDateRe = /^\d{4}-[01]\d-[0-3]\dT[0-2]\d:[0-5]\d:[0-5]\d\.\d+([+-][0-2]\d:[0-5]\d|Z)$/;
-    if (str === undefined || !isoDateRe.test(str)) {
+    if (typeof str !== 'string' || !isoDateRe.test(str)) {
         throw new Error(`Invalid format: "${str}" is not ISO date`);
     }
     return new Date(str);
 }
+/**
+ * Returns the first line of a stack trace that contains text.
+ * @param stackTrace - The stack trace to search.
+ * @returns The first non-blank line, or undefined when there is none.
+ * @example
+ * const line = getFirstNonEmptyLine('\n  Error: boom');
+ */
 function getFirstNonEmptyLine(stackTrace) {
     const lines = stackTrace?.split(/\r?\n/g);
     return lines?.find((str) => !/^\s*$/.test(str));
 }
 
+/**
+ * @file Parses Visual Studio TRX test results from .NET test runs.
+ */
+/**
+ * Matches a line break together with the carriage returns in front of it. The lookbehind makes the match start at
+ * the first carriage return of a run, so a long run of carriage returns without a line feed is scanned only once.
+ */
+const STACK_TRACE_LINE_BREAK = /(?<!\r)\r*\n/;
 class TestClass {
     name;
     constructor(name) {
@@ -45677,14 +45907,18 @@ class Test {
     }
     get result() {
         switch (this.outcome) {
-            case 'Passed':
+            case 'Passed': {
                 return 'success';
-            case 'NotExecuted':
+            }
+            case 'NotExecuted': {
                 return 'skipped';
-            case 'Failed':
+            }
+            case 'Failed': {
                 return 'failed';
-            default:
+            }
+            default: {
                 return undefined;
+            }
         }
     }
 }
@@ -45708,8 +45942,8 @@ class DotnetTrxParser {
         try {
             return (await xml2jsExports.parseStringPromise(content));
         }
-        catch (e) {
-            throw new Error(`Invalid XML at ${path}\n\n${e}`);
+        catch (error) {
+            throw new Error(`Invalid XML at ${path}\n\n${error}`);
         }
     }
     getTestClasses(trx) {
@@ -45800,21 +46034,19 @@ class DotnetTrxParser {
         };
     }
     exceptionThrowSource(stackTrace) {
-        const lines = stackTrace.split(/\r*\n/);
+        const lines = stackTrace.split(STACK_TRACE_LINE_BREAK);
         const re = / in (.+):line (\d+)$/;
         const { trackedFiles } = this.options;
         for (const str of lines) {
-            const match = str.match(re);
+            const match = re.exec(str);
             if (match !== null) {
                 const [, fileStr, lineStr] = match;
                 const filePath = normalizeFilePath(fileStr);
                 const workDir = this.getWorkDir(filePath);
-                if (workDir) {
-                    const file = filePath.slice(workDir.length);
-                    if (trackedFiles.includes(file)) {
-                        const line = parseInt(lineStr);
-                        return { path: file, line };
-                    }
+                const file = workDir ? filePath.slice(workDir.length) : undefined;
+                if (file !== undefined && trackedFiles.includes(file)) {
+                    const line = Number.parseInt(lineStr);
+                    return { path: file, line };
                 }
             }
         }
@@ -45826,6 +46058,16 @@ class DotnetTrxParser {
     }
 }
 
+/**
+ * @file Parses the JSON event stream written by go test -json.
+ */
+/**
+ * Maps the final action of a Go test to the result that is reported for it.
+ */
+const RESULT_BY_ACTION = new Map([
+    ['pass', 'success'],
+    ['skip', 'skipped'],
+]);
 /**
  * Parser for Go test JSON output produced with `go test -json`.
  */
@@ -45846,8 +46088,8 @@ class GolangJsonParser {
             try {
                 return JSON.parse(line);
             }
-            catch (e) {
-                throw new Error(`Invalid JSON at ${path} line ${index + 1}\n\n${e}`);
+            catch (error) {
+                throw new Error(`Invalid JSON at ${path} line ${index + 1}\n\n${error}`);
             }
         });
     }
@@ -45890,16 +46132,12 @@ class GolangJsonParser {
                 suite.groups.push(group);
             }
             const lastEvent = eventGroup.at(-1);
-            const result = lastEvent.Action === 'pass'
-                ? 'success'
-                : lastEvent.Action === 'skip'
-                    ? 'skipped'
-                    : 'failed';
+            const result = RESULT_BY_ACTION.get(lastEvent.Action) ?? 'failed';
             if (lastEvent.Elapsed === undefined) {
                 throw new Error('missing elapsed on final test event');
             }
             const time = lastEvent.Elapsed * 1000;
-            let error = undefined;
+            let error;
             if (result !== 'success') {
                 const outputEvents = eventGroup
                     .filter((e) => e.Action === 'output')
@@ -45919,11 +46157,42 @@ class GolangJsonParser {
     }
 }
 
-const re = /^\s*at (\S+\/\S*\/)?(.*)\((.*):(\d+)\)$/;
+/**
+ * @file Parses Java stack trace lines into their class, method and location parts.
+ */
+const re = /^\s*at (.*)\(([^(]*):(\d+)\)$/;
+/**
+ * Splits the text between the word at and the location into the optional class loader and module prefix and the
+ * trace path. The prefix is the longest run of non-whitespace characters from the start that ends with a slash and
+ * holds another slash after its first character.
+ * @param text - The text between the word at and the opening parenthesis of the location.
+ * @returns The prefix, which is undefined when absent, and the rest of the text.
+ * @example
+ * const [prefix, tracePath] = splitClassLoaderPrefix('app//com.example.App.run');
+ */
+function splitClassLoaderPrefix(text) {
+    const runLength = /^\S*/.exec(text)?.[0].length ?? 0;
+    const firstSlash = text.indexOf('/', 1);
+    if (firstSlash === -1 || firstSlash >= runLength) {
+        return [undefined, text];
+    }
+    const lastSlash = text.lastIndexOf('/', runLength - 1);
+    return lastSlash > firstSlash
+        ? [text.slice(0, lastSlash + 1), text.slice(lastSlash + 1)]
+        : [undefined, text];
+}
+/**
+ * Parses a single Java stack trace line into its class loader, module, file and line parts.
+ * @param stackTraceLine - The stack trace line, such as the text after the word at.
+ * @returns The parsed parts of the line, or undefined when the line is not a stack trace element.
+ * @example
+ * const element = parseStackTraceElement('at com.example.App.run(App.java:42)');
+ */
 function parseStackTraceElement(stackTraceLine) {
-    const match = stackTraceLine.match(re);
+    const match = re.exec(stackTraceLine);
     if (match !== null) {
-        const [, maybeClassLoaderAndModuleNameAndVersion, tracePath, fileName, lineStr,] = match;
+        const [, beforeLocation, fileName, lineStr] = match;
+        const [maybeClassLoaderAndModuleNameAndVersion, tracePath] = splitClassLoaderPrefix(beforeLocation);
         const { classLoader, moduleNameAndVersion } = parseClassLoaderAndModule(maybeClassLoaderAndModuleNameAndVersion);
         return {
             classLoader,
@@ -45935,19 +46204,26 @@ function parseStackTraceElement(stackTraceLine) {
     }
     return undefined;
 }
+/**
+ * Splits the class loader and the module name and version from a stack trace element.
+ * @param maybeClassLoaderAndModuleNameAndVersion - The text before the trace path, which may be empty.
+ * @returns The class loader and module with its version, each undefined when absent.
+ * @example
+ * const { classLoader, moduleNameAndVersion } = parseClassLoaderAndModule('app/module@1.0');
+ */
 function parseClassLoaderAndModule(maybeClassLoaderAndModuleNameAndVersion) {
     if (maybeClassLoaderAndModuleNameAndVersion) {
         const res = maybeClassLoaderAndModuleNameAndVersion.split('/');
         const classLoader = res[0];
-        let moduleNameAndVersion = res[1];
-        if (moduleNameAndVersion === '') {
-            moduleNameAndVersion = undefined;
-        }
+        const moduleNameAndVersion = res[1] || undefined;
         return { classLoader, moduleNameAndVersion };
     }
-    return { classLoader: undefined, moduleNameAndVersion: undefined };
+    return {};
 }
 
+/**
+ * @file Parses JUnit XML test results produced by Java test runners.
+ */
 /**
  * Parser for JUnit-style XML reports commonly produced by Java test frameworks.
  */
@@ -45958,7 +46234,7 @@ class JavaJunitParser {
         this.options = options;
         this.trackedFiles = {};
         for (const filePath of options.trackedFiles) {
-            const fileName = path__namespace.basename(filePath);
+            const fileName = path$1.basename(filePath);
             const files = this.trackedFiles[fileName] ?? (this.trackedFiles[fileName] = []);
             files.push(normalizeFilePath(filePath));
         }
@@ -45985,16 +46261,16 @@ class JavaJunitParser {
         try {
             return await xml2jsExports.parseStringPromise(content);
         }
-        catch (e) {
-            throw new Error(`Invalid XML at ${filePath}\n\n${e}`);
+        catch (error) {
+            throw new Error(`Invalid XML at ${filePath}\n\n${error}`);
         }
     }
     getTestRunResult(filePath, junit) {
         const suites = junit.testsuites.testsuite
             ? this.flattenSuites(junit.testsuites.testsuite, filePath)
             : [];
-        const seconds = parseFloat(junit.testsuites.$?.time);
-        const time = isNaN(seconds) ? undefined : seconds * 1000;
+        const seconds = Number.parseFloat(junit.testsuites.$?.time);
+        const time = Number.isNaN(seconds) ? undefined : seconds * 1000;
         return new TestRunResult(filePath, suites, time);
     }
     flattenSuites(suites, filePath) {
@@ -46006,9 +46282,9 @@ class JavaJunitParser {
             if (suite.testcase !== undefined && suite.testcase.length > 0) {
                 const rawName = suite.$.name?.trim() ?? '';
                 const name = rawName === '' || rawName === 'undefined'
-                    ? path__namespace.basename(filePath)
+                    ? path$1.basename(filePath)
                     : rawName;
-                const time = parseFloat(suite.$.time) * 1000;
+                const time = Number.parseFloat(suite.$.time) * 1000;
                 results.push(new TestSuiteResult(name, this.getGroups(suite), time));
             }
         }
@@ -46032,7 +46308,7 @@ class JavaJunitParser {
             const tests = grp.tests.map((tc) => {
                 const name = tc.$.name.trim();
                 const result = this.getTestCaseResult(tc);
-                const time = parseFloat(tc.$.time) * 1000;
+                const time = Number.parseFloat(tc.$.time) * 1000;
                 const error = this.getTestCaseError(tc);
                 return new TestCaseResult(name, result, time, error);
             });
@@ -46087,7 +46363,7 @@ class JavaJunitParser {
                 const { tracePath, fileName, lineStr } = stackTraceElement;
                 const filePath = this.getFilePath(tracePath, fileName);
                 if (filePath !== undefined) {
-                    const line = parseInt(lineStr);
+                    const line = Number.parseInt(lineStr);
                     return { filePath, line };
                 }
             }
@@ -46107,7 +46383,7 @@ class JavaJunitParser {
             return undefined;
         }
         for (const filePath of files) {
-            const dirs = path__namespace.dirname(filePath).split(/\//g);
+            const dirs = path$1.dirname(filePath).split(/\//g);
             if (packageParts.length > dirs.length) {
                 continue;
             }
@@ -46123,6 +46399,9 @@ class JavaJunitParser {
     }
 }
 
+/**
+ * @file Parses JUnit XML test results produced by Jest.
+ */
 /**
  * Parser for JUnit XML reports emitted by Jest with the jest-junit reporter.
  */
@@ -46143,8 +46422,8 @@ class JestJunitParser {
         try {
             return (await xml2jsExports.parseStringPromise(content));
         }
-        catch (e) {
-            throw new Error(`Invalid XML at ${path}\n\n${e}`);
+        catch (error) {
+            throw new Error(`Invalid XML at ${path}\n\n${error}`);
         }
     }
     getTestRunResult(path, junit) {
@@ -46152,10 +46431,10 @@ class JestJunitParser {
             ? []
             : junit.testsuites.testsuite.map((ts) => {
                 const name = this.escapeCharacters(ts.$.name.trim());
-                const time = parseFloat(ts.$.time) * 1000;
+                const time = Number.parseFloat(ts.$.time) * 1000;
                 return new TestSuiteResult(name, this.getGroups(ts), time);
             });
-        const time = junit.testsuites.$ && parseFloat(junit.testsuites.$.time) * 1000;
+        const time = junit.testsuites.$ && Number.parseFloat(junit.testsuites.$.time) * 1000;
         return new TestRunResult(path, suites, time);
     }
     isProbablyJestReport(junit) {
@@ -46176,11 +46455,8 @@ class JestJunitParser {
                 queue.push(...suite.testsuite);
             }
             if (suite.testcase) {
-                for (const tc of suite.testcase) {
-                    if (tc.$?.classname !== undefined) {
-                        classNames.push(tc.$.classname);
-                    }
-                }
+                const names = suite.testcase.map((tc) => tc.$?.classname);
+                classNames.push(...names.filter((name) => name !== undefined));
             }
         }
         if (hasNestedSuites) {
@@ -46190,11 +46466,8 @@ class JestJunitParser {
         const suiteNameHint = suiteNames.some((n) => /jest|__tests__|\.test|\.spec/i.test(n));
         const classNameHint = classNames.some((cn) => cn === '' || /›|__tests__|\.test|\.spec|\/|\\/i.test(cn ?? ''));
         const topLevelHint = /jest/.test(topLevelName);
-        return (suiteNameHint ||
-            classNameHint ||
-            topLevelHint ||
-            suites.length > 0 ||
-            classNames.length > 0);
+        const hasNameHint = suiteNameHint || classNameHint || topLevelHint;
+        return hasNameHint || suites.length > 0 || classNames.length > 0;
     }
     getGroups(suite) {
         if (!suite.testcase) {
@@ -46213,7 +46486,7 @@ class JestJunitParser {
             const tests = grp.tests.map((tc) => {
                 const name = tc.$.name.trim();
                 const result = this.getTestCaseResult(tc);
-                const time = parseFloat(tc.$.time) * 1000;
+                const time = Number.parseFloat(tc.$.time) * 1000;
                 const error = this.getTestCaseError(tc);
                 return new TestCaseResult(name, result, time, error);
             });
@@ -46259,10 +46532,13 @@ class JestJunitParser {
             (this.assumedWorkDir = getBasePath(path, this.options.trackedFiles)));
     }
     escapeCharacters(s) {
-        return s.replace(/([<>])/g, '\\$1');
+        return s.replaceAll(/([<>])/g, String.raw `\$1`);
     }
 }
 
+/**
+ * @file Parses the JSON report written by Mocha.
+ */
 /**
  * Parser for JSON reports produced by Mocha's built-in JSON reporter.
  */
@@ -46276,14 +46552,14 @@ class MochaJsonParser {
         const mocha = this.getMochaJson(path, content);
         const result = this.getTestRunResult(path, mocha);
         result.sort(true);
-        return Promise.resolve(result);
+        return result;
     }
     getMochaJson(path, content) {
         try {
             return JSON.parse(content);
         }
-        catch (e) {
-            throw new Error(`Invalid JSON at ${path}\n\n${e}`);
+        catch (error) {
+            throw new Error(`Invalid JSON at ${path}\n\n${error}`);
         }
     }
     getTestRunResult(resultsPath, mocha) {
@@ -46308,11 +46584,11 @@ class MochaJsonParser {
         return new TestRunResult(resultsPath, suites, mocha.stats.duration);
     }
     processTest(suite, test, result) {
-        const groupName = test.fullTitle !== test.title
-            ? test.fullTitle
+        const groupName = test.fullTitle === test.title
+            ? null
+            : test.fullTitle
                 .slice(0, test.fullTitle.length - test.title.length)
-                .trimEnd()
-            : null;
+                .trimEnd();
         let group = suite.groups.find((grp) => grp.name === groupName);
         if (group === undefined) {
             group = new TestGroupResult(groupName, []);
@@ -46358,6 +46634,9 @@ class MochaJsonParser {
 }
 
 /**
+ * @file Parses the JSON report written by RSpec.
+ */
+/**
  * Parser for JSON reports generated by the RSpec JSON formatter.
  */
 class RspecJsonParser {
@@ -46369,14 +46648,14 @@ class RspecJsonParser {
         const mocha = this.getRspecJson(path, content);
         const result = this.getTestRunResult(path, mocha);
         result.sort(true);
-        return Promise.resolve(result);
+        return result;
     }
     getRspecJson(path, content) {
         try {
             return JSON.parse(content);
         }
-        catch (e) {
-            throw new Error(`Invalid JSON at ${path}\n\n${e}`);
+        catch (error) {
+            throw new Error(`Invalid JSON at ${path}\n\n${error}`);
         }
     }
     getTestRunResult(resultsPath, rspec) {
@@ -46387,25 +46666,31 @@ class RspecJsonParser {
         };
         for (const test of rspec.examples) {
             const suite = getSuite(test);
-            if (test.status === 'failed') {
-                this.processTest(suite, test, 'failed');
-            }
-            else if (test.status === 'passed') {
-                this.processTest(suite, test, 'success');
-            }
-            else if (test.status === 'pending') {
-                this.processTest(suite, test, 'skipped');
+            switch (test.status) {
+                case 'failed': {
+                    this.processTest(suite, test, 'failed');
+                    break;
+                }
+                case 'passed': {
+                    this.processTest(suite, test, 'success');
+                    break;
+                }
+                case 'pending': {
+                    this.processTest(suite, test, 'skipped');
+                    break;
+                }
+                // No default
             }
         }
         const suites = Object.values(suitesMap);
         return new TestRunResult(resultsPath, suites, rspec.summary.duration);
     }
     processTest(suite, test, result) {
-        const groupName = test.full_description !== test.description
-            ? test.full_description
+        const groupName = test.full_description === test.description
+            ? null
+            : test.full_description
                 .slice(0, test.full_description.length - test.description.length)
-                .trimEnd()
-            : null;
+                .trimEnd();
         let group = suite.groups.find((grp) => grp.name === groupName);
         if (group === undefined) {
             group = new TestGroupResult(groupName, []);
@@ -46439,11 +46724,11 @@ class RspecJsonParser {
     getExceptionSource(backtrace) {
         const re = /^(.*?):(\d+):/;
         for (const str of backtrace) {
-            const match = str.match(re);
+            const match = re.exec(str);
             if (match !== null) {
                 const [, path, lineStr] = match;
                 if (path.startsWith('./')) {
-                    const line = parseInt(lineStr);
+                    const line = Number.parseInt(lineStr);
                     return { path, line };
                 }
             }
@@ -46452,6 +46737,9 @@ class RspecJsonParser {
     }
 }
 
+/**
+ * @file Registers the test result parsers and detects the format of a results file.
+ */
 /**
  * An array of all available parser factories to be tried in order.
  * The order matters: most specific formats first, most permissive last.
@@ -46464,7 +46752,7 @@ class RspecJsonParser {
  * 5. Golang - NDJSON with `Action` and `Package` fields
  * 6. RSpec - JSON with `version` and `examples` array
  * 7. Mocha - JSON with `stats`, `passes`, `failures`, `pending`
- * 8. Java JUnit - XML with `testsuites` or `testsuite` (fallback)
+ * 8. Java JUnit - XML with `testsuites` or `testsuite` (fallback).
  *
  * Note: Python xUnit and Swift xUnit are structurally identical to Java JUnit.
  */
@@ -46481,12 +46769,13 @@ const orderedParsers = [
 /**
  * Detects the test result format by trying each parser in order.
  * Returns the first parser that successfully parses the content.
- *
- * @param path - The file path (used for error reporting and some parsers)
- * @param content - The raw file content to parse
- * @param options - Parse options including workDir and trackedFiles
- * @returns The detected parser, parsed result, and format name
- * @throws Error if no parser can handle the content
+ * @param path - The file path (used for error reporting and some parsers).
+ * @param content - The raw file content to parse.
+ * @param options - Parse options including workDir and trackedFiles.
+ * @returns The detected parser, parsed result, and format name.
+ * @rejects {Error} When no parser can handle the content.
+ * @example
+ * const { format, result } = await detectTestFormat('results.xml', content, options);
  */
 async function detectTestFormat(path, content, options) {
     for (const { name, factory } of orderedParsers) {
@@ -46502,6 +46791,9 @@ async function detectTestFormat(path, content, options) {
     throw new Error('Could not determine test result format. None of the available parsers succeeded.');
 }
 
+/**
+ * @file Provides helpers that build Markdown links, icons and tables for the summaries.
+ */
 var Align;
 (function (Align) {
     Align["Left"] = ":---";
@@ -46512,20 +46804,51 @@ const Icon = {
     success: '✅',
     fail: '❌',
 };
+/**
+ * Creates a Markdown link from a title and an address.
+ * @param title - The text shown for the link.
+ * @param address - The URL the link points to.
+ * @returns The Markdown link.
+ * @example
+ * const md = link('Docs', 'https://example.com');
+ */
 function link(title, address) {
     return `[${title}](${address})`;
 }
+/**
+ * Creates a Markdown table from its headers, column alignments and rows.
+ * @param headers - The header cells of the table.
+ * @param align - The alignment markers of each column, such as ':---'.
+ * @param rows - The rows of the table, each a list of cells.
+ * @returns The Markdown table.
+ * @example
+ * const md = table(['Name', 'Count'], ['---', '---:'], ['tests', 3]);
+ */
 function table(headers, align, ...rows) {
-    const headerRow = `|${headers.map(tableEscape).join('|')}|`;
+    const headerRow = `|${headers.map((header) => tableEscape(header)).join('|')}|`;
     const alignRow = `|${align.join('|')}|`;
     const contentRows = rows
-        .map((row) => `|${row.map(tableEscape).join('|')}|`)
+        .map((row) => `|${row.map((cell) => tableEscape(cell)).join('|')}|`)
         .join('\n');
     return [headerRow, alignRow, contentRows].join('\n');
 }
+/**
+ * Escapes a table cell so that a pipe character does not end the cell early.
+ * @param content - The value of the cell.
+ * @returns The cell text with pipe characters escaped.
+ * @example
+ * const cell = tableEscape('a|b');
+ */
 function tableEscape(content) {
-    return content.toString().replace('|', '\\|');
+    return content.toString().replace('|', String.raw `\|`);
 }
+/**
+ * Formats a duration as seconds when it is over a second, or as milliseconds otherwise.
+ * @param ms - The duration in milliseconds.
+ * @returns The formatted duration.
+ * @example
+ * const time = formatTime(2500); // '3s'
+ */
 function formatTime(ms) {
     if (ms > 1000) {
         return `${Math.round(ms / 1000)}s`;
@@ -46534,22 +46857,33 @@ function formatTime(ms) {
 }
 
 /**
+ * @file Builds stable anchor identifiers for the headings of the summary.
+ */
+/**
  * Builds stable anchor identifiers for GitHub summary content, where headings are not auto-linked.
  * Returns both the element id and the href to use in links.
+ * @param name - The text to derive the anchor from, such as a heading or a suite name.
+ * @param options - The report options that control how anchors are built.
+ * @returns The element id and the href that points to it.
+ * @example
+ * const { id, link } = slug('My Suite', DEFAULT_OPTIONS);
  */
 function slug(name, options) {
     const slugId = name
         .trim()
-        .replace(/_/g, '')
-        .replace(/[./\\]/g, '-')
-        .replace(/[^\w-]/g, '');
+        .replaceAll('_', '')
+        .replaceAll(/[./\\]/g, '-')
+        .replaceAll(/[^\w-]/g, '');
     const id = `user-content-${slugId}`;
     const link = options.useActionsSummary ? `#${id}` : `#${slugId}`;
     return { id, link };
 }
 
-const MAX_REPORT_LENGTH = 65535;
-const MAX_ACTIONS_SUMMARY_LENGTH = 1048576;
+/**
+ * @file Formats test results as a Markdown summary for the GitHub Actions job summary.
+ */
+const MAX_REPORT_LENGTH = 65_535;
+const MAX_ACTIONS_SUMMARY_LENGTH = 1_048_576;
 const DEFAULT_OPTIONS = {
     listSuites: 'all',
     listTests: 'all',
@@ -46565,6 +46899,15 @@ let SummaryFormatter$1 = class SummaryFormatter {
         return getReport(results, options, shortSummary);
     }
 };
+/**
+ * Renders the test results as a Markdown report and trims it when it exceeds the GitHub size limit.
+ * @param results - The test runs to include in the report.
+ * @param options - The options that control the layout of the report.
+ * @param shortSummary - A one-line summary shown below the report title.
+ * @returns The Markdown report.
+ * @example
+ * const markdown = getReport(results, DEFAULT_OPTIONS, '3 passed, 1 failed');
+ */
 function getReport(results, options = DEFAULT_OPTIONS, shortSummary = '') {
     applySort(results);
     const opts = { ...options };
@@ -46585,11 +46928,26 @@ function getReport(results, options = DEFAULT_OPTIONS, shortSummary = '') {
     warning(`Test report summary exceeded limit of ${getMaxReportLength(options)} bytes and will be trimmed`);
     return trimReport(view, options);
 }
+/**
+ * Returns the byte limit for a report, which depends on whether it is written to the job summary.
+ * @param options - The options that decide where the report is written.
+ * @returns The maximum number of bytes the report may take.
+ * @example
+ * const limit = getMaxReportLength(DEFAULT_OPTIONS);
+ */
 function getMaxReportLength(options = DEFAULT_OPTIONS) {
     return options.useActionsSummary
         ? MAX_ACTIONS_SUMMARY_LENGTH
         : MAX_REPORT_LENGTH;
 }
+/**
+ * Cuts the report lines down to the byte limit and appends a notice that the report was trimmed.
+ * @param lines - The report lines to trim.
+ * @param options - The options that decide the byte limit.
+ * @returns The trimmed report, with the notice on its last line.
+ * @example
+ * const report = trimReport(['# Results', '```', 'output', '```'], DEFAULT_OPTIONS);
+ */
 function trimReport(lines, options) {
     const closingBlock = '```';
     const errorMsg = `**Report exceeded GitHub limit of ${getMaxReportLength(options)} bytes and has been trimmed**`;
@@ -46616,15 +46974,37 @@ function trimReport(lines, options) {
     reportLines.push(errorMsg);
     return reportLines.join('\n');
 }
+/**
+ * Sorts the test runs and their suites alphabetically by name, in place.
+ * @param results - The test runs to sort, which are also sorted in place.
+ * @example
+ * applySort(testRuns);
+ */
 function applySort(results) {
     results.sort((a, b) => a.path.localeCompare(b.path, DEFAULT_LOCALE));
     for (const res of results) {
         res.suites.sort((a, b) => a.name.localeCompare(b.name, DEFAULT_LOCALE));
     }
 }
+/**
+ * Returns the length of a string in UTF-8 bytes, which is the unit GitHub uses for its limits.
+ * @param text - The text to measure.
+ * @returns The number of UTF-8 bytes in the text.
+ * @example
+ * const size = getByteLength('report');
+ */
 function getByteLength(text) {
     return Buffer.byteLength(text, 'utf8');
 }
+/**
+ * Builds the lines of a report with its title, short summary, overall badge and per-run sections.
+ * @param results - The test runs to render.
+ * @param options - The options that control the layout of the report.
+ * @param shortSummary - A one-line summary shown below the title.
+ * @returns The lines of the report.
+ * @example
+ * const lines = renderReport(results, DEFAULT_OPTIONS, '');
+ */
 function renderReport(results, options, shortSummary) {
     const sections = [];
     const reportTitle = options.reportTitle.trim();
@@ -46640,12 +47020,30 @@ function renderReport(results, options, shortSummary) {
     sections.push(...runs);
     return sections;
 }
+/**
+ * Creates a single badge that summarises the results of all test runs combined.
+ * @param results - The test runs whose counts are added together.
+ * @param options - The options that control the badge title.
+ * @returns The Markdown image of the badge.
+ * @example
+ * const badge = getReportBadge(results, DEFAULT_OPTIONS);
+ */
 function getReportBadge(results, options) {
     const passed = results.reduce((sum, tr) => sum + tr.passed, 0);
     const skipped = results.reduce((sum, tr) => sum + tr.skipped, 0);
     const failed = results.reduce((sum, tr) => sum + tr.failed, 0);
     return getBadge(passed, failed, skipped, options);
 }
+/**
+ * Creates a Markdown badge that summarises the passed, failed and skipped test counts.
+ * @param passed - The number of passed tests.
+ * @param failed - The number of failed tests.
+ * @param skipped - The number of skipped tests.
+ * @param options - The options that control the badge title and hint.
+ * @returns The Markdown image of the badge.
+ * @example
+ * const badge = getBadge(10, 0, 1, DEFAULT_OPTIONS);
+ */
 function getBadge(passed, failed, skipped, options) {
     const text = [];
     if (passed > 0) {
@@ -46659,11 +47057,11 @@ function getBadge(passed, failed, skipped, options) {
     }
     const message = text.length > 0 ? text.join(', ') : 'none';
     let color = 'success';
+    if (passed === 0 && failed === 0) {
+        color = 'yellow';
+    }
     if (failed > 0) {
         color = 'critical';
-    }
-    else if (passed === 0 && failed === 0) {
-        color = 'yellow';
     }
     const hint = failed > 0 ? 'Tests failed' : 'Tests passed successfully';
     const encodedBadgeTitle = encodeImgShieldsURIComponent(options.badgeTitle);
@@ -46671,6 +47069,14 @@ function getBadge(passed, failed, skipped, options) {
     const encodedColor = encodeImgShieldsURIComponent(color);
     return `![${hint}](https://img.shields.io/badge/${encodedBadgeTitle}-${encodedMessage}-${encodedColor})`;
 }
+/**
+ * Renders a section for every test run, including the suites and tests that each one contains.
+ * @param testRuns - The test runs to render.
+ * @param options - The options that control which tests are listed.
+ * @returns The Markdown lines for all test runs.
+ * @example
+ * const lines = getTestRunsReport(testRuns, DEFAULT_OPTIONS);
+ */
 function getTestRunsReport(testRuns, options) {
     const sections = [];
     if (testRuns.length > 0 || options.onlySummary) {
@@ -46691,13 +47097,20 @@ function getTestRunsReport(testRuns, options) {
         sections.push('', resultsTable);
     }
     if (!options.onlySummary) {
-        const suitesReports = testRuns
-            .map((tr, i) => getSuitesReport(tr, i, options))
-            .flat();
+        const suitesReports = testRuns.flatMap((tr, i) => getSuitesReport(tr, i, options));
         sections.push(...suitesReports);
     }
     return sections;
 }
+/**
+ * Renders the section for each suite of a single test run.
+ * @param tr - The test run that owns the suites.
+ * @param runIndex - The position of the test run in the report, used to build anchors.
+ * @param options - The options that control which tests are listed.
+ * @returns The Markdown lines for the suites of the test run.
+ * @example
+ * const lines = getSuitesReport(testRun, 0, DEFAULT_OPTIONS);
+ */
 function getSuitesReport(tr, runIndex, options) {
     const sections = [];
     const suites = options.listSuites === 'failed'
@@ -46707,7 +47120,7 @@ function getSuitesReport(tr, runIndex, options) {
         const trSlug = makeRunSlug(runIndex, options);
         const nameLink = `<a id="${trSlug.id}" href="${options.baseUrl + trSlug.link}">${tr.path}</a>`;
         const icon = getResultIcon(tr.result);
-        sections.push(`## ${icon}\xa0${nameLink}`);
+        sections.push(`## ${icon}\u00A0${nameLink}`);
         const time = formatTime(tr.time);
         const headingLine2 = tr.tests > 0
             ? `**${tr.tests}** tests were completed in **${time}** with **${tr.passed}** passed, **${tr.failed}** failed and **${tr.skipped}** skipped.`
@@ -46730,15 +47143,23 @@ function getSuitesReport(tr, runIndex, options) {
         }
     }
     if (options.listTests !== 'none') {
-        const tests = suites
-            .map((ts, suiteIndex) => getTestsReport(ts, runIndex, suiteIndex, options))
-            .flat();
+        const tests = suites.flatMap((ts, suiteIndex) => getTestsReport(ts, runIndex, suiteIndex, options));
         if (tests.length > 1) {
             sections.push(...tests);
         }
     }
     return sections;
 }
+/**
+ * Renders the table of tests for a single suite, listing the tests that match the report options.
+ * @param ts - The suite whose tests are rendered.
+ * @param runIndex - The position of the owning test run, used to build anchors.
+ * @param suiteIndex - The position of the suite within its test run, used to build anchors.
+ * @param options - The options that control which tests are listed.
+ * @returns The Markdown lines for the tests of the suite.
+ * @example
+ * const lines = getTestsReport(suite, 0, 0, DEFAULT_OPTIONS);
+ */
 function getTestsReport(ts, runIndex, suiteIndex, options) {
     if (options.listTests === 'failed' && ts.result !== 'failed') {
         return [];
@@ -46752,8 +47173,7 @@ function getTestsReport(ts, runIndex, suiteIndex, options) {
     const tsSlug = makeSuiteSlug(runIndex, suiteIndex, options);
     const tsNameLink = `<a id="${tsSlug.id}" href="${options.baseUrl + tsSlug.link}">${tsName}</a>`;
     const icon = getResultIcon(ts.result);
-    sections.push(`### ${icon}\xa0${tsNameLink}`);
-    sections.push('```');
+    sections.push(`### ${icon}\u00A0${tsNameLink}`, '```');
     for (const grp of groups) {
         if (grp.name) {
             sections.push(grp.name);
@@ -46766,46 +47186,92 @@ function getTestsReport(ts, runIndex, suiteIndex, options) {
             const result = getResultIcon(tc.result);
             sections.push(`${space}${result} ${tc.name}`);
             if (tc.error) {
-                const lines = (tc.error.message ?? getFirstNonEmptyLine(tc.error.details)?.trim())
-                    ?.split(/\r?\n/g)
-                    .map((l) => '\t' + l);
-                if (lines) {
-                    sections.push(...lines);
-                }
+                sections.push(...formatErrorLines(tc.error));
             }
         }
     }
     sections.push('```');
     return sections;
 }
+/**
+ * Creates the anchor identifier and link for the heading of a test run.
+ * @param runIndex - The position of the test run in the report.
+ * @param options - The options that control how the slug is built.
+ * @returns The element id and the link that points to it.
+ * @example
+ * const { id, link } = makeRunSlug(0, DEFAULT_OPTIONS);
+ */
 function makeRunSlug(runIndex, options) {
     return slug(`r${runIndex}`, options);
 }
+/**
+ * Creates the anchor identifier and link for the heading of a test suite.
+ * @param runIndex - The position of the owning test run in the report.
+ * @param suiteIndex - The position of the suite within its test run.
+ * @param options - The options that control how the slug is built.
+ * @returns The element id and the link that points to it.
+ * @example
+ * const { id, link } = makeSuiteSlug(0, 1, DEFAULT_OPTIONS);
+ */
 function makeSuiteSlug(runIndex, suiteIndex, options) {
     return slug(`r${runIndex}s${suiteIndex}`, options);
 }
+/**
+ * Formats the message and details of a test error as indented Markdown lines.
+ * @param error - The error recorded for a failed test.
+ * @returns The lines to append to the report, each indented with a tab.
+ * @example
+ * const lines = formatErrorLines({ message: 'boom', details: 'stack' });
+ */
+function formatErrorLines(error) {
+    const text = error.message ?? getFirstNonEmptyLine(error.details)?.trim();
+    return (text?.split(/\r?\n/g) ?? []).map((l) => '\t' + l);
+}
+/**
+ * Returns the icon that represents a test execution result.
+ * @param result - The execution result of a test, suite or run.
+ * @returns The icon, or an empty string when the result has no icon.
+ * @example
+ * const icon = getResultIcon('failed');
+ */
 function getResultIcon(result) {
     switch (result) {
-        case 'success':
+        case 'success': {
             return Icon.success;
-        case 'skipped':
+        }
+        case 'skipped': {
             return Icon.skip;
-        case 'failed':
+        }
+        case 'failed': {
             return Icon.fail;
-        default:
+        }
+        default: {
             return '';
+        }
     }
 }
+/**
+ * Encodes a value for a shields.io badge URL, where dashes and underscores have special meaning.
+ * @param component - The text to encode.
+ * @returns The encoded text.
+ * @example
+ * const encoded = encodeImgShieldsURIComponent('2 passed');
+ */
 function encodeImgShieldsURIComponent(component) {
-    return encodeURIComponent(component).replace(/-/g, '--').replace(/_/g, '__');
+    return encodeURIComponent(component)
+        .replaceAll('-', '--')
+        .replaceAll('_', '__');
 }
 
+/**
+ * @file Runs the test result reporter end to end, from reading inputs to writing the summary.
+ */
 class TestReporter {
     name = getInput('name', { required: false }).trim() || 'tests';
     resultsPath = getInput('results-path', { required: true });
     listSuites = getInput('list-suites', { required: true });
     listTests = getInput('list-tests', { required: true });
-    maxAnnotations = parseInt(getInput('max-annotations', { required: true }));
+    maxAnnotations = Number.parseInt(getInput('max-annotations', { required: true }));
     failOnError = getInput('fail-on-error', { required: true }) === 'true';
     failOnEmpty = getInput('fail-on-empty', { required: true }) === 'true';
     workDirInput = getInput('working-directory', {
@@ -46834,11 +47300,10 @@ class TestReporter {
             setFailed(`Input parameter 'collapsed' has invalid value`);
             return;
         }
-        if (isNaN(this.maxAnnotations) ||
+        if (Number.isNaN(this.maxAnnotations) ||
             this.maxAnnotations < 0 ||
             this.maxAnnotations > 50) {
             setFailed(`Input parameter 'max-annotations' has invalid value`);
-            return;
         }
     }
     async run(writeSummary = true) {
@@ -46953,6 +47418,13 @@ class TestReporter {
         return { results, summary: summary$1, shortSummary };
     }
 }
+/**
+ * Runs the test result reporter and reports any unexpected failure to the action.
+ * @param writeSummary - Whether the summary is written to the job summary.
+ * @returns The output of the test run, or undefined when the run failed.
+ * @example
+ * const output = await run(true);
+ */
 async function run$2(writeSummary = true) {
     try {
         const testReporter = new TestReporter();
@@ -46966,25 +47438,28 @@ async function run$2(writeSummary = true) {
             setFailed(JSON.stringify(error));
         }
     }
+    return undefined;
 }
 
 /**
+ * @file Provides the shared base class for coverage parsers, with common path and file handling.
+ */
+/**
  * An abstract base class for XML-based coverage report parsers.
  * It is generic over the expected type of the parsed XML object.
- * @export
- * @abstract
+ * @template T The specific type of the parsed XML structure for a subclass.
  * @class BaseParser
  * @implements {CoverageParser}
- * @template T The specific type of the parsed XML structure for a subclass.
+ * @abstract
  */
 class BaseParser {
     /**
      * Parses the XML content string into a structured object and then
      * delegates to the abstract `process` method for format-specific logic.
-     * @param {string} content - The XML content of the coverage report.
-     * @returns {Promise<CoverageData>} A promise that resolves to file
-     * coverage data.
      * @memberof BaseParser
+     * @param content - The XML content of the coverage report.
+     * @returns A promise that resolves to file
+     * coverage data.
      */
     async parse(content) {
         const xml = await xml2jsExports.parseStringPromise(content);
@@ -46993,19 +47468,23 @@ class BaseParser {
 }
 
 /**
+ * @file Parses Clover XML coverage reports into the shared coverage model.
+ */
+/**
  * A parser for Clover XML coverage reports.
- * @export
  * @class CloverParser
- * @extends {BaseParser}
+ * @augments {BaseParser}
  */
 class CloverParser extends BaseParser {
     /**
      * Processes the parsed Clover XML object to extract coverage data.
-     * @protected
-     * @param {CloverXml} xml - The parsed Clover XML report.
-     * @returns {Promise<CoverageData>} A promise that resolves to the
-     * structured file coverage data.
      * @memberof CloverParser
+     * @param xml - The parsed Clover XML report.
+     * @returns A promise that resolves to the
+     * structured file coverage data.
+     * @protected
+     * @example
+     * const data = await parser.parse(xml);
      */
     process(xml) {
         const project = xml.coverage.project[0];
@@ -47061,19 +47540,23 @@ class CloverParser extends BaseParser {
 }
 
 /**
+ * @file Parses Cobertura XML coverage reports into the shared coverage model.
+ */
+/**
  * A parser for Cobertura XML coverage reports.
- * @export
  * @class CoberturaParser
- * @extends {BaseParser}
+ * @augments {BaseParser}
  */
 class CoberturaParser extends BaseParser {
     /**
      * Processes the parsed Cobertura XML object to extract coverage data.
-     * @protected
-     * @param {CoberturaXml} xml - The parsed Cobertura XML report.
-     * @returns {Promise<CoverageData>} A promise that resolves to the
-     * structured file coverage data.
      * @memberof CoberturaParser
+     * @param xml - The parsed Cobertura XML report.
+     * @returns A promise that resolves to the
+     * structured file coverage data.
+     * @protected
+     * @example
+     * const data = await parser.parse(xml);
      */
     process(xml) {
         const coverage = xml.coverage;
@@ -47114,20 +47597,24 @@ class CoberturaParser extends BaseParser {
     }
     /**
      * Extracts all class elements from the package structure.
-     * @private
-     * @param {CoberturaPackages[]} packages - The array of package elements.
-     * @returns {CoberturaClass[]} An array of all found class elements.
      * @memberof CoberturaParser
+     * @param packages - The array of package elements.
+     * @returns An array of all found class elements.
+     * @private
+     * @example
+     * const classes = this.classesFromPackages(xml.coverage.packages[0].package);
      */
     classesFromPackages(packages) {
         return (packages || []).flatMap((p) => (p.package || []).flatMap((pack) => (pack.classes || []).flatMap((c) => c.class)));
     }
     /**
      * Extracts line coverage details from a class element.
-     * @private
-     * @param {CoberturaClass} c - The class element.
-     * @returns {CoverageMetrics} The structured line coverage.
      * @memberof CoberturaParser
+     * @param c - The class element.
+     * @returns The structured line coverage.
+     * @private
+     * @example
+     * const lines = this.getLineCoverage(classElement);
      */
     getLineCoverage(c) {
         const lines = c.lines?.[0]?.line || [];
@@ -47138,10 +47625,12 @@ class CoberturaParser extends BaseParser {
     }
     /**
      * Extracts function coverage details from a class element.
-     * @private
-     * @param {CoberturaClass} c - The class element.
-     * @returns {CoverageMetrics} The structured function coverage.
      * @memberof CoberturaParser
+     * @param c - The class element.
+     * @returns The structured function coverage.
+     * @private
+     * @example
+     * const functions = this.getFunctionCoverage(classElement);
      */
     getFunctionCoverage(c) {
         const methods = c.methods?.[0]?.method || [];
@@ -47152,10 +47641,12 @@ class CoberturaParser extends BaseParser {
     }
     /**
      * Extracts branch coverage details from a class element.
-     * @private
-     * @param {CoberturaClass} c - The class element.
-     * @returns {CoverageMetrics} An array of branch coverage details.
      * @memberof CoberturaParser
+     * @param c - The class element.
+     * @returns An array of branch coverage details.
+     * @private
+     * @example
+     * const branches = this.getBranchCoverage(classElement);
      */
     getBranchCoverage(c) {
         if (!c.lines || !c.lines[0].line) {
@@ -47174,18 +47665,20 @@ class CoberturaParser extends BaseParser {
 }
 
 /**
+ * @file Parses gcov text output into the shared coverage model.
+ */
+/**
  * A parser for gcov text output files.
- * @export
  * @class GcovParser
  * @implements {CoverageParser}
  */
 class GcovParser {
     /**
      * Parses the gcov text content to extract coverage data.
-     * @param {string} content - The gcov text content.
-     * @returns {Promise<CoverageData>} A promise that resolves to the
-     * structured coverage data.
      * @memberof GcovParser
+     * @param content - The gcov text content.
+     * @returns A promise that resolves to the
+     * structured coverage data.
      */
     async parse(content) {
         const sections = this.parseGcovContent(content);
@@ -47198,95 +47691,29 @@ class GcovParser {
     }
     /**
      * Parses the complete gcov text content into file sections.
-     * @private
-     * @param {string} content - The raw gcov text content.
-     * @returns {GcovFileSection[]} Array of parsed file sections.
      * @memberof GcovParser
+     * @param content - The raw gcov text content.
+     * @returns Array of parsed file sections.
+     * @private
      */
     parseGcovContent(content) {
         const lines = content.split('\n');
         const sections = [];
         let currentSection = null;
-        for (let i = 0; i < lines.length; i++) {
-            const line = lines[i].trim();
-            const fileMatch = line.match(/^File\s+'(.+)'$/);
-            const creatingMatch = line.match(/^Creating\s+'(.+)'$/);
-            if (fileMatch || creatingMatch) {
+        for (const rawLine of lines) {
+            const line = rawLine.trim();
+            const filename = parseSectionFilename(line);
+            if (filename !== undefined) {
                 if (currentSection) {
                     sections.push(currentSection);
                 }
-                const filename = fileMatch
-                    ? fileMatch[1]
-                    : creatingMatch[1].replace(/\.gcov$/, '');
-                currentSection = {
-                    filename,
-                    lines: [],
-                };
-                continue;
+                currentSection = { filename, lines: [] };
             }
-            if (currentSection) {
-                const linesMatch = line.match(/^Lines executed:(\d+\.\d+)% of (\d+)$/);
-                const branchesMatch = line.match(/^Branches executed:(\d+\.\d+)% of (\d+)$/);
-                const functionsMatch = line.match(/^Functions executed:(\d+\.\d+)% of (\d+)$/);
-                if (linesMatch) {
-                    const percentage = parseFloat(linesMatch[1]);
-                    const total = parseInt(linesMatch[2], 10);
-                    const covered = Math.round((percentage / 100) * total);
-                    if (!currentSection.summary) {
-                        currentSection.summary = {
-                            linesExecuted: { covered: 0, total: 0 },
-                        };
-                    }
-                    currentSection.summary.linesExecuted = { covered, total };
-                    continue;
+            if (currentSection && !applySummaryLine(currentSection, line)) {
+                const sourceLine = parseSourceLine(line);
+                if (sourceLine) {
+                    currentSection.lines.push(sourceLine);
                 }
-                if (branchesMatch) {
-                    const percentage = parseFloat(branchesMatch[1]);
-                    const total = parseInt(branchesMatch[2], 10);
-                    const covered = Math.round((percentage / 100) * total);
-                    if (!currentSection.summary) {
-                        currentSection.summary = {
-                            linesExecuted: { covered: 0, total: 0 },
-                        };
-                    }
-                    currentSection.summary.branchesExecuted = { covered, total };
-                    continue;
-                }
-                if (functionsMatch) {
-                    const percentage = parseFloat(functionsMatch[1]);
-                    const total = parseInt(functionsMatch[2], 10);
-                    const covered = Math.round((percentage / 100) * total);
-                    if (!currentSection.summary) {
-                        currentSection.summary = {
-                            linesExecuted: { covered: 0, total: 0 },
-                        };
-                    }
-                    currentSection.summary.functionsExecuted = { covered, total };
-                    continue;
-                }
-            }
-            const lineMatch = line.match(/^\s*([#\d-]+):\s*(\d+):\s*(.*)/);
-            if (lineMatch && currentSection) {
-                const [, countStr, lineNumberStr, sourceCode] = lineMatch;
-                const lineNumber = parseInt(lineNumberStr, 10);
-                let executionCount = null;
-                if (countStr.trim() === '-') {
-                    executionCount = null;
-                }
-                else if (countStr.trim() === '#####') {
-                    executionCount = 0;
-                }
-                else {
-                    const count = parseInt(countStr.trim(), 10);
-                    if (!isNaN(count)) {
-                        executionCount = count;
-                    }
-                }
-                currentSection.lines.push({
-                    lineNumber,
-                    executionCount,
-                    sourceCode: sourceCode || '',
-                });
             }
         }
         if (currentSection) {
@@ -47296,10 +47723,10 @@ class GcovParser {
     }
     /**
      * Converts a gcov file section into standardized coverage details.
-     * @private
-     * @param {GcovFileSection} section - The parsed gcov file section.
-     * @returns {FileCoverageDetails} The standardized coverage details.
      * @memberof GcovParser
+     * @param section - The parsed gcov file section.
+     * @returns The standardized coverage details.
+     * @private
      */
     processSectionToDetails(section) {
         const executableLines = section.lines.filter((line) => line.executionCount !== null);
@@ -47310,15 +47737,10 @@ class GcovParser {
         let lines;
         const branches = { total: 0, covered: 0 };
         const methods = { total: 0, covered: 0 };
-        if (section.summary?.linesExecuted) {
-            lines = section.summary.linesExecuted;
-        }
-        else {
-            lines = {
-                total: executableLines.length,
-                covered: coveredLines.length,
-            };
-        }
+        lines = section.summary?.linesExecuted ?? {
+            total: executableLines.length,
+            covered: coveredLines.length,
+        };
         if (section.summary?.branchesExecuted) {
             branches.total = section.summary.branchesExecuted.total;
             branches.covered = section.summary.branchesExecuted.covered;
@@ -47338,10 +47760,10 @@ class GcovParser {
     }
     /**
      * Aggregates the details from all files to create an overall summary.
-     * @private
-     * @param {FileCoverageDetails[]} details - The details for all files.
-     * @returns {CoverageData['overall']} The project-wide coverage summary.
      * @memberof GcovParser
+     * @param details - The details for all files.
+     * @returns The project-wide coverage summary.
+     * @private
      */
     aggregateOverallCoverage(details) {
         return details.reduce((acc, detail) => {
@@ -47362,31 +47784,118 @@ class GcovParser {
         });
     }
 }
+/**
+ * Reads the source file name from a gcov section header line.
+ * @param line - The trimmed line to inspect.
+ * @returns The source file name, or undefined when the line is not a header.
+ * @example
+ * const name = parseSectionFilename("File 'src/index.ts'"); // 'src/index.ts'
+ */
+function parseSectionFilename(line) {
+    const fileMatch = /^File\s+'(.+)'$/.exec(line);
+    if (fileMatch) {
+        return fileMatch[1];
+    }
+    const creatingMatch = /^Creating\s+'(.+)'$/.exec(line);
+    if (creatingMatch) {
+        return creatingMatch[1].replace(/\.gcov$/, '');
+    }
+    return undefined;
+}
+/**
+ * Stores the lines, branches or functions percentage from a gcov summary line in the section.
+ * @param section - The section that receives the summary value.
+ * @param line - The trimmed line to inspect.
+ * @returns True when the line was a summary line and has been applied.
+ * @example
+ * const applied = applySummaryLine(section, 'Lines executed:50.00% of 4');
+ */
+function applySummaryLine(section, line) {
+    const summaryPatterns = [
+        { key: 'linesExecuted', re: /^Lines executed:(\d+\.\d+)% of (\d+)$/ },
+        { key: 'branchesExecuted', re: /^Branches executed:(\d+\.\d+)% of (\d+)$/ },
+        {
+            key: 'functionsExecuted',
+            re: /^Functions executed:(\d+\.\d+)% of (\d+)$/,
+        },
+    ];
+    for (const { key, re } of summaryPatterns) {
+        const match = re.exec(line);
+        if (match) {
+            const percentage = Number.parseFloat(match[1]);
+            const total = Number.parseInt(match[2], 10);
+            const covered = Math.round((percentage / 100) * total);
+            section.summary ??= { linesExecuted: { covered: 0, total: 0 } };
+            section.summary[key] = { covered, total };
+            return true;
+        }
+    }
+    return false;
+}
+/**
+ * Parses a gcov source line that starts with an execution count and a line number.
+ * @param line - The trimmed line to parse.
+ * @returns The parsed line, or undefined when the line has no count and number.
+ * @example
+ * const parsed = parseSourceLine('5: 12: return value;');
+ */
+function parseSourceLine(line) {
+    const lineMatch = /^\s*([#\d-]+):\s*(\d+):\s*(.*)/.exec(line);
+    if (!lineMatch) {
+        return undefined;
+    }
+    const [, countStr, lineNumberStr, sourceCode] = lineMatch;
+    return {
+        lineNumber: Number.parseInt(lineNumberStr, 10),
+        executionCount: parseExecutionCount(countStr),
+        sourceCode: sourceCode || '',
+    };
+}
+/**
+ * Converts the execution count column of a gcov source line into a number.
+ * @param countStr - The raw count column, such as '5', '#####' or '-'.
+ * @returns The execution count, or null when the line is not executable.
+ * @example
+ * const count = parseExecutionCount('#####'); // 0
+ */
+function parseExecutionCount(countStr) {
+    const trimmed = countStr.trim();
+    if (trimmed === '-') {
+        return null;
+    }
+    if (trimmed === '#####') {
+        return 0;
+    }
+    const count = Number.parseInt(trimmed, 10);
+    return Number.isNaN(count) ? null : count;
+}
 
 /**
+ * @file Parses Go cover profiles into the shared coverage model.
+ */
+/**
  * A parser for Go coverage profile files (output of `go test -coverprofile`).
- * @export
  * @class GocoverParser
  * @implements {CoverageParser}
  */
 class GocoverParser {
     /**
      * Regular expression to match the mode line at the start of Go coverage files.
-     * Valid modes are: set, count, atomic
+     * Valid modes are: set, count, atomic.
      */
     static MODE_REGEX = /^mode:\s*(set|count|atomic)\s*$/;
     /**
      * Regular expression to match coverage block lines.
-     * Format: file:startLine.startCol,endLine.endCol numStatements count
+     * Format: file:startLine.startCol,endLine.endCol numStatements count.
      */
     static BLOCK_REGEX = /^(.+):(\d+)\.(\d+),(\d+)\.(\d+)\s+(\d+)\s+(\d+)$/;
     /**
      * Parses Go coverage profile content.
-     * @param {string} content - The Go coverage profile content.
-     * @returns {Promise<CoverageData>} A promise that resolves to the
+     * @memberof GocoverParser
+     * @param content - The Go coverage profile content.
+     * @returns A promise that resolves to the
      * structured coverage data.
      * @throws {Error} If the content is not valid Go coverage format.
-     * @memberof GocoverParser
      */
     async parse(content) {
         const lines = content.split('\n').filter((line) => line.trim() !== '');
@@ -47402,18 +47911,18 @@ class GocoverParser {
             const line = lines[i].trim();
             if (line === '')
                 continue;
-            const match = line.match(GocoverParser.BLOCK_REGEX);
+            const match = GocoverParser.BLOCK_REGEX.exec(line);
             if (!match) {
                 throw new Error(`Invalid Go coverage format at line ${i + 1}: ${line}`);
             }
             const [, filename, startLine, startCol, endLine, endCol, numStmts, count,] = match;
             const block = {
-                startLine: parseInt(startLine, 10),
-                startCol: parseInt(startCol, 10),
-                endLine: parseInt(endLine, 10),
-                endCol: parseInt(endCol, 10),
-                numStatements: parseInt(numStmts, 10),
-                count: parseInt(count, 10),
+                startLine: Number.parseInt(startLine, 10),
+                startCol: Number.parseInt(startCol, 10),
+                endLine: Number.parseInt(endLine, 10),
+                endCol: Number.parseInt(endCol, 10),
+                numStatements: Number.parseInt(numStmts, 10),
+                count: Number.parseInt(count, 10),
             };
             if (!fileDataMap.has(filename)) {
                 fileDataMap.set(filename, { filename, blocks: [] });
@@ -47423,16 +47932,16 @@ class GocoverParser {
         if (fileDataMap.size === 0) {
             throw new Error('No valid Go coverage data found in content');
         }
-        const details = Array.from(fileDataMap.values()).map((fileData) => this.processFileToDetails(fileData));
+        const details = [...fileDataMap.values()].map((fileData) => this.processFileToDetails(fileData));
         const overall = this.aggregateOverallCoverage(details);
         return { overall, details };
     }
     /**
      * Converts Go coverage file data into standardized coverage details.
-     * @private
-     * @param {GocoverFileData} fileData - The parsed Go coverage file data.
-     * @returns {FileCoverageDetails} The standardized coverage details.
      * @memberof GocoverParser
+     * @param fileData - The parsed Go coverage file data.
+     * @returns The standardized coverage details.
+     * @private
      */
     processFileToDetails(fileData) {
         // Track coverage per line: Map<lineNumber, wasCovered>
@@ -47440,22 +47949,17 @@ class GocoverParser {
         for (const block of fileData.blocks) {
             // Mark all lines in the block
             for (let line = block.startLine; line <= block.endLine; line++) {
-                const currentCoverage = lineCoverage.get(line);
                 // A line is covered if any block covering it has count > 0
-                if (currentCoverage === undefined) {
-                    lineCoverage.set(line, block.count > 0);
-                }
-                else if (block.count > 0) {
-                    lineCoverage.set(line, true);
-                }
+                const currentCoverage = lineCoverage.get(line) ?? false;
+                lineCoverage.set(line, currentCoverage || block.count > 0);
             }
         }
         const totalLines = lineCoverage.size;
-        const coveredLines = Array.from(lineCoverage.values()).filter((covered) => covered).length;
-        const uncoveredLines = Array.from(lineCoverage.entries())
+        const coveredLines = [...lineCoverage.values()].filter(Boolean).length;
+        const uncoveredLines = [...lineCoverage.entries()]
             .filter(([, covered]) => !covered)
             .map(([lineNum]) => lineNum)
-            .sort((a, b) => a - b);
+            .toSorted((a, b) => a - b);
         // Calculate statement coverage from blocks
         let totalStatements = 0;
         let coveredStatements = 0;
@@ -47488,10 +47992,10 @@ class GocoverParser {
     }
     /**
      * Aggregates the details from all files to create an overall summary.
-     * @private
-     * @param {FileCoverageDetails[]} details - The details for all files.
-     * @returns {CoverageData['overall']} The project-wide coverage summary.
      * @memberof GocoverParser
+     * @param details - The details for all files.
+     * @returns The project-wide coverage summary.
+     * @private
      */
     aggregateOverallCoverage(details) {
         return details.reduce((acc, detail) => {
@@ -47514,19 +48018,23 @@ class GocoverParser {
 }
 
 /**
+ * @file Parses JaCoCo XML coverage reports into the shared coverage model.
+ */
+/**
  * A parser for JaCoCo XML coverage reports.
- * @export
  * @class JacocoParser
- * @extends {BaseParser}
+ * @augments {BaseParser}
  */
 class JacocoParser extends BaseParser {
     /**
      * Processes the parsed JaCoCo XML object to extract coverage data.
-     * @protected
-     * @param {JacocoReport} xml - The parsed JaCoCo XML report.
-     * @returns {Promise<CoverageData>} A promise that resolves to the
-     * structured file coverage data.
      * @memberof JacocoParser
+     * @param xml - The parsed JaCoCo XML report.
+     * @returns A promise that resolves to the
+     * structured file coverage data.
+     * @protected
+     * @example
+     * const data = await parser.parse(xml);
      */
     process(xml) {
         const overall = this.aggregateCounters(xml.report.counter);
@@ -47535,10 +48043,12 @@ class JacocoParser extends BaseParser {
     }
     /**
      * Extracts coverage information from a single package element.
-     * @private
-     * @param {JacocoPackage} pack - The package object from the report.
-     * @returns {FileCoverageDetails[]} An array of file coverage details.
      * @memberof JacocoParser
+     * @param pack - The package object from the report.
+     * @returns An array of file coverage details.
+     * @private
+     * @example
+     * const files = this.unpackage(pack);
      */
     unpackage(pack) {
         return (pack.sourcefile || []).map((s) => {
@@ -47554,11 +48064,12 @@ class JacocoParser extends BaseParser {
     /**
      * Aggregates an array of Jacoco counter elements into the standard
      * coverage metrics object.
-     * @private
-     * @param {JacocoCounter[]} counters - The array of counter-elements.
-     * @returns {Omit<FileCoverageDetails, 'file' | 'uncoveredLines'>}
-     * The aggregated coverage metrics.
      * @memberof JacocoParser
+     * @param counters - The array of counter-elements.
+     * @returns The coverage metrics summed across all of the counters.
+     * @private
+     * @example
+     * const metrics = this.aggregateCounters(counters);
      */
     aggregateCounters(counters) {
         const metrics = {};
@@ -47579,6 +48090,9 @@ class JacocoParser extends BaseParser {
 }
 
 /**
+ * @file Parses llvm-cov JSON exports into the shared coverage model.
+ */
+/**
  * Matches paths inside a `.build` directory, where SwiftPM keeps checked-out
  * dependencies and generated sources that are not part of the project.
  * @internal
@@ -47589,18 +48103,17 @@ const DEPENDENCY_PATH = /(^|[\\/])\.build[\\/]/;
  * SwiftPM writes to `.build/<triple>/debug/codecov/<package>.json` when tests
  * run with `--enable-code-coverage`. Files under a `.build` directory
  * (dependencies) are ignored.
- * @export
  * @class LlvmCovParser
  * @implements {CoverageParser}
  */
 class LlvmCovParser {
     /**
      * Parses the llvm-cov JSON export.
-     * @param {string} content - The JSON content of the coverage report.
-     * @returns {Promise<CoverageData>} A promise that resolves to the
+     * @memberof LlvmCovParser
+     * @param content - The JSON content of the coverage report.
+     * @returns A promise that resolves to the
      * structured coverage data.
      * @throws {Error} If the content is not an llvm-cov JSON export.
-     * @memberof LlvmCovParser
      */
     parse(content) {
         let json;
@@ -47642,11 +48155,11 @@ class LlvmCovParser {
      * rule: a line's count is the largest count among the regions starting on
      * it and the region wrapping into it, ignoring gap regions. The wrapping
      * region is disregarded when the line's first segment opens a new region.
-     * @private
-     * @param {LlvmSegment[]} segments - The segments of a file.
-     * @returns {Map<number, number>} Hit counts keyed by line number, holding
-     * executable lines only.
      * @memberof LlvmCovParser
+     * @param segments - The segments of a file.
+     * @returns Hit counts keyed by line number, holding
+     * executable lines only.
+     * @private
      */
     lineCounts(segments) {
         const counts = new Map();
@@ -47683,11 +48196,11 @@ class LlvmCovParser {
     }
     /**
      * Converts a single exported file to the standard file details.
-     * @private
-     * @param {LlvmFile} file - The exported file.
-     * @param {CoverageMetrics} methods - Function metrics for the file.
-     * @returns {FileCoverageDetails} The standardized details.
      * @memberof LlvmCovParser
+     * @param file - The exported file.
+     * @param methods - Function metrics for the file.
+     * @returns The standardized details.
+     * @private
      */
     processFile(file, methods) {
         const counts = this.lineCounts(file.segments ?? []);
@@ -47715,10 +48228,10 @@ class LlvmCovParser {
     }
     /**
      * Aggregates the details from all files to create an overall summary.
-     * @private
-     * @param {FileCoverageDetails[]} details - The details for all files.
-     * @returns {CoverageData['overall']} The project-wide coverage summary.
      * @memberof LlvmCovParser
+     * @param details - The details for all files.
+     * @returns The project-wide coverage summary.
+     * @private
      */
     aggregateOverallCoverage(details) {
         return details.reduce((acc, detail) => {
@@ -47742,18 +48255,20 @@ class LlvmCovParser {
 }
 
 /**
+ * @file Parses LCOV tracefiles into the shared coverage model.
+ */
+/**
  * A parser for LCOV string-based coverage reports.
- * @export
  * @class LcovParser
  * @implements {CoverageParser}
  */
 class LcovParser {
     /**
      * Parses the LCOV content string line by line.
-     * @param {string} content - The LCOV content of the coverage report.
-     * @returns {Promise<CoverageData>} A promise that resolves to the
-     * structured file coverage data.
      * @memberof LcovParser
+     * @param content - The LCOV content of the coverage report.
+     * @returns A promise that resolves to the
+     * structured file coverage data.
      */
     parse(content) {
         const records = content.split('end_of_record');
@@ -47765,9 +48280,9 @@ class LcovParser {
     }
     /**
      * Creates a new, empty builder object for a file record.
-     * @private
-     * @returns {LcovFileBuilder} An empty builder object.
      * @memberof LcovParser
+     * @returns An empty builder object.
+     * @private
      */
     createNewBuilder() {
         return {
@@ -47779,11 +48294,11 @@ class LcovParser {
     }
     /**
      * Parses a single "record" block from an LCOV file.
-     * @private
-     * @param {string} record - A block of LCOV data for a single file.
-     * @returns {(FileCoverageDetails | null)} The parsed coverage data or
-     * null if the record is empty.
      * @memberof LcovParser
+     * @param record - A block of LCOV data for a single file.
+     * @returns The parsed coverage data or
+     * null if the record is empty.
+     * @private
      */
     parseRecord(record) {
         if (record.trim() === '') {
@@ -47820,11 +48335,11 @@ class LcovParser {
     }
     /**
      * Processes a single line of an LCOV record and updates the builder.
-     * @private
-     * @param {string} type - The LCOV data type (e.g., 'SF', 'DA').
-     * @param {string} value - The value associated with the type.
-     * @param {LcovFileBuilder} builder - The file builder to populate.
      * @memberof LcovParser
+     * @param type - The LCOV data type (e.g., 'SF', 'DA').
+     * @param value - The value associated with the type.
+     * @param builder - The file builder to populate.
+     * @private
      */
     processLine(type, value, builder) {
         switch (type) {
@@ -47865,10 +48380,10 @@ class LcovParser {
     }
     /**
      * Aggregates the details from all files to create an overall summary.
-     * @private
-     * @param {FileCoverageDetails[]} details - The details for all files.
-     * @returns {CoverageData['overall']} The project-wide coverage summary.
      * @memberof LcovParser
+     * @param details - The details for all files.
+     * @returns The project-wide coverage summary.
+     * @private
      */
     aggregateOverallCoverage(details) {
         return details.reduce((acc, detail) => {
@@ -47891,6 +48406,9 @@ class LcovParser {
 }
 
 /**
+ * @file Detects the coverage format of a report and dispatches it to the matching parser.
+ */
+/**
  * An array of all available parser instances to be tried in order.
  * The order can matter if formats are subsets of one another.
  */
@@ -47903,6 +48421,14 @@ const availableParsers = [
     new LlvmCovParser(),
     new LcovParser(),
 ];
+/**
+ * Detects the format of a coverage report by trying each available parser in turn.
+ * @param content - The raw text of the coverage report.
+ * @returns The parser that understood the report and the parsed coverage data.
+ * @rejects {Error} When none of the available parsers can read the report.
+ * @example
+ * const { parser, data } = await detectCoverage(lcovText);
+ */
 async function detectCoverage(content) {
     for (const parser of availableParsers) {
         try {
@@ -47917,31 +48443,34 @@ async function detectCoverage(content) {
 }
 
 /**
+ * @file Provides helpers shared by the coverage formatters, such as compressing uncovered line numbers into ranges.
+ */
+/**
  * Transforms an array of numbers into a compact, human-readable string of
  * continuous ranges. This pure function is designed to make lists of
  * numbers, such as uncovered code lines, easier to read.
  *
  * If the resulting string exceeds the optional maxLength, a single compact
  * range from the first to the last number is returned instead.
- *
- * @export
- * @param {number[]} lines - An array of numbers. The function will internally
+ * @param lines - An array of numbers. The function will internally
  * sort this array, so the input does not need to be pre-sorted. An empty
  * array will result in an empty string.
- * @param {object} [options] - Optional configuration.
- * @param {number} [options.maxLength] - The maximum character length for the
+ * @param [options] - Optional configuration.
+ * @param [options.maxLength] - The maximum character length for the
  * output string. If exceeded, a simplified range is returned.
- * @returns {string} A comma-separated string representing the number ranges.
+ * @returns A comma-separated string representing the number ranges.
+ * @example
+ * const text = formatUncoveredLines([1, 2, 3, 7, 9, 10]); // '1-3,7,9-10'
  */
 function formatUncoveredLines(lines, options) {
     if (lines.length === 0) {
         return '';
     }
     else {
-        const sortedLines = [...lines].sort((a, b) => a - b);
+        const sortedLines = [...lines].toSorted((a, b) => a - b);
         const groupedRanges = sortedLines.reduce((acc, current) => {
-            const lastGroup = acc[acc.length - 1];
-            if (acc.length === 0 || current > lastGroup[lastGroup.length - 1] + 1) {
+            const lastGroup = acc.at(-1);
+            if (acc.length === 0 || current > lastGroup.at(-1) + 1) {
                 acc.push([current]);
             }
             else {
@@ -47951,32 +48480,31 @@ function formatUncoveredLines(lines, options) {
         }, []);
         const fullRangeString = groupedRanges
             .map((group) => {
-            if (group.length > 1) {
-                return `${group[0]}-${group[group.length - 1]}`;
-            }
-            else {
-                return `${group[0]}`;
-            }
+            return group.length > 1 ? `${group[0]}-${group.at(-1)}` : `${group[0]}`;
         })
             .join(',');
-        if (options?.maxLength && fullRangeString.length > options.maxLength) {
-            return `${sortedLines[0]}-${sortedLines[sortedLines.length - 1]}`;
-        }
-        else {
-            return fullRangeString;
-        }
+        return options?.maxLength && fullRangeString.length > options.maxLength
+            ? `${sortedLines[0]}-${sortedLines.at(-1)}`
+            : fullRangeString;
     }
 }
 
 /**
+ * @file Formats coverage results as a Markdown summary for the GitHub Actions job summary.
+ */
+/**
  * A formatter that generates a rich Markdown summary for GitHub Actions.
- * @export
  * @class SummaryFormatter
  * @implements {CoverageFormatter}
  */
 class SummaryFormatter {
     /**
-     * {@inheritDoc CoverageFormatter.format}
+     * Formats the coverage data as a Markdown summary table.
+     * @param coverageData - The coverage data to format.
+     * @param options - The options, such as the repository and commit used for links.
+     * @returns The Markdown summary as a single string.
+     * @example
+     * const markdown = new SummaryFormatter().format(coverageData, { rootDir: process.cwd() });
      */
     format(coverageData, options) {
         const tree = this.buildTree(coverageData.details, options.rootDir);
@@ -47999,10 +48527,10 @@ class SummaryFormatter {
     }
     /**
      * Builds the file and directory tree from a flat list of file details.
+     * @param details - A flat list of file coverage data.
+     * @param [rootDir] - The project's root directory for making paths relative.
+     * @returns The root node of the constructed file tree.
      * @private
-     * @param {FileCoverageDetails[]} details - A flat list of file coverage data.
-     * @param {string} [rootDir] - The project's root directory for making paths relative.
-     * @returns {CoverageNode} The root node of the constructed file tree.
      */
     buildTree(details, rootDir) {
         const root = { children: new Map(), _isFile: false };
@@ -48021,7 +48549,7 @@ class SummaryFormatter {
                 }
                 currentNode = currentNode.children.get(part);
             }
-            const fileName = pathParts[pathParts.length - 1];
+            const [fileName] = pathParts.slice(-1);
             currentNode.children.set(fileName, {
                 children: new Map(),
                 _coverage: detail,
@@ -48032,9 +48560,9 @@ class SummaryFormatter {
     }
     /**
      * Recursively calculates aggregate coverage for all directories in the tree.
+     * @param node - The current node in the tree to process.
+     * @returns A flat list of all descendant file coverages.
      * @private
-     * @param {CoverageNode} node - The current node in the tree to process.
-     * @returns {FileCoverageDetails[]} A flat list of all descendant file coverages.
      */
     calculateAggregates(node) {
         const descendantFiles = [];
@@ -48063,16 +48591,16 @@ class SummaryFormatter {
     }
     /**
      * Recursively renders the coverage tree into an array of Markdown table rows.
+     * @param node - The current node of the tree to render.
+     * @param options - The options containing repo and commit info.
+     * @param [indent] - The current indentation level.
+     * @param [prefix] - The current path prefix.
+     * @returns An array of formatted Markdown table rows.
      * @private
-     * @param {CoverageNode} node - The current node of the tree to render.
-     * @param {SummaryOptions} options - The options containing repo and commit info.
-     * @param {number} [indent=0] - The current indentation level.
-     * @param {string} [prefix=''] - The current path prefix.
-     * @returns {string[]} An array of formatted Markdown table rows.
      */
     renderTree(node, options, indent = 0, prefix = '') {
         let rows = [];
-        const sortedKeys = [...node.children.keys()].sort();
+        const sortedKeys = [...node.children.keys()].toSorted((a, b) => a.localeCompare(b));
         for (const key of sortedKeys) {
             const child = node.children.get(key);
             const currentPath = path$1.join(prefix, key);
@@ -48081,16 +48609,15 @@ class SummaryFormatter {
             }
             else {
                 const dirName = `**${key}/**`;
-                rows.push(this.buildRow(dirName, child._coverage, options, indent));
-                rows.push(...this.renderTree(child, options, indent + 2, currentPath));
+                rows.push(this.buildRow(dirName, child._coverage, options, indent), ...this.renderTree(child, options, indent + 2, currentPath));
             }
         }
         return rows;
     }
     /**
      * Builds a single formatted Markdown table row.
+     * @returns The fully formatted Markdown table row string.
      * @private
-     * @returns {string} The fully formatted Markdown table row string.
      */
     buildRow(name, data, options, indent = 0, isSummary = false, filePath) {
         const { statements, branches, methods, lines } = data;
@@ -48112,9 +48639,9 @@ class SummaryFormatter {
     }
     /**
      * Formats a single metric cell with a progress bar and percentage.
+     * @param metric - The metric data to format.
+     * @returns The formatted Markdown string for the cell.
      * @private
-     * @param {CoverageMetrics} metric - The metric data to format.
-     * @returns {string} The formatted Markdown string for the cell.
      */
     formatMetric(metric) {
         const pct = metric.total === 0 ? 100 : (metric.covered / metric.total) * 100;
@@ -48123,8 +48650,8 @@ class SummaryFormatter {
     }
     /**
      * Creates the Markdown for the "Uncovered Lines" cell, including links.
+     * @returns The formatted Markdown string for the cell.
      * @private
-     * @returns {string} The formatted Markdown string for the cell.
      */
     formatUncoveredCell(data, options, filePath) {
         if (!('uncoveredLines' in data) ||
@@ -48156,7 +48683,13 @@ class SummaryFormatter {
     }
     buildProgressBar(percentage) {
         const pct = Math.round(percentage);
-        const color = pct < 50 ? 'red' : pct < 80 ? 'yellow' : 'green';
+        let color = 'green';
+        if (pct < 80) {
+            color = 'yellow';
+        }
+        if (pct < 50) {
+            color = 'red';
+        }
         const padded = String(Math.round(pct / 5) * 5).padStart(3, '0');
         const url = `https://raw.githubusercontent.com/mridang/scratch/refs/heads/master/dist/res/progress-${color}-${padded}.svg`;
         return `![${pct}%](${url})`;
@@ -48164,25 +48697,33 @@ class SummaryFormatter {
 }
 
 /**
- * @internal
+ * @file Formats coverage results as a coloured, tree-shaped table for the console.
+ */
+/**
  * ANSI color codes for console output.
+ * @internal
  */
 const colors = {
-    red: '\x1b[31m',
-    green: '\x1b[32m',
-    yellow: '\x1b[33m',
-    reset: '\x1b[0m',
+    red: '\u001B[31m',
+    green: '\u001B[32m',
+    yellow: '\u001B[33m',
+    reset: '\u001B[0m',
 };
 /**
  * A formatter that generates a console summary similar to Jest's output,
  * including a hierarchical file tree view with relative paths.
- * @export
  * @class ConsoleFormatter
  * @implements {CoverageFormatter}
  */
 class ConsoleFormatter {
     /**
-     * {@inheritDoc CoverageFormatter.format}
+     * Formats the coverage data as a hierarchical console table.
+     * @param coverageData - The coverage data to format.
+     * @param options - The options for the formatter.
+     * @param options.rootDir - The root directory used to make file paths relative.
+     * @returns The console table as a single string.
+     * @example
+     * const table = new ConsoleFormatter().format(coverageData, { rootDir: process.cwd() });
      */
     format(coverageData, options = {}) {
         const { rootDir } = options;
@@ -48205,10 +48746,10 @@ class ConsoleFormatter {
     /**
      * Builds the file and directory tree from a flat list of file details,
      * making paths relative to the provided root directory.
+     * @param details - A flat list of file coverage data.
+     * @param [rootDir] - The project's root directory.
+     * @returns The root node of the constructed file tree.
      * @private
-     * @param {FileCoverageDetails[]} details - A flat list of file coverage data.
-     * @param {string} [rootDir] - The project's root directory.
-     * @returns {CoverageNode} The root node of the constructed file tree.
      */
     buildTree(details, rootDir) {
         const root = { children: new Map(), _isFile: false };
@@ -48227,7 +48768,7 @@ class ConsoleFormatter {
                 }
                 currentNode = currentNode.children.get(part);
             }
-            const fileName = pathParts[pathParts.length - 1];
+            const fileName = pathParts.at(-1);
             currentNode.children.set(fileName, {
                 children: new Map(),
                 _coverage: detail,
@@ -48238,9 +48779,9 @@ class ConsoleFormatter {
     }
     /**
      * Recursively calculates aggregate coverage for all directories in the tree.
+     * @param node - The current node in the tree to process.
+     * @returns A flat list of all descendant file coverages.
      * @private
-     * @param {CoverageNode} node - The current node in the tree to process.
-     * @returns {FileCoverageDetails[]} A flat list of all descendant file coverages.
      */
     calculateAggregates(node) {
         const descendantFiles = [];
@@ -48269,15 +48810,15 @@ class ConsoleFormatter {
     }
     /**
      * Recursively renders the coverage tree into an array of formatted table rows.
+     * @param node - The current node of the tree to render.
+     * @param fileWidth - The calculated max width for the file column.
+     * @param [indent] - The current indentation level.
+     * @returns An array of formatted strings for each table row.
      * @private
-     * @param {CoverageNode} node - The current node of the tree to render.
-     * @param {number} fileWidth - The calculated max width for the file column.
-     * @param {number} [indent=0] - The current indentation level.
-     * @returns {string[]} An array of formatted strings for each table row.
      */
     renderTree(node, fileWidth, indent = 0) {
         const rows = [];
-        const sortedKeys = [...node.children.keys()].sort();
+        const sortedKeys = [...node.children.keys()].toSorted((a, b) => a.localeCompare(b));
         for (const key of sortedKeys) {
             const child = node.children.get(key);
             if (child._isFile) {
@@ -48285,26 +48826,31 @@ class ConsoleFormatter {
             }
             else {
                 const dirName = `${key}${path$1.sep}`;
-                rows.push(this.buildRow(dirName, child._coverage, fileWidth, indent));
-                rows.push(...this.renderTree(child, fileWidth, indent + 2));
+                rows.push(this.buildRow(dirName, child._coverage, fileWidth, indent), ...this.renderTree(child, fileWidth, indent + 2));
             }
         }
         return rows;
     }
     /**
      * Builds a single formatted and colorized table row.
+     * @param name - The name of the file or directory.
+     * @param data - Coverage data for the row.
+     * @param fileWidth - The max width of the file column.
+     * @param [indent] - The indentation level for the name.
+     * @returns The fully formatted and colorized table row string.
      * @private
-     * @param {string} name - The name of the file or directory.
-     * @param {FileCoverageDetails | CoverageData['overall']} data - Coverage data for the row.
-     * @param {number} fileWidth - The max width of the file column.
-     * @param {number} [indent=0] - The indentation level for the name.
-     * @returns {string} The fully formatted and colorized table row string.
      */
     buildRow(name, data, fileWidth, indent = 0) {
         const { statements, branches, methods, lines } = data;
         const getPct = (m) => m.total === 0 ? 100 : (m.covered / m.total) * 100;
         const colorize = (p, t) => {
-            const color = p < 50 ? colors.red : p < 80 ? colors.yellow : colors.green;
+            let color = colors.green;
+            if (p < 80) {
+                color = colors.yellow;
+            }
+            if (p < 50) {
+                color = colors.red;
+            }
             return `${color}${t}${colors.reset}`;
         };
         const pcts = {
@@ -48329,9 +48875,9 @@ class ConsoleFormatter {
     }
     /**
      * Builds the header and separator lines for the table.
+     * @param fileWidth - The max width for the file column.
+     * @returns The header components.
      * @private
-     * @param {number} fileWidth - The max width for the file column.
-     * @returns {{ separator: string; header: string }} The header components.
      */
     buildHeader(fileWidth) {
         const headers = [
@@ -48347,11 +48893,11 @@ class ConsoleFormatter {
     }
     /**
      * Calculates the required width for the file column.
+     * @param node - The current node to process.
+     * @param [indent] - The current indentation level.
+     * @param [currentMax] - The maximum length found so far.
+     * @returns The maximum required width for the file column.
      * @private
-     * @param {CoverageNode} node - The current node to process.
-     * @param {number} [indent=0] - The current indentation level.
-     * @param {number} [currentMax=0] - The maximum length found so far.
-     * @returns {number} The maximum required width for the file column.
      */
     calculateFileColumnWidth(node, indent = 0, currentMax = 0) {
         let max = currentMax;
@@ -48369,6 +48915,9 @@ class ConsoleFormatter {
 }
 
 /**
+ * @file Finds coverage report files on the local disk using the configured glob patterns.
+ */
+/**
  * Loads coverage report files from the local workspace using glob patterns.
  */
 class LocalCoverageProvider {
@@ -48381,7 +48930,7 @@ class LocalCoverageProvider {
         for (const pattern of this.patterns) {
             const paths = await glob(pattern, { dot: true });
             for (const file of paths) {
-                const content = await fs__namespace.promises.readFile(file, { encoding: 'utf8' });
+                const content = await promises.readFile(file, { encoding: 'utf8' });
                 result.push({ file, content });
             }
         }
@@ -48389,6 +48938,17 @@ class LocalCoverageProvider {
     }
 }
 
+/**
+ * @file Runs the coverage pipeline for a set of inputs and collects the formatted summaries.
+ */
+/**
+ * Loads the coverage files that match the configured patterns and formats each one.
+ * @param options - The glob patterns of the coverage files to read.
+ * @returns The formatted summaries and the console output for every file.
+ * @rejects {Error} When no coverage file matches the patterns.
+ * @example
+ * const output = await runCoverage({ patterns: ['coverage/lcov.info'] });
+ */
 async function runCoverage(options) {
     const provider = new LocalCoverageProvider(options.patterns);
     const files = await provider.load();
@@ -48415,6 +48975,9 @@ async function runCoverage(options) {
     return { summaries, consoleOutputs };
 }
 
+/**
+ * @file Runs the coverage reporter end to end, from reading inputs to writing the summary.
+ */
 /**
  * Entrypoint for executing the coverage reporter flow from the GitHub Action.
  */
@@ -48467,6 +49030,13 @@ class CoverageReporter {
         }
     }
 }
+/**
+ * Runs the coverage reporter for the configured inputs and reports any failure to the action.
+ * @param writeSummary - Whether the summary is written to the job summary.
+ * @returns The output of the coverage run, including the summaries and console output.
+ * @example
+ * const output = await run(true);
+ */
 async function run$1(writeSummary = true) {
     try {
         const coverageReporter = new CoverageReporter();
@@ -48483,10 +49053,17 @@ async function run$1(writeSummary = true) {
     }
 }
 
+/**
+ * @file Runs the test result and coverage reporters together when the action is invoked with both kinds of input.
+ */
+/**
+ * Runs the test result and coverage reporters for the inputs given to the action and writes one combined summary.
+ * @example
+ * await run();
+ */
 async function run() {
     const resultsPath = getInput('results-path', { required: false }).trim();
-    const coveragePath = getInput('coverage-path', { required: false })
-        .trim();
+    const coveragePath = getInput('coverage-path', { required: false }).trim();
     const hasResults = resultsPath.length > 0;
     const hasCoverage = coveragePath.length > 0;
     if (!hasResults && !hasCoverage) {
@@ -48504,7 +49081,8 @@ async function run() {
             sections.push(...coverageRun.summaries);
         }
         if (sections.length > 0) {
-            await (await summary.clear()).addRaw(sections.join('\n\n')).write();
+            const cleared = await summary.clear();
+            await cleared.addRaw(sections.join('\n\n')).write();
         }
         return;
     }
@@ -48516,9 +49094,9 @@ async function run() {
 }
 
 /**
- * The entrypoint for the action. This file simply imports and runs the action's
- * main logic.
+ * @file The entrypoint for the action, which imports and runs the main logic.
  */
+// eslint-disable-next-line unicorn/prefer-top-level-await -- the CommonJS bundle produced by rollup cannot use top-level await
 var main = (async () => {
     await run();
 })();
