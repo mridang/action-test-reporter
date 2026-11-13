@@ -1,7 +1,6 @@
 /**
  * @file Jest configuration that runs the TypeScript test suite under ESM with coverage thresholds.
  */
-
 export default {
   preset: 'ts-jest/presets/default-esm',
   transform: {
@@ -40,6 +39,10 @@ export default {
   coverageReporters: ['lcov', 'text'],
   coveragePathIgnorePatterns: ['/dist/', '/node_modules/'],
   testTimeout: 60_000,
+  extensionsToTreatAsEsm: ['.ts', '.tsx', '.mts'],
+  moduleNameMapper: {
+    '^(\\.{1,2}/.*)\\.js$': '$1',
+  },
   reporters: [
     'default',
     [
@@ -50,8 +53,4 @@ export default {
       },
     ],
   ],
-  extensionsToTreatAsEsm: ['.ts', '.tsx', '.mts'],
-  moduleNameMapper: {
-    '^(\\.{1,2}/(?!cjs/).*)\\.js$': '$1',
-  },
 };
