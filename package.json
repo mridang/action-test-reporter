@@ -11,7 +11,8 @@
     "prepack": "tsc",
     "test": "NODE_OPTIONS='--experimental-vm-modules' jest --verbose --config=jest.config.mjs --runInBand",
     "test:debug": "jest --verbose --config=jest.config.mjs --runInBand --detectOpenHandles",
-    "test:watch": "npm run test -- --watch"
+    "test:watch": "npm run test -- --watch",
+    "typecheck": "tsc --noEmit"
   },
   "main": "dist/main.cjs",
   "exports": {
