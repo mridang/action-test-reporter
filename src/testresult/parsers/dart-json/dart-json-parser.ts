@@ -4,7 +4,7 @@
 
 import { ParseOptions, TestParser } from '../../test-parser.js';
 
-import { getBasePath, normalizeFilePath } from '../../utils/path-utils.js';
+import { getBasePath, normalizeFilePath } from '../../utils/path-utilities.js';
 
 import {
   ReportEvent,
@@ -32,6 +32,11 @@ import {
   TestCaseError,
 } from '../../test-results.js';
 
+const DART_FRAME_PATTERN = /^(?!package:)(.*)\s(\d+):\d+\s/;
+const FLUTTER_FRAME_PATTERN = /^(#\d+\s)(.*):(\d+):\d+\)$/;
+const USELESS_MESSAGE_PATTERN =
+  /^Test failed\. See exception logs above\.\nThe test description was:/m;
+
 /**
  * Captures the exception text of a Flutter test print. A single whitespace character separates the text from its
  * surroundings in the pattern, which keeps the scan linear, so callers trim the leading whitespace of the capture.
@@ -51,7 +56,7 @@ export const FLUTTER_EXCEPTION_PRINT =
 export function matchDartFrame(
   line: string,
 ): [path: string, line: string] | undefined {
-  const match = /^(?!package:)(.*)\s(\d+):\d+\s/.exec(line);
+  const match = DART_FRAME_PATTERN.exec(line);
   return match === null ? undefined : [match[1], match[2]];
 }
 
@@ -68,16 +73,16 @@ export function matchDartFrame(
 export function matchFlutterFrame(
   line: string,
 ): [path: string, line: string] | undefined {
-  const match = /^(#\d+\s)(.*):(\d+):\d+\)$/.exec(line);
+  const match = FLUTTER_FRAME_PATTERN.exec(line);
   if (match === null) {
     return undefined;
   }
-  const [, head, middle, lineStr] = match;
+  const [, head, middle, lineString] = match;
   let open = middle.lastIndexOf('(');
   while (open !== -1 && line.startsWith('package:', head.length + open + 1)) {
     open = open === 0 ? -1 : middle.lastIndexOf('(', open - 1);
   }
-  return open === -1 ? undefined : [middle.slice(open + 1), lineStr];
+  return open === -1 ? undefined : [middle.slice(open + 1), lineString];
 }
 
 class TestRun {
@@ -150,51 +155,55 @@ export class DartJsonParser implements TestParser {
   private getTestRun(path: string, content: string): TestRun {
     const lines = content.split(/\n\r?/g);
     const events = lines
-      .map((str, i) => {
-        if (str.trim() === '') {
+      .map((text, index) => {
+        if (text.trim() === '') {
           return null;
         }
         try {
-          return JSON.parse(str);
+          return JSON.parse(text);
         } catch (error) {
           const errWithCol = error as { columnNumber?: number };
           const col =
             errWithCol.columnNumber === undefined
               ? ''
               : `:${errWithCol.columnNumber}`;
-          throw new Error(`Invalid JSON at ${path}:${i + 1}${col}\n\n${error}`);
+          throw new Error(
+            `Invalid JSON at ${path}:${index + 1}${col}\n\n${error}`,
+          );
         }
       })
-      .filter((evt) => evt != null) as ReportEvent[];
+      .filter((reportEvent) => reportEvent != null) as ReportEvent[];
 
     let success = false;
     let totalTime = 0;
     const suites: { [id: number]: TestSuite } = {};
     const tests: { [id: number]: TestCase } = {};
 
-    for (const evt of events) {
-      if (isSuiteEvent(evt)) {
-        suites[evt.suite.id] = new TestSuite(evt.suite);
-      } else if (isGroupEvent(evt)) {
-        suites[evt.group.suiteID].groups[evt.group.id] = new TestGroup(
-          evt.group,
-        );
-      } else if (isTestStartEvent(evt) && evt.test.url !== null) {
-        const test: TestCase = new TestCase(evt);
-        const suite = suites[evt.test.suiteID];
-        const groupIndex = evt.test.groupIDs.length - 1;
-        const group = suite.groups[evt.test.groupIDs[groupIndex]];
+    for (const reportEvent of events) {
+      if (isSuiteEvent(reportEvent)) {
+        suites[reportEvent.suite.id] = new TestSuite(reportEvent.suite);
+      } else if (isGroupEvent(reportEvent)) {
+        suites[reportEvent.group.suiteID].groups[reportEvent.group.id] =
+          new TestGroup(reportEvent.group);
+      } else if (
+        isTestStartEvent(reportEvent) &&
+        reportEvent.test.url !== null
+      ) {
+        const test: TestCase = new TestCase(reportEvent);
+        const suite = suites[reportEvent.test.suiteID];
+        const groupIndex = reportEvent.test.groupIDs.length - 1;
+        const group = suite.groups[reportEvent.test.groupIDs[groupIndex]];
         group.tests.push(test);
-        tests[evt.test.id] = test;
-      } else if (isTestDoneEvent(evt) && tests[evt.testID]) {
-        tests[evt.testID].testDone = evt;
-      } else if (isErrorEvent(evt) && tests[evt.testID]) {
-        tests[evt.testID].error = evt;
-      } else if (isMessageEvent(evt) && tests[evt.testID]) {
-        tests[evt.testID].print.push(evt);
-      } else if (isDoneEvent(evt)) {
-        success = evt.success;
-        totalTime = evt.time;
+        tests[reportEvent.test.id] = test;
+      } else if (isTestDoneEvent(reportEvent) && tests[reportEvent.testID]) {
+        tests[reportEvent.testID].testDone = reportEvent;
+      } else if (isErrorEvent(reportEvent) && tests[reportEvent.testID]) {
+        tests[reportEvent.testID].error = reportEvent;
+      } else if (isMessageEvent(reportEvent) && tests[reportEvent.testID]) {
+        tests[reportEvent.testID].print.push(reportEvent);
+      } else if (isDoneEvent(reportEvent)) {
+        success = reportEvent.success;
+        totalTime = reportEvent.time;
       } else {
         // Start, suite and group events do not contribute to the totals.
       }
@@ -253,7 +262,9 @@ export class DartJsonParser implements TestParser {
       .filter((p) => p.messageType === 'print')
       .map((p) => p.message)
       .join('\n');
-    const details = [print, stackTrace].filter((str) => str !== '').join('\n');
+    const details = [print, stackTrace]
+      .filter((text) => text !== '')
+      .join('\n');
     const src = this.exceptionThrowSource(details, trackedFiles);
     const message = this.getErrorMessage(test.error?.error ?? '', print);
     let path;
@@ -283,8 +294,7 @@ export class DartJsonParser implements TestParser {
 
   private getErrorMessage(message: string, print: string): string {
     // Try Flutter-specific error extraction (works for both Dart and Flutter)
-    const uselessMessageRe =
-      /^Test failed\. See exception logs above\.\nThe test description was:/m;
+    const uselessMessageRe = USELESS_MESSAGE_PATTERN;
     if (uselessMessageRe.test(message)) {
       const match = FLUTTER_EXCEPTION_PRINT.exec(print);
       if (match !== null) {
@@ -326,13 +336,13 @@ export class DartJsonParser implements TestParser {
     matcher: (line: string) => [path: string, line: string] | undefined,
     trackedFiles: string[],
   ): { path: string; line: number } | undefined {
-    for (const str of lines) {
-      const match = matcher(str);
+    for (const text of lines) {
+      const match = matcher(text);
       if (match !== undefined) {
-        const [pathStr, lineStr] = match;
-        const path = normalizeFilePath(this.getRelativePath(pathStr));
+        const [pathString, lineString] = match;
+        const path = normalizeFilePath(this.getRelativePath(pathString));
         if (trackedFiles.includes(path)) {
-          return { path, line: Number.parseInt(lineStr) };
+          return { path, line: Number.parseInt(lineString) };
         }
       }
     }

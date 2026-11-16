@@ -31,7 +31,6 @@ const coreMock = {
     }),
     write: jest.fn(async () => {
       recordedSummary = summaryBuffer;
-      return undefined;
     }),
     clear: jest.fn(() => {
       summaryBuffer = '';
@@ -51,7 +50,7 @@ const { run } = await import('../src/index.js');
  * setInputs({ 'results-path': 'results.xml' });
  */
 function setInputs(map: Inputs): void {
-  Object.keys(inputs).forEach((key) => delete inputs[key]);
+  for (const key of Object.keys(inputs)) delete inputs[key];
   Object.assign(inputs, map);
   summaryBuffer = '';
   recordedSummary = '';

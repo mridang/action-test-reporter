@@ -11,8 +11,11 @@ import {
   DEFAULT_OPTIONS,
   getReport,
 } from '../../../src/testresult/formatter/summary-formatter.js';
-import { normalizeFilePath } from '../../../src/testresult/utils/path-utils.js';
+import { normalizeFilePath } from '../../../src/testresult/utils/path-utilities.js';
 import { getDirname } from '../helpers/dir.js';
+
+const TESTS_FAILED_BADGE = /^!\[Tests failed]/;
+const CUSTOM_TITLE_HEADING = /^# My Custom Title\n/;
 
 const testDir = getDirname(import.meta.url);
 
@@ -181,7 +184,7 @@ describe('java-junit tests', () => {
     const parser = new JavaJunitParser(opts);
     const result = await parser.parse(filePath, fileContent);
     const report = getReport([result]);
-    expect(report).toMatch(/^!\[Tests failed]/);
+    expect(report).toMatch(TESTS_FAILED_BADGE);
   });
 
   test.each([
@@ -214,7 +217,7 @@ describe('java-junit tests', () => {
         ...DEFAULT_OPTIONS,
         reportTitle,
       });
-      expect(report).toMatch(/^!\[Tests failed]/);
+      expect(report).toMatch(TESTS_FAILED_BADGE);
     },
   );
 
@@ -242,7 +245,7 @@ describe('java-junit tests', () => {
       ...DEFAULT_OPTIONS,
       reportTitle: 'My Custom Title',
     });
-    expect(report).toMatch(/^# My Custom Title\n/);
+    expect(report).toMatch(CUSTOM_TITLE_HEADING);
   });
 
   test('parses nested phpunit suites with leaf testcases', async () => {

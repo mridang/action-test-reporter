@@ -11,8 +11,8 @@ import {
   TestRunResult,
   TestSuiteResult,
 } from '../../test-results.js';
-import { getExceptionSource } from '../../utils/node-utils.js';
-import { getBasePath, normalizeFilePath } from '../../utils/path-utils.js';
+import { getExceptionSource } from '../../utils/node-utilities.js';
+import { getBasePath, normalizeFilePath } from '../../utils/path-utilities.js';
 import { MochaJson, MochaJsonTest } from './mocha-json-types.js';
 
 /**

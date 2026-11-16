@@ -13,8 +13,8 @@ import {
 } from './dotnet-trx-types.js';
 import { ParseOptions, TestParser } from '../../test-parser.js';
 
-import { getBasePath, normalizeFilePath } from '../../utils/path-utils.js';
-import { parseIsoDate, parseNetDuration } from '../../utils/parse-utils.js';
+import { getBasePath, normalizeFilePath } from '../../utils/path-utilities.js';
+import { parseIsoDate, parseNetDuration } from '../../utils/parse-utilities.js';
 
 import {
   TestCaseError,
@@ -24,6 +24,8 @@ import {
   TestRunResult,
   TestSuiteResult,
 } from '../../test-results.js';
+
+const DOTNET_EXCEPTION_LOCATION = / in (.+):line (\d+)$/;
 
 /**
  * Matches a line break together with the carriage returns in front of it. The lookbehind makes the match start at
@@ -116,21 +118,23 @@ export class DotnetTrxParser implements TestParser {
 
     const testClasses: { [name: string]: TestClass } = {};
     for (const r of unitTestsResults) {
-      const className = r.test.TestMethod[0].$.className ?? 'Unclassified';
-      let tc = testClasses[className] as TestClass | undefined;
+      const testClassName = r.test.TestMethod[0].$.className ?? 'Unclassified';
+      let tc = testClasses[testClassName] as TestClass | undefined;
       if (tc === undefined) {
-        tc = new TestClass(className);
+        tc = new TestClass(testClassName);
         testClasses[tc.name] = tc;
       }
       const error = this.getErrorInfo(r.result);
-      const durationAttr = r.result.$.duration;
-      const duration = durationAttr ? parseNetDuration(durationAttr) : 0;
+      const durationAttribute = r.result.$.duration;
+      const duration = durationAttribute
+        ? parseNetDuration(durationAttribute)
+        : 0;
 
       const resultTestName = r.result.$.testName;
       const testName =
-        resultTestName.startsWith(className) &&
-        resultTestName[className.length] === '.'
-          ? resultTestName.slice(className.length + 1)
+        resultTestName.startsWith(testClassName) &&
+        resultTestName.codePointAt(testClassName.length) === '.'.codePointAt(0)
+          ? resultTestName.slice(testClassName.length + 1)
           : resultTestName;
 
       const test = new Test(testName, r.result.$.outcome, duration, error);
@@ -211,18 +215,18 @@ export class DotnetTrxParser implements TestParser {
     stackTrace: string,
   ): { path: string; line: number } | undefined {
     const lines = stackTrace.split(STACK_TRACE_LINE_BREAK);
-    const re = / in (.+):line (\d+)$/;
+    const re = DOTNET_EXCEPTION_LOCATION;
     const { trackedFiles } = this.options;
 
-    for (const str of lines) {
-      const match = re.exec(str);
+    for (const text of lines) {
+      const match = re.exec(text);
       if (match !== null) {
-        const [, fileStr, lineStr] = match;
-        const filePath = normalizeFilePath(fileStr);
+        const [, fileString, lineString] = match;
+        const filePath = normalizeFilePath(fileString);
         const workDir = this.getWorkDir(filePath);
         const file = workDir ? filePath.slice(workDir.length) : undefined;
         if (file !== undefined && trackedFiles.includes(file)) {
-          const line = Number.parseInt(lineStr);
+          const line = Number.parseInt(lineString);
           return { path: file, line };
         }
       }

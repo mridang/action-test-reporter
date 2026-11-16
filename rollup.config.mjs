@@ -10,10 +10,10 @@ import json from '@rollup/plugin-json';
 import path from 'node:path';
 import { mkdir, writeFile } from 'node:fs/promises';
 
-const NODE_BUILTINS = builtinModules.reduce(
-  (acc, name) => [...acc, name, `node:${name}`],
-  [],
-);
+const NODE_BUILTINS = builtinModules.flatMap((name) => [name, `node:${name}`]);
+
+/** Matches the dependencies that are installed under node_modules. */
+const NODE_MODULES_PATH = /node_modules/;
 
 /**
  * Emits one progress bar SVG per colour and percentage into the output directory.
@@ -102,7 +102,7 @@ const rollupConfig = (configOverrides = {}) => ({
       preferBuiltins: true,
     }),
     commonjs({
-      include: /node_modules/,
+      include: NODE_MODULES_PATH,
       requireReturnsDefault: (id) => {
         if (id.includes('jwt-decode')) {
           return true;

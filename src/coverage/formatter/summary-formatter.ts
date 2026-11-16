@@ -11,6 +11,8 @@ import {
 } from '../parsers/coverage-parser.js';
 import { formatUncoveredLines } from './index.js';
 
+const collator = new Intl.Collator();
+
 /**
  * Represents a node in the file coverage tree. It can be a directory
  * or a file.
@@ -171,7 +173,7 @@ export class SummaryFormatter implements CoverageFormatter<SummaryOptions> {
   ): string[] {
     let rows: string[] = [];
     const sortedKeys = [...node.children.keys()].toSorted((a, b) =>
-      a.localeCompare(b),
+      collator.compare(a, b),
     );
 
     for (const key of sortedKeys) {
@@ -214,7 +216,7 @@ export class SummaryFormatter implements CoverageFormatter<SummaryOptions> {
     filePath?: string,
   ): string {
     const { statements, branches, methods, lines } = data;
-    const indentStr = ' '.repeat(indent) + (indent > 0 ? '•  ' : '');
+    const indentString = ' '.repeat(indent) + (indent > 0 ? '•  ' : '');
     const fileName = isSummary ? `**${name}**` : name;
     const canLink = Boolean(options.repoUrl && options.sha && filePath);
 
@@ -224,7 +226,7 @@ export class SummaryFormatter implements CoverageFormatter<SummaryOptions> {
         : fileName;
 
     const cols = [
-      `${indentStr}${fileLink}`,
+      `${indentString}${fileLink}`,
       this.formatMetric(statements),
       this.formatMetric(branches),
       this.formatMetric(methods),

@@ -129,17 +129,17 @@ export class LlvmCovParser implements CoverageParser {
   private lineCounts(segments: LlvmSegment[]): Map<number, number> {
     const counts = new Map<number, number>();
     let wrapped: LlvmSegment | undefined;
-    let i = 0;
+    let index = 0;
 
-    while (i < segments.length) {
-      const line = segments[i][0];
-      let end = i;
+    while (index < segments.length) {
+      const line = segments[index][0];
+      let end = index;
       while (end < segments.length && segments[end][0] === line) end++;
 
       const starting = segments
-        .slice(i, end)
+        .slice(index, end)
         .filter((s) => s[3] && !s[5] && s[4]);
-      const startsWithEntry = segments[i][4] && !segments[i][5];
+      const startsWithEntry = segments[index][4] && !segments[index][5];
       const wrappedCounts =
         !startsWithEntry && wrapped && wrapped[3] && !wrapped[5];
 
@@ -157,7 +157,7 @@ export class LlvmCovParser implements CoverageParser {
         for (let l = line + 1; l < next; l++) counts.set(l, last[2]);
       }
       wrapped = last;
-      i = end;
+      index = end;
     }
 
     return counts;

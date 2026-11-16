@@ -15,6 +15,8 @@ import {
   TestCaseError,
 } from '../../test-results.js';
 
+const GO_OUTPUT_INDENT = /^ {4}/;
+
 /**
  * Maps the final action of a Go test to the result that is reported for it.
  */
@@ -109,9 +111,9 @@ export class GolangJsonParser implements TestParser {
       let error: TestCaseError | undefined;
       if (result !== 'success') {
         const outputEvents = eventGroup
-          .filter((e) => e.Action === 'output')
-          .map((e) => e.Output ?? '')
-          .map((o) => o.replace(/^ {4}/, ''));
+          .filter((event) => event.Action === 'output')
+          .map((event) => event.Output ?? '')
+          .map((o) => o.replace(GO_OUTPUT_INDENT, ''));
 
         outputEvents.splice(0, 1);
         outputEvents.splice(-1, 1);

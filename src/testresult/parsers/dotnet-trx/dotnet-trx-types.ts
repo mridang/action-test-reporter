@@ -34,6 +34,7 @@ export interface UnitTest {
 
 interface TestMethod {
   $: {
+    // eslint-disable-next-line unicorn/no-keyword-prefix -- mirrors the className XML attribute of the TRX TestMethod element
     className: string;
     name: string;
   };

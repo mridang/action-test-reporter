@@ -20,7 +20,7 @@ import { detectTestFormat } from './parsers/index.js';
 import { SummaryFormatter } from './formatter/summary-formatter.js';
 import { ParseOptions } from './test-parser.js';
 import { TestRunResult } from './test-results.js';
-import { normalizeDirPath, normalizeFilePath } from './utils/path-utils.js';
+import { normalizeDirPath, normalizeFilePath } from './utils/path-utilities.js';
 
 export interface TestReporterOutput {
   results: TestRunResult[];

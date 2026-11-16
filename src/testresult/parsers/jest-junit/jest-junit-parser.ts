@@ -6,8 +6,8 @@ import { ParseOptions, TestParser } from '../../test-parser.js';
 import { parseStringPromise } from 'xml2js';
 
 import { JunitReport, TestCase, TestSuite } from './jest-junit-types.js';
-import { getExceptionSource } from '../../utils/node-utils.js';
-import { getBasePath, normalizeFilePath } from '../../utils/path-utils.js';
+import { getExceptionSource } from '../../utils/node-utilities.js';
+import { getBasePath, normalizeFilePath } from '../../utils/path-utilities.js';
 
 import {
   TestCaseError,
@@ -17,6 +17,9 @@ import {
   TestRunResult,
   TestSuiteResult,
 } from '../../test-results.js';
+
+const JEST_SUITE_NAME_PATTERN = /jest|__tests__|\.test|\.spec/i;
+const JEST_CLASS_NAME_PATTERN = /›|__tests__|\.test|\.spec|\/|\\/i;
 
 /**
  * Parser for JUnit XML reports emitted by Jest with the jest-junit reporter.
@@ -66,7 +69,7 @@ export class JestJunitParser implements TestParser {
     const suites = junit.testsuites.testsuite ?? [];
     const queue = [...suites];
     const suiteNames: string[] = [];
-    const classNames: string[] = [];
+    const testcaseClassNames: string[] = [];
     let hasNestedSuites = false;
 
     while (queue.length > 0) {
@@ -83,7 +86,7 @@ export class JestJunitParser implements TestParser {
         const names = suite.testcase.map(
           (tc) => tc.$?.classname as string | undefined,
         );
-        classNames.push(
+        testcaseClassNames.push(
           ...names.filter((name): name is string => name !== undefined),
         );
       }
@@ -95,15 +98,15 @@ export class JestJunitParser implements TestParser {
 
     const topLevelName = junit.testsuites.$?.name ?? '';
     const suiteNameHint = suiteNames.some((n) =>
-      /jest|__tests__|\.test|\.spec/i.test(n),
+      JEST_SUITE_NAME_PATTERN.test(n),
     );
-    const classNameHint = classNames.some(
-      (cn) => cn === '' || /›|__tests__|\.test|\.spec|\/|\\/i.test(cn ?? ''),
+    const testcaseClassHint = testcaseClassNames.some(
+      (cn) => cn === '' || JEST_CLASS_NAME_PATTERN.test(cn ?? ''),
     );
-    const topLevelHint = /jest/.test(topLevelName);
+    const topLevelHint = topLevelName.includes('jest');
 
-    const hasNameHint = suiteNameHint || classNameHint || topLevelHint;
-    return hasNameHint || suites.length > 0 || classNames.length > 0;
+    const hasNameHint = suiteNameHint || testcaseClassHint || topLevelHint;
+    return hasNameHint || suites.length > 0 || testcaseClassNames.length > 0;
   }
 
   private getGroups(suite: TestSuite): TestGroupResult[] {

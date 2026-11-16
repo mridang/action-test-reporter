@@ -3,7 +3,7 @@
  */
 
 import { randomStrings, referencePattern } from '../helpers/fuzz.js';
-import { matchStackFrame } from '../../../src/testresult/utils/node-utils.js';
+import { matchStackFrame } from '../../../src/testresult/utils/node-utilities.js';
 
 const originalRe = referencePattern(
   '',
