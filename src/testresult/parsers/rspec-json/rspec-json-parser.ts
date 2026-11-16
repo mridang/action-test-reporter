@@ -2,16 +2,15 @@
  * @file Parses the JSON report written by RSpec.
  */
 
-import { ParseOptions, TestParser } from '../../test-parser.js';
+import type { ParseOptions, TestParser } from '../../test-parser.js';
+import type { TestCaseError, TestExecutionResult } from '../../test-results.js';
 import {
-  TestCaseError,
   TestCaseResult,
-  TestExecutionResult,
   TestGroupResult,
   TestRunResult,
   TestSuiteResult,
 } from '../../test-results.js';
-import { RspecJson, RspecExample } from './rspec-json-types.js';
+import type { RspecJson, RspecExample } from './rspec-json-types.js';
 
 const RSPEC_BACKTRACE_LOCATION = /^(.*?):(\d+):/;
 
@@ -30,9 +29,9 @@ export class RspecJsonParser implements TestParser {
 
   private getRspecJson(path: string, content: string): RspecJson {
     try {
-      return JSON.parse(content);
+      return JSON.parse(content) as RspecJson;
     } catch (error) {
-      throw new Error(`Invalid JSON at ${path}\n\n${error}`);
+      throw new Error(`Invalid JSON at ${path}\n\n${String(error)}`);
     }
   }
 

@@ -2,6 +2,7 @@
  * @file Tests the Dart JSON test result parser against its fixtures.
  */
 
+import { describe, expect, test } from '@jest/globals';
 import { mkdir, readFile, writeFile } from 'node:fs/promises';
 import path from 'node:path';
 
@@ -12,7 +13,7 @@ import {
   matchFlutterFrame,
 } from '../../../src/testresult/parsers/dart-json/dart-json-parser.js';
 import { randomStrings, referencePattern } from '../helpers/fuzz.js';
-import { ParseOptions } from '../../../src/testresult/test-parser.js';
+import type { ParseOptions } from '../../../src/testresult/test-parser.js';
 import {
   DEFAULT_OPTIONS,
   getReport,

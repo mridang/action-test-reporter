@@ -2,6 +2,7 @@
  * @file Tests the llvm-cov coverage parser against its JSON export.
  */
 
+import { describe, expect, it } from '@jest/globals';
 import { promises as fs } from 'node:fs';
 import path from 'node:path';
 import { LlvmCovParser } from '../../../src/coverage/parsers/llvm-cov/llvm-cov-parser.js';

@@ -2,17 +2,16 @@
  * @file Parses the JSON event stream written by go test -json.
  */
 
-import { ParseOptions, TestParser } from '../../test-parser.js';
+import type { ParseOptions, TestParser } from '../../test-parser.js';
 
-import { GoTestEvent } from './golang-json-types.js';
+import type { GoTestEvent } from './golang-json-types.js';
 
+import type { TestExecutionResult, TestCaseError } from '../../test-results.js';
 import {
-  TestExecutionResult,
   TestRunResult,
   TestSuiteResult,
   TestGroupResult,
   TestCaseResult,
-  TestCaseError,
 } from '../../test-results.js';
 
 const GO_OUTPUT_INDENT = /^ {4}/;
@@ -48,7 +47,7 @@ export class GolangJsonParser implements TestParser {
           return JSON.parse(line) as GoTestEvent;
         } catch (error) {
           throw new Error(
-            `Invalid JSON at ${path} line ${index + 1}\n\n${error}`,
+            `Invalid JSON at ${path} line ${index + 1}\n\n${String(error)}`,
           );
         }
       });

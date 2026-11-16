@@ -3,8 +3,8 @@
  */
 
 import path from 'node:path';
-import { CoverageFormatter } from './coverage-formatter.js';
-import {
+import type { CoverageFormatter } from './coverage-formatter.js';
+import type {
   CoverageData,
   FileCoverageDetails,
   CoverageMetrics,
@@ -170,7 +170,7 @@ export class ConsoleFormatter implements CoverageFormatter<{
   private renderTree(
     node: CoverageNode,
     fileWidth: number,
-    indent: number = 0,
+    indent = 0,
   ): string[] {
     const rows: string[] = [];
     const sortedKeys = [...node.children.keys()].toSorted((a, b) =>
@@ -205,7 +205,7 @@ export class ConsoleFormatter implements CoverageFormatter<{
     name: string,
     data: FileCoverageDetails | CoverageData['overall'],
     fileWidth: number,
-    indent: number = 0,
+    indent = 0,
   ): string {
     const { statements, branches, methods, lines } = data;
     const getPct = (m: CoverageMetrics) =>
@@ -275,8 +275,8 @@ export class ConsoleFormatter implements CoverageFormatter<{
    */
   private calculateFileColumnWidth(
     node: CoverageNode,
-    indent: number = 0,
-    currentMax: number = 0,
+    indent = 0,
+    currentMax = 0,
   ): number {
     let max = currentMax;
     for (const [key, child] of node.children.entries()) {

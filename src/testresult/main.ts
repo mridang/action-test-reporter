@@ -15,11 +15,11 @@ import {
 } from '@actions/core';
 
 import { LocalFileProvider } from './input-providers/local-file-provider.js';
-import { FileContent } from './input-providers/input-provider.js';
+import type { FileContent } from './input-providers/input-provider.js';
 import { detectTestFormat } from './parsers/index.js';
 import { SummaryFormatter } from './formatter/summary-formatter.js';
-import { ParseOptions } from './test-parser.js';
-import { TestRunResult } from './test-results.js';
+import type { ParseOptions } from './test-parser.js';
+import type { TestRunResult } from './test-results.js';
 import { normalizeDirPath, normalizeFilePath } from './utils/path-utilities.js';
 
 export interface TestReporterOutput {

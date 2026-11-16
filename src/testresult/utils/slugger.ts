@@ -2,7 +2,7 @@
  * @file Builds stable anchor identifiers for the headings of the summary.
  */
 
-import { ReportOptions } from '../formatter/summary-formatter.js';
+import type { ReportOptions } from '../formatter/summary-formatter.js';
 
 /**
  * Builds stable anchor identifiers for GitHub summary content, where headings are not auto-linked.

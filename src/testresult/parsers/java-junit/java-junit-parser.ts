@@ -3,10 +3,10 @@
  */
 
 import path from 'node:path';
-import { ParseOptions, TestParser } from '../../test-parser.js';
+import type { ParseOptions, TestParser } from '../../test-parser.js';
 import { parseStringPromise } from 'xml2js';
 
-import {
+import type {
   JunitReport,
   SingleSuiteReport,
   TestCase,
@@ -15,10 +15,9 @@ import {
 import { parseStackTraceElement } from './java-stack-trace-element-parser.js';
 import { normalizeFilePath } from '../../utils/path-utilities.js';
 
+import type { TestCaseError, TestExecutionResult } from '../../test-results.js';
 import {
-  TestCaseError,
   TestCaseResult,
-  TestExecutionResult,
   TestGroupResult,
   TestRunResult,
   TestSuiteResult,
@@ -68,9 +67,10 @@ export class JavaJunitParser implements TestParser {
     content: string,
   ): Promise<JunitReport | SingleSuiteReport> {
     try {
-      return await parseStringPromise(content);
+      return (await parseStringPromise(content)) as
+        JunitReport | SingleSuiteReport;
     } catch (error) {
-      throw new Error(`Invalid XML at ${filePath}\n\n${error}`);
+      throw new Error(`Invalid XML at ${filePath}\n\n${String(error)}`);
     }
   }
 

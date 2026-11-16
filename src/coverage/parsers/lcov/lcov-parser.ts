@@ -2,12 +2,12 @@
  * @file Parses LCOV tracefiles into the shared coverage model.
  */
 
-import {
+import type {
   CoverageParser,
   CoverageData,
   FileCoverageDetails,
 } from '../coverage-parser.js';
-import { LcovFileBuilder } from './lcov-types.js';
+import type { LcovFileBuilder } from './lcov-types.js';
 
 /**
  * A parser for LCOV string-based coverage reports.
@@ -22,7 +22,7 @@ export class LcovParser implements CoverageParser {
    * @returns A promise that resolves to the
    * structured file coverage data.
    */
-  public parse(content: string): Promise<CoverageData> {
+  public async parse(content: string): Promise<CoverageData> {
     const records = content.split('end_of_record');
     const details: FileCoverageDetails[] = records
       .map((record) => this.parseRecord(record))
@@ -30,7 +30,7 @@ export class LcovParser implements CoverageParser {
 
     const overall = this.aggregateOverallCoverage(details);
 
-    return Promise.resolve({ overall, details });
+    return { overall, details };
   }
 
   /**

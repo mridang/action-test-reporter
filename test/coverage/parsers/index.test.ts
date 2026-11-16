@@ -2,6 +2,7 @@
  * @file Tests the detection of the coverage format of a report.
  */
 
+import { describe, expect, it } from '@jest/globals';
 import { promises as fs } from 'node:fs';
 import path from 'node:path';
 import { detectCoverage } from '../../../src/coverage/parsers/index.js';

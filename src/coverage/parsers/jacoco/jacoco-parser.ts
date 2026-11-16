@@ -3,12 +3,16 @@
  */
 
 import { BaseParser } from '../base-parser.js';
-import {
+import type {
   CoverageData,
   CoverageMetrics,
   FileCoverageDetails,
 } from '../coverage-parser.js';
-import { JacocoCounter, JacocoReport, JacocoPackage } from './jacoco-types.js';
+import type {
+  JacocoCounter,
+  JacocoReport,
+  JacocoPackage,
+} from './jacoco-types.js';
 
 /**
  * A parser for JaCoCo XML coverage reports.
@@ -26,13 +30,13 @@ export class JacocoParser extends BaseParser<JacocoReport> {
    * @example
    * const data = await parser.parse(xml);
    */
-  protected process(xml: JacocoReport): Promise<CoverageData> {
+  protected async process(xml: JacocoReport): Promise<CoverageData> {
     const overall = this.aggregateCounters(xml.report.counter);
     const details = (xml.report.package || []).flatMap((p) =>
       this.unpackage(p),
     );
 
-    return Promise.resolve({ overall, details });
+    return { overall, details };
   }
 
   /**

@@ -2,17 +2,20 @@
  * @file Parses the JSON event stream written by the Dart test runner.
  */
 
-import { ParseOptions, TestParser } from '../../test-parser.js';
+import type { ParseOptions, TestParser } from '../../test-parser.js';
 
 import { getBasePath, normalizeFilePath } from '../../utils/path-utilities.js';
 
-import {
+import type {
   ReportEvent,
   Suite,
   Group,
   TestStartEvent,
   TestDoneEvent,
   ErrorEvent,
+  MessageEvent,
+} from './dart-json-types.js';
+import {
   isSuiteEvent,
   isGroupEvent,
   isTestStartEvent,
@@ -20,16 +23,14 @@ import {
   isErrorEvent,
   isDoneEvent,
   isMessageEvent,
-  MessageEvent,
 } from './dart-json-types.js';
 
+import type { TestExecutionResult, TestCaseError } from '../../test-results.js';
 import {
-  TestExecutionResult,
   TestRunResult,
   TestSuiteResult,
   TestGroupResult,
   TestCaseResult,
-  TestCaseError,
 } from '../../test-results.js';
 
 const DART_FRAME_PATTERN = /^(?!package:)(.*)\s(\d+):\d+\s/;
@@ -160,7 +161,7 @@ export class DartJsonParser implements TestParser {
           return null;
         }
         try {
-          return JSON.parse(text);
+          return JSON.parse(text) as ReportEvent;
         } catch (error) {
           const errWithCol = error as { columnNumber?: number };
           const col =
@@ -168,11 +169,11 @@ export class DartJsonParser implements TestParser {
               ? ''
               : `:${errWithCol.columnNumber}`;
           throw new Error(
-            `Invalid JSON at ${path}:${index + 1}${col}\n\n${error}`,
+            `Invalid JSON at ${path}:${index + 1}${col}\n\n${String(error)}`,
           );
         }
       })
-      .filter((reportEvent) => reportEvent != null) as ReportEvent[];
+      .filter((reportEvent): reportEvent is ReportEvent => reportEvent != null);
 
     let success = false;
     let totalTime = 0;

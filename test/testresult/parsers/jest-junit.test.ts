@@ -2,11 +2,12 @@
  * @file Tests the Jest JUnit test result parser against its fixtures.
  */
 
+import { describe, expect, test } from '@jest/globals';
 import { mkdir, readFile, writeFile } from 'node:fs/promises';
 import path from 'node:path';
 
 import { JestJunitParser } from '../../../src/testresult/parsers/jest-junit/jest-junit-parser.js';
-import { ParseOptions } from '../../../src/testresult/test-parser.js';
+import type { ParseOptions } from '../../../src/testresult/test-parser.js';
 import {
   DEFAULT_OPTIONS,
   getReport,

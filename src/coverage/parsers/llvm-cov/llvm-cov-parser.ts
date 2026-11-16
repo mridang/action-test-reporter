@@ -2,7 +2,7 @@
  * @file Parses llvm-cov JSON exports into the shared coverage model.
  */
 
-import {
+import type {
   CoverageParser,
   CoverageData,
   CoverageMetrics,
@@ -70,12 +70,12 @@ export class LlvmCovParser implements CoverageParser {
    * structured coverage data.
    * @throws {Error} If the content is not an llvm-cov JSON export.
    */
-  public parse(content: string): Promise<CoverageData> {
+  public async parse(content: string): Promise<CoverageData> {
     let json: LlvmExport;
     try {
       json = JSON.parse(content) as LlvmExport;
     } catch {
-      return Promise.reject(new Error('Content is not valid JSON'));
+      throw new Error('Content is not valid JSON');
     }
 
     if (
@@ -84,7 +84,7 @@ export class LlvmCovParser implements CoverageParser {
       !json.type.startsWith('llvm.coverage.json.export') ||
       !Array.isArray(json.data)
     ) {
-      return Promise.reject(new Error('Not an llvm-cov JSON export'));
+      throw new Error('Not an llvm-cov JSON export');
     }
 
     const files = json.data.flatMap((entry) => entry.files ?? []);
@@ -109,10 +109,10 @@ export class LlvmCovParser implements CoverageParser {
         ),
       );
 
-    return Promise.resolve({
+    return {
       overall: this.aggregateOverallCoverage(details),
       details,
-    });
+    };
   }
 
   /**

@@ -2,13 +2,13 @@
  * @file Parses gcov text output into the shared coverage model.
  */
 
-import {
+import type {
   CoverageParser,
   CoverageData,
   CoverageMetrics,
   FileCoverageDetails,
 } from '../coverage-parser.js';
-import { GcovFileSection, GcovLine } from './gcov-types.js';
+import type { GcovFileSection, GcovLine } from './gcov-types.js';
 
 const GCOV_FILE_HEADER = /^File\s+'(.+)'$/;
 const GCOV_CREATING_HEADER = /^Creating\s+'(.+)'$/;

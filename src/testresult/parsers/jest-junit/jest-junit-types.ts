@@ -35,6 +35,6 @@ export interface TestCase {
     name: string;
     time: string;
   };
-  failure?: string[];
+  failure?: (string | { _: string })[];
   skipped?: string[];
 }

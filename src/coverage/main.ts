@@ -4,7 +4,8 @@
 
 import { getInput, info, setFailed, summary } from '@actions/core';
 
-import { CoverageRunOutput, runCoverage } from './runner.js';
+import type { CoverageRunOutput } from './runner.js';
+import { runCoverage } from './runner.js';
 
 /**
  * Entrypoint for executing the coverage reporter flow from the GitHub Action.

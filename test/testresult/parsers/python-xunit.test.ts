@@ -2,11 +2,12 @@
  * @file Tests the Python xUnit test result parser against its fixtures.
  */
 
+import { beforeAll, describe, expect, test } from '@jest/globals';
 import { mkdir, readFile, writeFile } from 'node:fs/promises';
 import path from 'node:path';
 
 import { PythonXunitParser } from '../../../src/testresult/parsers/python-xunit/python-xunit-parser.js';
-import { ParseOptions } from '../../../src/testresult/test-parser.js';
+import type { ParseOptions } from '../../../src/testresult/test-parser.js';
 import {
   DEFAULT_OPTIONS,
   getReport,

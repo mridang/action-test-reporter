@@ -2,8 +2,8 @@
  * @file Registers the test result parsers and detects the format of a results file.
  */
 
-import { ParseOptions, TestParser } from '../test-parser.js';
-import { TestRunResult } from '../test-results.js';
+import type { ParseOptions, TestParser } from '../test-parser.js';
+import type { TestRunResult } from '../test-results.js';
 import { DartJsonParser } from './dart-json/dart-json-parser.js';
 import { DotnetNunitParser } from './dotnet-nunit/dotnet-nunit-parser.js';
 import { DotnetTrxParser } from './dotnet-trx/dotnet-trx-parser.js';

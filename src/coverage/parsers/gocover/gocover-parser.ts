@@ -2,12 +2,12 @@
  * @file Parses Go cover profiles into the shared coverage model.
  */
 
-import {
+import type {
   CoverageParser,
   CoverageData,
   FileCoverageDetails,
 } from '../coverage-parser.js';
-import { GocoverBlock, GocoverFileData } from './gocover-types.js';
+import type { GocoverBlock, GocoverFileData } from './gocover-types.js';
 
 /**
  * A parser for Go coverage profile files (output of `go test -coverprofile`).

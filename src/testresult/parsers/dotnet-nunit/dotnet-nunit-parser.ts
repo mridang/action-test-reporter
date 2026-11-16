@@ -2,20 +2,19 @@
  * @file Parses NUnit XML test results from .NET test runs.
  */
 
-import { ParseOptions, TestParser } from '../../test-parser.js';
+import type { ParseOptions, TestParser } from '../../test-parser.js';
 import { parseStringPromise } from 'xml2js';
 
-import { NunitReport, TestCase, TestSuite } from './dotnet-nunit-types.js';
+import type { NunitReport, TestCase, TestSuite } from './dotnet-nunit-types.js';
 import { getExceptionSource } from '../../utils/node-utilities.js';
 import { getBasePath, normalizeFilePath } from '../../utils/path-utilities.js';
 
+import type { TestExecutionResult, TestCaseError } from '../../test-results.js';
 import {
-  TestExecutionResult,
   TestRunResult,
   TestSuiteResult,
   TestGroupResult,
   TestCaseResult,
-  TestCaseError,
 } from '../../test-results.js';
 
 /**
@@ -38,7 +37,7 @@ export class DotnetNunitParser implements TestParser {
     try {
       return (await parseStringPromise(content)) as NunitReport;
     } catch (error) {
-      throw new Error(`Invalid XML at ${path}\n\n${error}`);
+      throw new Error(`Invalid XML at ${path}\n\n${String(error)}`);
     }
   }
 
