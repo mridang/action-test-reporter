@@ -1,9 +1,10 @@
+const LEADING_NON_WHITESPACE = /^\S*/;
 /**
  * @file Parses Java stack trace lines into their class, method and location parts.
  */
 
 interface StackTraceElement {
-  classLoader: string | undefined;
+  loader: string | undefined;
   moduleNameAndVersion: string | undefined;
   tracePath: string;
   fileName: string;
@@ -24,7 +25,7 @@ const re = /^\s*at (.*)\(([^(]*):(\d+)\)$/;
 export function splitClassLoaderPrefix(
   text: string,
 ): [prefix: string | undefined, rest: string] {
-  const runLength = /^\S*/.exec(text)?.[0].length ?? 0;
+  const runLength = LEADING_NON_WHITESPACE.exec(text)?.[0].length ?? 0;
   const firstSlash = text.indexOf('/', 1);
   if (firstSlash === -1 || firstSlash >= runLength) {
     return [undefined, text];
@@ -47,18 +48,18 @@ export function parseStackTraceElement(
 ): StackTraceElement | undefined {
   const match = re.exec(stackTraceLine);
   if (match !== null) {
-    const [, beforeLocation, fileName, lineStr] = match;
+    const [, beforeLocation, fileName, lineString] = match;
     const [maybeClassLoaderAndModuleNameAndVersion, tracePath] =
       splitClassLoaderPrefix(beforeLocation);
-    const { classLoader, moduleNameAndVersion } = parseClassLoaderAndModule(
+    const { loader, moduleNameAndVersion } = parseClassLoaderAndModule(
       maybeClassLoaderAndModuleNameAndVersion,
     );
     return {
-      classLoader,
+      loader,
       moduleNameAndVersion,
       tracePath,
       fileName,
-      lineStr,
+      lineStr: lineString,
     };
   }
   return undefined;
@@ -69,19 +70,19 @@ export function parseStackTraceElement(
  * @param maybeClassLoaderAndModuleNameAndVersion - The text before the trace path, which may be empty.
  * @returns The class loader and module with its version, each undefined when absent.
  * @example
- * const { classLoader, moduleNameAndVersion } = parseClassLoaderAndModule('app/module@1.0');
+ * const { loader, moduleNameAndVersion } = parseClassLoaderAndModule('app/module@1.0');
  */
 function parseClassLoaderAndModule(
   maybeClassLoaderAndModuleNameAndVersion?: string,
 ): {
-  classLoader?: string;
+  loader?: string;
   moduleNameAndVersion?: string;
 } {
   if (maybeClassLoaderAndModuleNameAndVersion) {
     const res = maybeClassLoaderAndModuleNameAndVersion.split('/');
-    const classLoader = res[0];
+    const loader = res[0];
     const moduleNameAndVersion = res[1] || undefined;
-    return { classLoader, moduleNameAndVersion };
+    return { loader, moduleNameAndVersion };
   }
   return {};
 }

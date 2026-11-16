@@ -78,7 +78,7 @@ export class LcovParser implements CoverageParser {
 
     const uncoveredLines = [...builder.lines.details.entries()]
       .filter(([, hits]) => hits === 0)
-      .map(([lineNum]) => lineNum);
+      .map(([lineNumber]) => lineNumber);
 
     return {
       file: builder.file,

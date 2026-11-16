@@ -11,6 +11,8 @@ import {
 } from '../parsers/coverage-parser.js';
 import { formatUncoveredLines } from './index.js';
 
+const collator = new Intl.Collator();
+
 /**
  * ANSI color codes for console output.
  * @internal
@@ -172,7 +174,7 @@ export class ConsoleFormatter implements CoverageFormatter<{
   ): string[] {
     const rows: string[] = [];
     const sortedKeys = [...node.children.keys()].toSorted((a, b) =>
-      a.localeCompare(b),
+      collator.compare(a, b),
     );
 
     for (const key of sortedKeys) {

@@ -15,10 +15,12 @@ import {
   Icon,
   link,
   table,
-} from '../utils/markdown-utils.js';
-import { DEFAULT_LOCALE } from '../utils/node-utils.js';
-import { getFirstNonEmptyLine } from '../utils/parse-utils.js';
+} from '../utils/markdown-utilities.js';
+import { DEFAULT_LOCALE } from '../utils/node-utilities.js';
+import { getFirstNonEmptyLine } from '../utils/parse-utilities.js';
 import { slug } from '../utils/slugger.js';
+
+const collator = new Intl.Collator(DEFAULT_LOCALE);
 
 const MAX_REPORT_LENGTH = 65_535;
 const MAX_ACTIONS_SUMMARY_LENGTH = 1_048_576;
@@ -162,9 +164,9 @@ function trimReport(lines: string[], options: ReportOptions): string {
  * applySort(testRuns);
  */
 function applySort(results: TestRunResult[]): void {
-  results.sort((a, b) => a.path.localeCompare(b.path, DEFAULT_LOCALE));
+  results.sort((a, b) => collator.compare(a.path, b.path));
   for (const res of results) {
-    res.suites.sort((a, b) => a.name.localeCompare(b.name, DEFAULT_LOCALE));
+    res.suites.sort((a, b) => collator.compare(a.name, b.name));
   }
 }
 
@@ -311,8 +313,8 @@ function getTestRunsReport(
   }
 
   if (!options.onlySummary) {
-    const suitesReports = testRuns.flatMap((tr, i) =>
-      getSuitesReport(tr, i, options),
+    const suitesReports = testRuns.flatMap((tr, index) =>
+      getSuitesReport(tr, index, options),
     );
     sections.push(...suitesReports);
   }

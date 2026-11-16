@@ -10,6 +10,14 @@ import {
 } from '../coverage-parser.js';
 import { GcovFileSection, GcovLine } from './gcov-types.js';
 
+const GCOV_FILE_HEADER = /^File\s+'(.+)'$/;
+const GCOV_CREATING_HEADER = /^Creating\s+'(.+)'$/;
+const GCOV_EXTENSION = /\.gcov$/;
+const GCOV_LINES_SUMMARY = /^Lines executed:(\d+\.\d+)% of (\d+)$/;
+const GCOV_BRANCHES_SUMMARY = /^Branches executed:(\d+\.\d+)% of (\d+)$/;
+const GCOV_FUNCTIONS_SUMMARY = /^Functions executed:(\d+\.\d+)% of (\d+)$/;
+const GCOV_SOURCE_LINE = /^\s*([#\d-]+):\s*(\d+):\s*(.*)/;
+
 /**
  * A parser for gcov text output files.
  * @class GcovParser
@@ -164,13 +172,13 @@ export class GcovParser implements CoverageParser {
  * const name = parseSectionFilename("File 'src/index.ts'"); // 'src/index.ts'
  */
 function parseSectionFilename(line: string): string | undefined {
-  const fileMatch = /^File\s+'(.+)'$/.exec(line);
+  const fileMatch = GCOV_FILE_HEADER.exec(line);
   if (fileMatch) {
     return fileMatch[1];
   }
-  const creatingMatch = /^Creating\s+'(.+)'$/.exec(line);
+  const creatingMatch = GCOV_CREATING_HEADER.exec(line);
   if (creatingMatch) {
-    return creatingMatch[1].replace(/\.gcov$/, '');
+    return creatingMatch[1].replace(GCOV_EXTENSION, '');
   }
   return undefined;
 }
@@ -185,11 +193,11 @@ function parseSectionFilename(line: string): string | undefined {
  */
 function applySummaryLine(section: GcovFileSection, line: string): boolean {
   const summaryPatterns = [
-    { key: 'linesExecuted', re: /^Lines executed:(\d+\.\d+)% of (\d+)$/ },
-    { key: 'branchesExecuted', re: /^Branches executed:(\d+\.\d+)% of (\d+)$/ },
+    { key: 'linesExecuted', re: GCOV_LINES_SUMMARY },
+    { key: 'branchesExecuted', re: GCOV_BRANCHES_SUMMARY },
     {
       key: 'functionsExecuted',
-      re: /^Functions executed:(\d+\.\d+)% of (\d+)$/,
+      re: GCOV_FUNCTIONS_SUMMARY,
     },
   ] as const;
 
@@ -216,27 +224,27 @@ function applySummaryLine(section: GcovFileSection, line: string): boolean {
  * const parsed = parseSourceLine('5: 12: return value;');
  */
 function parseSourceLine(line: string): GcovLine | undefined {
-  const lineMatch = /^\s*([#\d-]+):\s*(\d+):\s*(.*)/.exec(line);
+  const lineMatch = GCOV_SOURCE_LINE.exec(line);
   if (!lineMatch) {
     return undefined;
   }
-  const [, countStr, lineNumberStr, sourceCode] = lineMatch;
+  const [, countString, lineNumberString, sourceCode] = lineMatch;
   return {
-    lineNumber: Number.parseInt(lineNumberStr, 10),
-    executionCount: parseExecutionCount(countStr),
+    lineNumber: Number.parseInt(lineNumberString, 10),
+    executionCount: parseExecutionCount(countString),
     sourceCode: sourceCode || '',
   };
 }
 
 /**
  * Converts the execution count column of a gcov source line into a number.
- * @param countStr - The raw count column, such as '5', '#####' or '-'.
+ * @param countString - The raw count column, such as '5', '#####' or '-'.
  * @returns The execution count, or null when the line is not executable.
  * @example
  * const count = parseExecutionCount('#####'); // 0
  */
-function parseExecutionCount(countStr: string): number | null {
-  const trimmed = countStr.trim();
+function parseExecutionCount(countString: string): number | null {
+  const trimmed = countString.trim();
   if (trimmed === '-') {
     return null;
   }

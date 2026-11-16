@@ -38195,6 +38195,8 @@ function isMessageEvent(event) {
 /**
  * @file Provides helpers that read exception details and locale settings from Node-based results.
  */
+const LINE_BREAK_PATTERN$1 = /\r?\n/;
+const STACK_FRAME_PATTERN = /^[^(]*\((.*):(\d+):\d+\)$/;
 const DEFAULT_LOCALE = 'en-US';
 /**
  * Finds the first stack trace frame that points to a tracked project file, skipping Node internals and dependencies.
@@ -38206,9 +38208,9 @@ const DEFAULT_LOCALE = 'en-US';
  * const source = getExceptionSource(error.stack ?? '', files, (p) => p);
  */
 function getExceptionSource(stackTrace, trackedFiles, getRelativePath) {
-    const lines = stackTrace.split(/\r?\n/);
-    for (const str of lines) {
-        const frame = getTrackedFrame(str, trackedFiles, getRelativePath);
+    const lines = stackTrace.split(LINE_BREAK_PATTERN$1);
+    for (const line of lines) {
+        const frame = getTrackedFrame(line, trackedFiles, getRelativePath);
         if (frame) {
             return frame;
         }
@@ -38219,31 +38221,31 @@ function getExceptionSource(stackTrace, trackedFiles, getRelativePath) {
  * Extracts the file path and line number from the parenthesized location at the end of a stack trace line.
  * The pattern is anchored at the start and skips to the first opening parenthesis with a negated class, so the
  * scan stays linear on long lines.
- * @param str - A single line of the stack trace.
+ * @param text - A single line of the stack trace.
  * @returns The file path and the line number text, or undefined when the line has no location.
  * @example
  * const match = matchStackFrame('at run (/work/src/index.ts:10:5)');
  */
-function matchStackFrame(str) {
-    const match = /^[^(]*\((.*):(\d+):\d+\)$/.exec(str);
+function matchStackFrame(text) {
+    const match = STACK_FRAME_PATTERN.exec(text);
     return match === null ? undefined : [match[1], match[2]];
 }
 /**
  * Parses one stack trace line and returns it when it points to a tracked project file.
- * @param str - A single line of the stack trace.
+ * @param text - A single line of the stack trace.
  * @param trackedFiles - The files tracked by Git.
  * @param getRelativePath - Converts a frame path into a path relative to the repository.
  * @returns The relative path and line of the frame, or undefined when the line does not match.
  * @example
  * const frame = getTrackedFrame('at run (/work/src/index.ts:10:5)', files, (p) => p);
  */
-function getTrackedFrame(str, trackedFiles, getRelativePath) {
-    const match = matchStackFrame(str);
+function getTrackedFrame(text, trackedFiles, getRelativePath) {
+    const match = matchStackFrame(text);
     if (match === undefined) {
         return undefined;
     }
-    const [fileStr, lineStr] = match;
-    const filePath = normalizeFilePath(fileStr);
+    const [fileString, lineString] = match;
+    const filePath = normalizeFilePath(fileString);
     if (filePath.startsWith('internal/') || filePath.includes('/node_modules/')) {
         return undefined;
     }
@@ -38251,12 +38253,13 @@ function getTrackedFrame(str, trackedFiles, getRelativePath) {
     if (!path || !trackedFiles.includes(path)) {
         return undefined;
     }
-    return { path, line: Number.parseInt(lineStr) };
+    return { path, line: Number.parseInt(lineString) };
 }
 
 /**
  * @file Defines the in-memory model of test runs, suites, groups and cases.
  */
+const collator$3 = new Intl.Collator(DEFAULT_LOCALE);
 class TestRunResult {
     path;
     suites;
@@ -38287,7 +38290,7 @@ class TestRunResult {
             : 'success';
     }
     sort(deep) {
-        this.suites.sort((a, b) => a.name.localeCompare(b.name, DEFAULT_LOCALE));
+        this.suites.sort((a, b) => collator$3.compare(a.name, b.name));
         if (deep) {
             for (const suite of this.suites) {
                 suite.sort(deep);
@@ -38325,7 +38328,7 @@ class TestSuiteResult {
             : 'success';
     }
     sort(deep) {
-        this.groups.sort((a, b) => (a.name ?? '').localeCompare(b.name ?? '', DEFAULT_LOCALE));
+        this.groups.sort((a, b) => collator$3.compare(a.name ?? '', b.name ?? ''));
         if (deep) {
             for (const grp of this.groups) {
                 grp.sort();
@@ -38356,7 +38359,7 @@ class TestGroupResult {
         return this.tests.some((t) => t.result === 'failed') ? 'failed' : 'success';
     }
     sort() {
-        this.tests.sort((a, b) => a.name.localeCompare(b.name, DEFAULT_LOCALE));
+        this.tests.sort((a, b) => collator$3.compare(a.name, b.name));
     }
 }
 class TestCaseResult {
@@ -38375,6 +38378,9 @@ class TestCaseResult {
 /**
  * @file Parses the JSON event stream written by the Dart test runner.
  */
+const DART_FRAME_PATTERN = /^(?!package:)(.*)\s(\d+):\d+\s/;
+const FLUTTER_FRAME_PATTERN = /^(#\d+\s)(.*):(\d+):\d+\)$/;
+const USELESS_MESSAGE_PATTERN = /^Test failed\. See exception logs above\.\nThe test description was:/m;
 /**
  * Captures the exception text of a Flutter test print. A single whitespace character separates the text from its
  * surroundings in the pattern, which keeps the scan linear, so callers trim the leading whitespace of the capture.
@@ -38390,7 +38396,7 @@ const FLUTTER_EXCEPTION_PRINT = /^══╡ EXCEPTION CAUGHT BY FLUTTER TEST FRA
  * const match = matchDartFrame('test/a_test.dart 12:5  main');
  */
 function matchDartFrame(line) {
-    const match = /^(?!package:)(.*)\s(\d+):\d+\s/.exec(line);
+    const match = DART_FRAME_PATTERN.exec(line);
     return match === null ? undefined : [match[1], match[2]];
 }
 /**
@@ -38404,16 +38410,16 @@ function matchDartFrame(line) {
  * const match = matchFlutterFrame('#0 main (file:///work/test/a_test.dart:12:5)');
  */
 function matchFlutterFrame(line) {
-    const match = /^(#\d+\s)(.*):(\d+):\d+\)$/.exec(line);
+    const match = FLUTTER_FRAME_PATTERN.exec(line);
     if (match === null) {
         return undefined;
     }
-    const [, head, middle, lineStr] = match;
+    const [, head, middle, lineString] = match;
     let open = middle.lastIndexOf('(');
     while (open !== -1 && line.startsWith('package:', head.length + open + 1)) {
         open = open === 0 ? -1 : middle.lastIndexOf('(', open - 1);
     }
-    return open === -1 ? undefined : [middle.slice(open + 1), lineStr];
+    return open === -1 ? undefined : [middle.slice(open + 1), lineString];
 }
 class TestRun {
     path;
@@ -38487,53 +38493,55 @@ class DartJsonParser {
     getTestRun(path, content) {
         const lines = content.split(/\n\r?/g);
         const events = lines
-            .map((str, i) => {
-            if (str.trim() === '') {
+            .map((text, index) => {
+            if (text.trim() === '') {
                 return null;
             }
             try {
-                return JSON.parse(str);
+                return JSON.parse(text);
             }
             catch (error) {
                 const errWithCol = error;
                 const col = errWithCol.columnNumber === undefined
                     ? ''
                     : `:${errWithCol.columnNumber}`;
-                throw new Error(`Invalid JSON at ${path}:${i + 1}${col}\n\n${error}`);
+                throw new Error(`Invalid JSON at ${path}:${index + 1}${col}\n\n${error}`);
             }
         })
-            .filter((evt) => evt != null);
+            .filter((reportEvent) => reportEvent != null);
         let success = false;
         let totalTime = 0;
         const suites = {};
         const tests = {};
-        for (const evt of events) {
-            if (isSuiteEvent(evt)) {
-                suites[evt.suite.id] = new TestSuite(evt.suite);
+        for (const reportEvent of events) {
+            if (isSuiteEvent(reportEvent)) {
+                suites[reportEvent.suite.id] = new TestSuite(reportEvent.suite);
             }
-            else if (isGroupEvent(evt)) {
-                suites[evt.group.suiteID].groups[evt.group.id] = new TestGroup(evt.group);
+            else if (isGroupEvent(reportEvent)) {
+                suites[reportEvent.group.suiteID].groups[reportEvent.group.id] =
+                    new TestGroup(reportEvent.group);
             }
-            else if (isTestStartEvent(evt) && evt.test.url !== null) {
-                const test = new TestCase(evt);
-                const suite = suites[evt.test.suiteID];
-                const groupIndex = evt.test.groupIDs.length - 1;
-                const group = suite.groups[evt.test.groupIDs[groupIndex]];
+            else if (isTestStartEvent(reportEvent) &&
+                reportEvent.test.url !== null) {
+                const test = new TestCase(reportEvent);
+                const suite = suites[reportEvent.test.suiteID];
+                const groupIndex = reportEvent.test.groupIDs.length - 1;
+                const group = suite.groups[reportEvent.test.groupIDs[groupIndex]];
                 group.tests.push(test);
-                tests[evt.test.id] = test;
+                tests[reportEvent.test.id] = test;
             }
-            else if (isTestDoneEvent(evt) && tests[evt.testID]) {
-                tests[evt.testID].testDone = evt;
+            else if (isTestDoneEvent(reportEvent) && tests[reportEvent.testID]) {
+                tests[reportEvent.testID].testDone = reportEvent;
             }
-            else if (isErrorEvent(evt) && tests[evt.testID]) {
-                tests[evt.testID].error = evt;
+            else if (isErrorEvent(reportEvent) && tests[reportEvent.testID]) {
+                tests[reportEvent.testID].error = reportEvent;
             }
-            else if (isMessageEvent(evt) && tests[evt.testID]) {
-                tests[evt.testID].print.push(evt);
+            else if (isMessageEvent(reportEvent) && tests[reportEvent.testID]) {
+                tests[reportEvent.testID].print.push(reportEvent);
             }
-            else if (isDoneEvent(evt)) {
-                success = evt.success;
-                totalTime = evt.time;
+            else if (isDoneEvent(reportEvent)) {
+                success = reportEvent.success;
+                totalTime = reportEvent.time;
             }
             else ;
         }
@@ -38573,7 +38581,9 @@ class DartJsonParser {
             .filter((p) => p.messageType === 'print')
             .map((p) => p.message)
             .join('\n');
-        const details = [print, stackTrace].filter((str) => str !== '').join('\n');
+        const details = [print, stackTrace]
+            .filter((text) => text !== '')
+            .join('\n');
         const src = this.exceptionThrowSource(details, trackedFiles);
         const message = this.getErrorMessage(test.error?.error ?? '', print);
         let path;
@@ -38601,7 +38611,7 @@ class DartJsonParser {
     }
     getErrorMessage(message, print) {
         // Try Flutter-specific error extraction (works for both Dart and Flutter)
-        const uselessMessageRe = /^Test failed\. See exception logs above\.\nThe test description was:/m;
+        const uselessMessageRe = USELESS_MESSAGE_PATTERN;
         if (uselessMessageRe.test(message)) {
             const match = FLUTTER_EXCEPTION_PRINT.exec(print);
             if (match !== null) {
@@ -38631,13 +38641,13 @@ class DartJsonParser {
      * const frame = this.findTrackedFrame(lines, matchDartFrame, trackedFiles);
      */
     findTrackedFrame(lines, matcher, trackedFiles) {
-        for (const str of lines) {
-            const match = matcher(str);
+        for (const text of lines) {
+            const match = matcher(text);
             if (match !== undefined) {
-                const [pathStr, lineStr] = match;
-                const path = normalizeFilePath(this.getRelativePath(pathStr));
+                const [pathString, lineString] = match;
+                const path = normalizeFilePath(this.getRelativePath(pathString));
                 if (trackedFiles.includes(path)) {
-                    return { path, line: Number.parseInt(lineStr) };
+                    return { path, line: Number.parseInt(lineString) };
                 }
             }
         }
@@ -45829,43 +45839,46 @@ class DotnetNunitParser {
     }
 }
 
+const NET_DURATION_PATTERN = /^(\d\d):(\d\d):(\d\d(?:\.\d+)?)$/;
+const ISO_DATE_PATTERN = /^\d{4}-[01]\d-[0-3]\dT[0-2]\d:[0-5]\d:[0-5]\d\.\d+([+-][0-2]\d:[0-5]\d|Z)$/;
+const BLANK_LINE_PATTERN = /^\s*$/;
 /**
  * @file Provides helpers that parse durations, dates and stack traces from test reports.
  */
 /**
  * Parses a .NET duration in the form hh:mm:ss, with optional fractional seconds, into milliseconds.
- * @param str - The duration text to parse.
+ * @param text - The duration text to parse.
  * @returns The duration in milliseconds.
  * @throws {Error} When the text is not in the expected format.
  * @example
  * const ms = parseNetDuration('00:01:30.5'); // 90500
  */
-function parseNetDuration(str) {
-    const durationRe = /^(\d\d):(\d\d):(\d\d(?:\.\d+)?)$/;
-    const durationMatch = durationRe.exec(str);
+function parseNetDuration(text) {
+    const durationRe = NET_DURATION_PATTERN;
+    const durationMatch = durationRe.exec(text);
     if (durationMatch === null) {
-        throw new Error(`Invalid format: "${str}" is not NET duration`);
+        throw new Error(`Invalid format: "${text}" is not NET duration`);
     }
-    const [, hourStr, minStr, secStr] = durationMatch;
-    return ((Number.parseInt(hourStr) * 3600 +
-        Number.parseInt(minStr) * 60 +
-        Number.parseFloat(secStr)) *
+    const [, hourString, minString, secString] = durationMatch;
+    return ((Number.parseInt(hourString) * 3600 +
+        Number.parseInt(minString) * 60 +
+        Number.parseFloat(secString)) *
         1000);
 }
 /**
  * Parses an ISO 8601 date-time with a fractional second and a time zone offset.
- * @param str - The date text to parse.
+ * @param text - The date text to parse.
  * @returns The parsed date.
  * @throws {Error} When the text is not an ISO 8601 date-time.
  * @example
  * const date = parseIsoDate('2024-05-01T10:00:00.000Z');
  */
-function parseIsoDate(str) {
-    const isoDateRe = /^\d{4}-[01]\d-[0-3]\dT[0-2]\d:[0-5]\d:[0-5]\d\.\d+([+-][0-2]\d:[0-5]\d|Z)$/;
-    if (typeof str !== 'string' || !isoDateRe.test(str)) {
-        throw new Error(`Invalid format: "${str}" is not ISO date`);
+function parseIsoDate(text) {
+    const isoDateRe = ISO_DATE_PATTERN;
+    if (typeof text !== 'string' || !isoDateRe.test(text)) {
+        throw new Error(`Invalid format: "${text}" is not ISO date`);
     }
-    return new Date(str);
+    return new Date(text);
 }
 /**
  * Returns the first line of a stack trace that contains text.
@@ -45876,12 +45889,13 @@ function parseIsoDate(str) {
  */
 function getFirstNonEmptyLine(stackTrace) {
     const lines = stackTrace?.split(/\r?\n/g);
-    return lines?.find((str) => !/^\s*$/.test(str));
+    return lines?.find((line) => !BLANK_LINE_PATTERN.test(line));
 }
 
 /**
  * @file Parses Visual Studio TRX test results from .NET test runs.
  */
+const DOTNET_EXCEPTION_LOCATION = / in (.+):line (\d+)$/;
 /**
  * Matches a line break together with the carriage returns in front of it. The lookbehind makes the match start at
  * the first carriage return of a run, so a long run of carriage returns without a line feed is scanned only once.
@@ -45964,19 +45978,21 @@ class DotnetTrxParser {
         }));
         const testClasses = {};
         for (const r of unitTestsResults) {
-            const className = r.test.TestMethod[0].$.className ?? 'Unclassified';
-            let tc = testClasses[className];
+            const testClassName = r.test.TestMethod[0].$.className ?? 'Unclassified';
+            let tc = testClasses[testClassName];
             if (tc === undefined) {
-                tc = new TestClass(className);
+                tc = new TestClass(testClassName);
                 testClasses[tc.name] = tc;
             }
             const error = this.getErrorInfo(r.result);
-            const durationAttr = r.result.$.duration;
-            const duration = durationAttr ? parseNetDuration(durationAttr) : 0;
+            const durationAttribute = r.result.$.duration;
+            const duration = durationAttribute
+                ? parseNetDuration(durationAttribute)
+                : 0;
             const resultTestName = r.result.$.testName;
-            const testName = resultTestName.startsWith(className) &&
-                resultTestName[className.length] === '.'
-                ? resultTestName.slice(className.length + 1)
+            const testName = resultTestName.startsWith(testClassName) &&
+                resultTestName.codePointAt(testClassName.length) === '.'.codePointAt(0)
+                ? resultTestName.slice(testClassName.length + 1)
                 : resultTestName;
             const test = new Test(testName, r.result.$.outcome, duration, error);
             tc.tests.push(test);
@@ -46035,17 +46051,17 @@ class DotnetTrxParser {
     }
     exceptionThrowSource(stackTrace) {
         const lines = stackTrace.split(STACK_TRACE_LINE_BREAK);
-        const re = / in (.+):line (\d+)$/;
+        const re = DOTNET_EXCEPTION_LOCATION;
         const { trackedFiles } = this.options;
-        for (const str of lines) {
-            const match = re.exec(str);
+        for (const text of lines) {
+            const match = re.exec(text);
             if (match !== null) {
-                const [, fileStr, lineStr] = match;
-                const filePath = normalizeFilePath(fileStr);
+                const [, fileString, lineString] = match;
+                const filePath = normalizeFilePath(fileString);
                 const workDir = this.getWorkDir(filePath);
                 const file = workDir ? filePath.slice(workDir.length) : undefined;
                 if (file !== undefined && trackedFiles.includes(file)) {
-                    const line = Number.parseInt(lineStr);
+                    const line = Number.parseInt(lineString);
                     return { path: file, line };
                 }
             }
@@ -46061,6 +46077,7 @@ class DotnetTrxParser {
 /**
  * @file Parses the JSON event stream written by go test -json.
  */
+const GO_OUTPUT_INDENT = /^ {4}/;
 /**
  * Maps the final action of a Go test to the result that is reported for it.
  */
@@ -46140,9 +46157,9 @@ class GolangJsonParser {
             let error;
             if (result !== 'success') {
                 const outputEvents = eventGroup
-                    .filter((e) => e.Action === 'output')
-                    .map((e) => e.Output ?? '')
-                    .map((o) => o.replace(/^ {4}/, ''));
+                    .filter((event) => event.Action === 'output')
+                    .map((event) => event.Output ?? '')
+                    .map((o) => o.replace(GO_OUTPUT_INDENT, ''));
                 outputEvents.splice(0, 1);
                 outputEvents.splice(-1, 1);
                 const details = outputEvents.join('');
@@ -46157,9 +46174,7 @@ class GolangJsonParser {
     }
 }
 
-/**
- * @file Parses Java stack trace lines into their class, method and location parts.
- */
+const LEADING_NON_WHITESPACE = /^\S*/;
 const re = /^\s*at (.*)\(([^(]*):(\d+)\)$/;
 /**
  * Splits the text between the word at and the location into the optional class loader and module prefix and the
@@ -46171,7 +46186,7 @@ const re = /^\s*at (.*)\(([^(]*):(\d+)\)$/;
  * const [prefix, tracePath] = splitClassLoaderPrefix('app//com.example.App.run');
  */
 function splitClassLoaderPrefix(text) {
-    const runLength = /^\S*/.exec(text)?.[0].length ?? 0;
+    const runLength = LEADING_NON_WHITESPACE.exec(text)?.[0].length ?? 0;
     const firstSlash = text.indexOf('/', 1);
     if (firstSlash === -1 || firstSlash >= runLength) {
         return [undefined, text];
@@ -46191,15 +46206,15 @@ function splitClassLoaderPrefix(text) {
 function parseStackTraceElement(stackTraceLine) {
     const match = re.exec(stackTraceLine);
     if (match !== null) {
-        const [, beforeLocation, fileName, lineStr] = match;
+        const [, beforeLocation, fileName, lineString] = match;
         const [maybeClassLoaderAndModuleNameAndVersion, tracePath] = splitClassLoaderPrefix(beforeLocation);
-        const { classLoader, moduleNameAndVersion } = parseClassLoaderAndModule(maybeClassLoaderAndModuleNameAndVersion);
+        const { loader, moduleNameAndVersion } = parseClassLoaderAndModule(maybeClassLoaderAndModuleNameAndVersion);
         return {
-            classLoader,
+            loader,
             moduleNameAndVersion,
             tracePath,
             fileName,
-            lineStr,
+            lineStr: lineString,
         };
     }
     return undefined;
@@ -46209,14 +46224,14 @@ function parseStackTraceElement(stackTraceLine) {
  * @param maybeClassLoaderAndModuleNameAndVersion - The text before the trace path, which may be empty.
  * @returns The class loader and module with its version, each undefined when absent.
  * @example
- * const { classLoader, moduleNameAndVersion } = parseClassLoaderAndModule('app/module@1.0');
+ * const { loader, moduleNameAndVersion } = parseClassLoaderAndModule('app/module@1.0');
  */
 function parseClassLoaderAndModule(maybeClassLoaderAndModuleNameAndVersion) {
     if (maybeClassLoaderAndModuleNameAndVersion) {
         const res = maybeClassLoaderAndModuleNameAndVersion.split('/');
-        const classLoader = res[0];
+        const loader = res[0];
         const moduleNameAndVersion = res[1] || undefined;
-        return { classLoader, moduleNameAndVersion };
+        return { loader, moduleNameAndVersion };
     }
     return {};
 }
@@ -46224,6 +46239,7 @@ function parseClassLoaderAndModule(maybeClassLoaderAndModuleNameAndVersion) {
 /**
  * @file Parses JUnit XML test results produced by Java test runners.
  */
+const LINE_BREAK_PATTERN = /\r?\n/;
 /**
  * Parser for JUnit-style XML reports commonly produced by Java test frameworks.
  */
@@ -46296,10 +46312,10 @@ class JavaJunitParser {
         }
         const groups = [];
         for (const tc of suite.testcase) {
-            const className = tc.$.classname === suite.$.name ? '' : tc.$.classname;
-            let grp = groups.find((g) => g.name === className);
+            const groupName = tc.$.classname === suite.$.name ? '' : tc.$.classname;
+            let grp = groups.find((g) => g.name === groupName);
             if (grp === undefined) {
-                grp = { name: className, tests: [] };
+                grp = { name: groupName, tests: [] };
                 groups.push(grp);
             }
             grp.tests.push(tc);
@@ -46356,9 +46372,9 @@ class JavaJunitParser {
         };
     }
     exceptionThrowSource(stackTrace) {
-        const lines = stackTrace.split(/\r?\n/);
-        for (const str of lines) {
-            const stackTraceElement = parseStackTraceElement(str);
+        const lines = stackTrace.split(LINE_BREAK_PATTERN);
+        for (const text of lines) {
+            const stackTraceElement = parseStackTraceElement(text);
             if (stackTraceElement) {
                 const { tracePath, fileName, lineStr } = stackTraceElement;
                 const filePath = this.getFilePath(tracePath, fileName);
@@ -46383,14 +46399,14 @@ class JavaJunitParser {
             return undefined;
         }
         for (const filePath of files) {
-            const dirs = path$1.dirname(filePath).split(/\//g);
-            if (packageParts.length > dirs.length) {
+            const directories = path$1.dirname(filePath).split(/\//g);
+            if (packageParts.length > directories.length) {
                 continue;
             }
-            if (dirs.length > packageParts.length) {
-                dirs.splice(0, dirs.length - packageParts.length);
+            if (directories.length > packageParts.length) {
+                directories.splice(0, directories.length - packageParts.length);
             }
-            const isMatch = packageParts.every((part, i) => part === dirs[i]);
+            const isMatch = packageParts.every((part, index) => part === directories[index]);
             if (isMatch) {
                 return filePath;
             }
@@ -46402,6 +46418,8 @@ class JavaJunitParser {
 /**
  * @file Parses JUnit XML test results produced by Jest.
  */
+const JEST_SUITE_NAME_PATTERN = /jest|__tests__|\.test|\.spec/i;
+const JEST_CLASS_NAME_PATTERN = /›|__tests__|\.test|\.spec|\/|\\/i;
 /**
  * Parser for JUnit XML reports emitted by Jest with the jest-junit reporter.
  */
@@ -46441,7 +46459,7 @@ class JestJunitParser {
         const suites = junit.testsuites.testsuite ?? [];
         const queue = [...suites];
         const suiteNames = [];
-        const classNames = [];
+        const testcaseClassNames = [];
         let hasNestedSuites = false;
         while (queue.length > 0) {
             const suite = queue.shift();
@@ -46456,18 +46474,18 @@ class JestJunitParser {
             }
             if (suite.testcase) {
                 const names = suite.testcase.map((tc) => tc.$?.classname);
-                classNames.push(...names.filter((name) => name !== undefined));
+                testcaseClassNames.push(...names.filter((name) => name !== undefined));
             }
         }
         if (hasNestedSuites) {
             return false;
         }
         const topLevelName = junit.testsuites.$?.name ?? '';
-        const suiteNameHint = suiteNames.some((n) => /jest|__tests__|\.test|\.spec/i.test(n));
-        const classNameHint = classNames.some((cn) => cn === '' || /›|__tests__|\.test|\.spec|\/|\\/i.test(cn ?? ''));
-        const topLevelHint = /jest/.test(topLevelName);
-        const hasNameHint = suiteNameHint || classNameHint || topLevelHint;
-        return hasNameHint || suites.length > 0 || classNames.length > 0;
+        const suiteNameHint = suiteNames.some((n) => JEST_SUITE_NAME_PATTERN.test(n));
+        const testcaseClassHint = testcaseClassNames.some((cn) => cn === '' || JEST_CLASS_NAME_PATTERN.test(cn ?? ''));
+        const topLevelHint = topLevelName.includes('jest');
+        const hasNameHint = suiteNameHint || testcaseClassHint || topLevelHint;
+        return hasNameHint || suites.length > 0 || testcaseClassNames.length > 0;
     }
     getGroups(suite) {
         if (!suite.testcase) {
@@ -46636,6 +46654,7 @@ class MochaJsonParser {
 /**
  * @file Parses the JSON report written by RSpec.
  */
+const RSPEC_BACKTRACE_LOCATION = /^(.*?):(\d+):/;
 /**
  * Parser for JSON reports generated by the RSpec JSON formatter.
  */
@@ -46722,13 +46741,13 @@ class RspecJsonParser {
         };
     }
     getExceptionSource(backtrace) {
-        const re = /^(.*?):(\d+):/;
-        for (const str of backtrace) {
-            const match = re.exec(str);
+        const re = RSPEC_BACKTRACE_LOCATION;
+        for (const text of backtrace) {
+            const match = re.exec(text);
             if (match !== null) {
-                const [, path, lineStr] = match;
+                const [, path, lineString] = match;
                 if (path.startsWith('./')) {
-                    const line = Number.parseInt(lineStr);
+                    const line = Number.parseInt(lineString);
                     return { path, line };
                 }
             }
@@ -46882,6 +46901,7 @@ function slug(name, options) {
 /**
  * @file Formats test results as a Markdown summary for the GitHub Actions job summary.
  */
+const collator$2 = new Intl.Collator(DEFAULT_LOCALE);
 const MAX_REPORT_LENGTH = 65_535;
 const MAX_ACTIONS_SUMMARY_LENGTH = 1_048_576;
 const DEFAULT_OPTIONS = {
@@ -46981,9 +47001,9 @@ function trimReport(lines, options) {
  * applySort(testRuns);
  */
 function applySort(results) {
-    results.sort((a, b) => a.path.localeCompare(b.path, DEFAULT_LOCALE));
+    results.sort((a, b) => collator$2.compare(a.path, b.path));
     for (const res of results) {
-        res.suites.sort((a, b) => a.name.localeCompare(b.name, DEFAULT_LOCALE));
+        res.suites.sort((a, b) => collator$2.compare(a.name, b.name));
     }
 }
 /**
@@ -47097,7 +47117,7 @@ function getTestRunsReport(testRuns, options) {
         sections.push('', resultsTable);
     }
     if (!options.onlySummary) {
-        const suitesReports = testRuns.flatMap((tr, i) => getSuitesReport(tr, i, options));
+        const suitesReports = testRuns.flatMap((tr, index) => getSuitesReport(tr, index, options));
         sections.push(...suitesReports);
     }
     return sections;
@@ -47667,6 +47687,13 @@ class CoberturaParser extends BaseParser {
 /**
  * @file Parses gcov text output into the shared coverage model.
  */
+const GCOV_FILE_HEADER = /^File\s+'(.+)'$/;
+const GCOV_CREATING_HEADER = /^Creating\s+'(.+)'$/;
+const GCOV_EXTENSION = /\.gcov$/;
+const GCOV_LINES_SUMMARY = /^Lines executed:(\d+\.\d+)% of (\d+)$/;
+const GCOV_BRANCHES_SUMMARY = /^Branches executed:(\d+\.\d+)% of (\d+)$/;
+const GCOV_FUNCTIONS_SUMMARY = /^Functions executed:(\d+\.\d+)% of (\d+)$/;
+const GCOV_SOURCE_LINE = /^\s*([#\d-]+):\s*(\d+):\s*(.*)/;
 /**
  * A parser for gcov text output files.
  * @class GcovParser
@@ -47792,13 +47819,13 @@ class GcovParser {
  * const name = parseSectionFilename("File 'src/index.ts'"); // 'src/index.ts'
  */
 function parseSectionFilename(line) {
-    const fileMatch = /^File\s+'(.+)'$/.exec(line);
+    const fileMatch = GCOV_FILE_HEADER.exec(line);
     if (fileMatch) {
         return fileMatch[1];
     }
-    const creatingMatch = /^Creating\s+'(.+)'$/.exec(line);
+    const creatingMatch = GCOV_CREATING_HEADER.exec(line);
     if (creatingMatch) {
-        return creatingMatch[1].replace(/\.gcov$/, '');
+        return creatingMatch[1].replace(GCOV_EXTENSION, '');
     }
     return undefined;
 }
@@ -47812,11 +47839,11 @@ function parseSectionFilename(line) {
  */
 function applySummaryLine(section, line) {
     const summaryPatterns = [
-        { key: 'linesExecuted', re: /^Lines executed:(\d+\.\d+)% of (\d+)$/ },
-        { key: 'branchesExecuted', re: /^Branches executed:(\d+\.\d+)% of (\d+)$/ },
+        { key: 'linesExecuted', re: GCOV_LINES_SUMMARY },
+        { key: 'branchesExecuted', re: GCOV_BRANCHES_SUMMARY },
         {
             key: 'functionsExecuted',
-            re: /^Functions executed:(\d+\.\d+)% of (\d+)$/,
+            re: GCOV_FUNCTIONS_SUMMARY,
         },
     ];
     for (const { key, re } of summaryPatterns) {
@@ -47840,26 +47867,26 @@ function applySummaryLine(section, line) {
  * const parsed = parseSourceLine('5: 12: return value;');
  */
 function parseSourceLine(line) {
-    const lineMatch = /^\s*([#\d-]+):\s*(\d+):\s*(.*)/.exec(line);
+    const lineMatch = GCOV_SOURCE_LINE.exec(line);
     if (!lineMatch) {
         return undefined;
     }
-    const [, countStr, lineNumberStr, sourceCode] = lineMatch;
+    const [, countString, lineNumberString, sourceCode] = lineMatch;
     return {
-        lineNumber: Number.parseInt(lineNumberStr, 10),
-        executionCount: parseExecutionCount(countStr),
+        lineNumber: Number.parseInt(lineNumberString, 10),
+        executionCount: parseExecutionCount(countString),
         sourceCode: sourceCode || '',
     };
 }
 /**
  * Converts the execution count column of a gcov source line into a number.
- * @param countStr - The raw count column, such as '5', '#####' or '-'.
+ * @param countString - The raw count column, such as '5', '#####' or '-'.
  * @returns The execution count, or null when the line is not executable.
  * @example
  * const count = parseExecutionCount('#####'); // 0
  */
-function parseExecutionCount(countStr) {
-    const trimmed = countStr.trim();
+function parseExecutionCount(countString) {
+    const trimmed = countString.trim();
     if (trimmed === '-') {
         return null;
     }
@@ -47907,21 +47934,21 @@ class GocoverParser {
             throw new Error('Invalid Go coverage format: missing or invalid mode line');
         }
         const fileDataMap = new Map();
-        for (let i = 1; i < lines.length; i++) {
-            const line = lines[i].trim();
+        for (let index = 1; index < lines.length; index++) {
+            const line = lines[index].trim();
             if (line === '')
                 continue;
             const match = GocoverParser.BLOCK_REGEX.exec(line);
             if (!match) {
-                throw new Error(`Invalid Go coverage format at line ${i + 1}: ${line}`);
+                throw new Error(`Invalid Go coverage format at line ${index + 1}: ${line}`);
             }
-            const [, filename, startLine, startCol, endLine, endCol, numStmts, count,] = match;
+            const [, filename, startLine, startCol, endLine, endCol, numberStmts, count,] = match;
             const block = {
                 startLine: Number.parseInt(startLine, 10),
                 startCol: Number.parseInt(startCol, 10),
                 endLine: Number.parseInt(endLine, 10),
                 endCol: Number.parseInt(endCol, 10),
-                numStatements: Number.parseInt(numStmts, 10),
+                numStatements: Number.parseInt(numberStmts, 10),
                 count: Number.parseInt(count, 10),
             };
             if (!fileDataMap.has(filename)) {
@@ -47932,7 +47959,7 @@ class GocoverParser {
         if (fileDataMap.size === 0) {
             throw new Error('No valid Go coverage data found in content');
         }
-        const details = [...fileDataMap.values()].map((fileData) => this.processFileToDetails(fileData));
+        const details = Array.from(fileDataMap.values(), (fileData) => this.processFileToDetails(fileData));
         const overall = this.aggregateOverallCoverage(details);
         return { overall, details };
     }
@@ -47958,7 +47985,7 @@ class GocoverParser {
         const coveredLines = [...lineCoverage.values()].filter(Boolean).length;
         const uncoveredLines = [...lineCoverage.entries()]
             .filter(([, covered]) => !covered)
-            .map(([lineNum]) => lineNum)
+            .map(([lineNumber]) => lineNumber)
             .toSorted((a, b) => a - b);
         // Calculate statement coverage from blocks
         let totalStatements = 0;
@@ -48073,13 +48100,13 @@ class JacocoParser extends BaseParser {
      */
     aggregateCounters(counters) {
         const metrics = {};
-        (counters || []).forEach((c) => {
+        for (const c of counters || []) {
             const type = c.$.type.toLowerCase();
             metrics[type] = {
                 covered: Number(c.$.covered),
                 total: Number(c.$.covered) + Number(c.$.missed),
             };
-        });
+        }
         return {
             lines: metrics.line || { covered: 0, total: 0 },
             branches: metrics.branch || { covered: 0, total: 0 },
@@ -48164,16 +48191,16 @@ class LlvmCovParser {
     lineCounts(segments) {
         const counts = new Map();
         let wrapped;
-        let i = 0;
-        while (i < segments.length) {
-            const line = segments[i][0];
-            let end = i;
+        let index = 0;
+        while (index < segments.length) {
+            const line = segments[index][0];
+            let end = index;
             while (end < segments.length && segments[end][0] === line)
                 end++;
             const starting = segments
-                .slice(i, end)
+                .slice(index, end)
                 .filter((s) => s[3] && !s[5] && s[4]);
-            const startsWithEntry = segments[i][4] && !segments[i][5];
+            const startsWithEntry = segments[index][4] && !segments[index][5];
             const wrappedCounts = !startsWithEntry && wrapped && wrapped[3] && !wrapped[5];
             if (starting.length > 0 || wrappedCounts) {
                 const candidates = starting.map((s) => s[2]);
@@ -48190,7 +48217,7 @@ class LlvmCovParser {
                     counts.set(l, last[2]);
             }
             wrapped = last;
-            i = end;
+            index = end;
         }
         return counts;
     }
@@ -48317,7 +48344,7 @@ class LcovParser {
         builder.lines.total = builder.lines.total || builder.lines.details.size;
         const uncoveredLines = [...builder.lines.details.entries()]
             .filter(([, hits]) => hits === 0)
-            .map(([lineNum]) => lineNum);
+            .map(([lineNumber]) => lineNumber);
         return {
             file: builder.file,
             lines: {
@@ -48492,6 +48519,7 @@ function formatUncoveredLines(lines, options) {
 /**
  * @file Formats coverage results as a Markdown summary for the GitHub Actions job summary.
  */
+const collator$1 = new Intl.Collator();
 /**
  * A formatter that generates a rich Markdown summary for GitHub Actions.
  * @class SummaryFormatter
@@ -48600,7 +48628,7 @@ class SummaryFormatter {
      */
     renderTree(node, options, indent = 0, prefix = '') {
         let rows = [];
-        const sortedKeys = [...node.children.keys()].toSorted((a, b) => a.localeCompare(b));
+        const sortedKeys = [...node.children.keys()].toSorted((a, b) => collator$1.compare(a, b));
         for (const key of sortedKeys) {
             const child = node.children.get(key);
             const currentPath = path$1.join(prefix, key);
@@ -48621,14 +48649,14 @@ class SummaryFormatter {
      */
     buildRow(name, data, options, indent = 0, isSummary = false, filePath) {
         const { statements, branches, methods, lines } = data;
-        const indentStr = ' '.repeat(indent) + (indent > 0 ? '•  ' : '');
+        const indentString = ' '.repeat(indent) + (indent > 0 ? '•  ' : '');
         const fileName = isSummary ? `**${name}**` : name;
         const canLink = Boolean(options.repoUrl && options.sha && filePath);
         const fileLink = canLink && filePath
             ? `[${fileName}](${options.repoUrl}/blob/${options.sha}/${filePath})`
             : fileName;
         const cols = [
-            `${indentStr}${fileLink}`,
+            `${indentString}${fileLink}`,
             this.formatMetric(statements),
             this.formatMetric(branches),
             this.formatMetric(methods),
@@ -48699,6 +48727,7 @@ class SummaryFormatter {
 /**
  * @file Formats coverage results as a coloured, tree-shaped table for the console.
  */
+const collator = new Intl.Collator();
 /**
  * ANSI color codes for console output.
  * @internal
@@ -48818,7 +48847,7 @@ class ConsoleFormatter {
      */
     renderTree(node, fileWidth, indent = 0) {
         const rows = [];
-        const sortedKeys = [...node.children.keys()].toSorted((a, b) => a.localeCompare(b));
+        const sortedKeys = [...node.children.keys()].toSorted((a, b) => collator.compare(a, b));
         for (const key of sortedKeys) {
             const child = node.children.get(key);
             if (child._isFile) {

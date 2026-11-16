@@ -2,7 +2,9 @@
  * @file Defines the in-memory model of test runs, suites, groups and cases.
  */
 
-import { DEFAULT_LOCALE } from './utils/node-utils.js';
+import { DEFAULT_LOCALE } from './utils/node-utilities.js';
+
+const collator = new Intl.Collator(DEFAULT_LOCALE);
 
 export class TestRunResult {
   constructor(
@@ -36,7 +38,7 @@ export class TestRunResult {
   }
 
   sort(deep: boolean): void {
-    this.suites.sort((a, b) => a.name.localeCompare(b.name, DEFAULT_LOCALE));
+    this.suites.sort((a, b) => collator.compare(a.name, b.name));
     if (deep) {
       for (const suite of this.suites) {
         suite.sort(deep);
@@ -76,9 +78,7 @@ export class TestSuiteResult {
   }
 
   sort(deep: boolean): void {
-    this.groups.sort((a, b) =>
-      (a.name ?? '').localeCompare(b.name ?? '', DEFAULT_LOCALE),
-    );
+    this.groups.sort((a, b) => collator.compare(a.name ?? '', b.name ?? ''));
     if (deep) {
       for (const grp of this.groups) {
         grp.sort();
@@ -120,7 +120,7 @@ export class TestGroupResult {
   }
 
   sort(): void {
-    this.tests.sort((a, b) => a.name.localeCompare(b.name, DEFAULT_LOCALE));
+    this.tests.sort((a, b) => collator.compare(a.name, b.name));
   }
 }
 

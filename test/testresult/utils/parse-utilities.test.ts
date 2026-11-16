@@ -2,7 +2,9 @@
  * @file Tests the duration, date and stack trace helpers in the parse utilities.
  */
 
-import { parseNetDuration } from '../../../src/testresult/utils/parse-utils.js';
+import { parseNetDuration } from '../../../src/testresult/utils/parse-utilities.js';
+
+const INVALID_FORMAT_MESSAGE = /^Invalid format/;
 
 describe('parseNetDuration', () => {
   test('returns 0 for 00:00:00', () => {
@@ -37,7 +39,7 @@ describe('parseNetDuration', () => {
 
   test('throws when string has invalid format', () => {
     expect(() => parseNetDuration('12:34:56 not a duration')).toThrow(
-      /^Invalid format/,
+      INVALID_FORMAT_MESSAGE,
     );
   });
 });

@@ -51,7 +51,7 @@ describe('parseStackTraceLine tests', () => {
         const line =
           'at com.foo.loader/foo@9.0/com.foo.Main.run(Main.java:101)';
         expect(parseStackTraceElement(line)).toEqual({
-          classLoader: 'com.foo.loader',
+          loader: 'com.foo.loader',
           moduleNameAndVersion: 'foo@9.0',
           tracePath: 'com.foo.Main.run',
           fileName: 'Main.java',
@@ -62,7 +62,7 @@ describe('parseStackTraceLine tests', () => {
       test('with classloader', async () => {
         const line = 'at com.foo.loader//com.foo.Main.run(Main.java:101)';
         expect(parseStackTraceElement(line)).toEqual({
-          classLoader: 'com.foo.loader',
+          loader: 'com.foo.loader',
           tracePath: 'com.foo.Main.run',
           fileName: 'Main.java',
           lineStr: '101',
@@ -142,7 +142,7 @@ describe('java stack trace patterns match the original pattern', () => {
 
   test('keeps the module prefix of a frame', () => {
     const line = 'at app//jdk.internal/com.example.App.run(App.java:42)';
-    expect(parseStackTraceElement(line)?.classLoader).toBe('app');
+    expect(parseStackTraceElement(line)?.loader).toBe('app');
   });
 
   test('stays fast on a long adversarial line', () => {

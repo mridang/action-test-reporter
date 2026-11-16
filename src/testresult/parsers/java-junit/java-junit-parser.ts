@@ -13,7 +13,7 @@ import {
   TestSuite,
 } from './java-junit-types.js';
 import { parseStackTraceElement } from './java-stack-trace-element-parser.js';
-import { normalizeFilePath } from '../../utils/path-utils.js';
+import { normalizeFilePath } from '../../utils/path-utilities.js';
 
 import {
   TestCaseError,
@@ -23,6 +23,8 @@ import {
   TestRunResult,
   TestSuiteResult,
 } from '../../test-results.js';
+
+const LINE_BREAK_PATTERN = /\r?\n/;
 
 /**
  * Parser for JUnit-style XML reports commonly produced by Java test frameworks.
@@ -114,10 +116,10 @@ export class JavaJunitParser implements TestParser {
 
     const groups: { name: string; tests: TestCase[] }[] = [];
     for (const tc of suite.testcase) {
-      const className = tc.$.classname === suite.$.name ? '' : tc.$.classname;
-      let grp = groups.find((g) => g.name === className);
+      const groupName = tc.$.classname === suite.$.name ? '' : tc.$.classname;
+      let grp = groups.find((g) => g.name === groupName);
       if (grp === undefined) {
-        grp = { name: className, tests: [] };
+        grp = { name: groupName, tests: [] };
         groups.push(grp);
       }
       grp.tests.push(tc);
@@ -182,10 +184,10 @@ export class JavaJunitParser implements TestParser {
   private exceptionThrowSource(
     stackTrace: string,
   ): { filePath: string; line: number } | undefined {
-    const lines = stackTrace.split(/\r?\n/);
+    const lines = stackTrace.split(LINE_BREAK_PATTERN);
 
-    for (const str of lines) {
-      const stackTraceElement = parseStackTraceElement(str);
+    for (const text of lines) {
+      const stackTraceElement = parseStackTraceElement(text);
       if (stackTraceElement) {
         const { tracePath, fileName, lineStr } = stackTraceElement;
         const filePath = this.getFilePath(tracePath, fileName);
@@ -214,14 +216,16 @@ export class JavaJunitParser implements TestParser {
     }
 
     for (const filePath of files) {
-      const dirs = path.dirname(filePath).split(/\//g);
-      if (packageParts.length > dirs.length) {
+      const directories = path.dirname(filePath).split(/\//g);
+      if (packageParts.length > directories.length) {
         continue;
       }
-      if (dirs.length > packageParts.length) {
-        dirs.splice(0, dirs.length - packageParts.length);
+      if (directories.length > packageParts.length) {
+        directories.splice(0, directories.length - packageParts.length);
       }
-      const isMatch = packageParts.every((part, i) => part === dirs[i]);
+      const isMatch = packageParts.every(
+        (part, index) => part === directories[index],
+      );
       if (isMatch) {
         return filePath;
       }

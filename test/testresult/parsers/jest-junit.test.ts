@@ -11,8 +11,15 @@ import {
   DEFAULT_OPTIONS,
   getReport,
 } from '../../../src/testresult/formatter/summary-formatter.js';
-import { normalizeFilePath } from '../../../src/testresult/utils/path-utils.js';
+import { normalizeFilePath } from '../../../src/testresult/utils/path-utilities.js';
 import { getDirname } from '../helpers/dir.js';
+
+const TESTS_FAILED_BADGE = /^!\[Tests failed]/;
+const CUSTOM_TITLE_HEADING = /^# My Custom Title\n/;
+const SUMMARY_HEADING = /^## 1 passed, 4 failed and 1 skipped\n/;
+const CUSTOM_TITLE_WITH_SUMMARY =
+  /^# My Custom Title\n## 1 passed, 4 failed and 1 skipped\n/;
+const NOT_JEST_JUNIT_REPORT = /Not a Jest JUnit report/;
 
 const testDir = getDirname(import.meta.url);
 
@@ -37,7 +44,7 @@ describe('jest-junit tests', () => {
 
     const parser = new JestJunitParser(opts);
     await expect(parser.parse(filePath, fileContent)).rejects.toThrow(
-      /Not a Jest JUnit report/,
+      NOT_JEST_JUNIT_REPORT,
     );
   });
 
@@ -286,7 +293,7 @@ describe('jest-junit tests', () => {
     const parser = new JestJunitParser(opts);
     const result = await parser.parse(filePath, fileContent);
     const report = getReport([result]);
-    expect(report).toMatch(/^!\[Tests failed]/);
+    expect(report).toMatch(TESTS_FAILED_BADGE);
   });
 
   test.each([
@@ -318,7 +325,7 @@ describe('jest-junit tests', () => {
         ...DEFAULT_OPTIONS,
         reportTitle,
       });
-      expect(report).toMatch(/^!\[Tests failed]/);
+      expect(report).toMatch(TESTS_FAILED_BADGE);
     },
   );
 
@@ -340,7 +347,7 @@ describe('jest-junit tests', () => {
       ...DEFAULT_OPTIONS,
       reportTitle: 'My Custom Title',
     });
-    expect(report).toMatch(/^# My Custom Title\n/);
+    expect(report).toMatch(CUSTOM_TITLE_HEADING);
   });
 
   test('report ignores collapsed setting when configured to always', async () => {
@@ -468,7 +475,7 @@ describe('jest-junit tests', () => {
     const result = await parser.parse(filePath, fileContent);
     const shortSummary = '1 passed, 4 failed and 1 skipped';
     const report = getReport([result], DEFAULT_OPTIONS, shortSummary);
-    expect(report).toMatch(/^## 1 passed, 4 failed and 1 skipped\n/);
+    expect(report).toMatch(SUMMARY_HEADING);
   });
 
   test('report includes a custom report title and short summary', async () => {
@@ -494,8 +501,6 @@ describe('jest-junit tests', () => {
       },
       shortSummary,
     );
-    expect(report).toMatch(
-      /^# My Custom Title\n## 1 passed, 4 failed and 1 skipped\n/,
-    );
+    expect(report).toMatch(CUSTOM_TITLE_WITH_SUMMARY);
   });
 });

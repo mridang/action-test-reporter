@@ -3,6 +3,7 @@
  */
 
 import { readFile } from 'node:fs/promises';
+// eslint-disable-next-line e18e/ban-dependencies -- tinyglobby is not a drop-in replacement for fast-glob, so the swap is deferred to keep file matching identical
 import glob from 'fast-glob';
 import { CoverageFile, CoverageInputProvider } from './input-provider.js';
 

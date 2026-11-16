@@ -2,7 +2,10 @@
  * @file Provides helpers that read exception details and locale settings from Node-based results.
  */
 
-import { normalizeFilePath } from './path-utils.js';
+import { normalizeFilePath } from './path-utilities.js';
+
+const LINE_BREAK_PATTERN = /\r?\n/;
+const STACK_FRAME_PATTERN = /^[^(]*\((.*):(\d+):\d+\)$/;
 
 export const DEFAULT_LOCALE = 'en-US';
 
@@ -18,12 +21,12 @@ export const DEFAULT_LOCALE = 'en-US';
 export function getExceptionSource(
   stackTrace: string,
   trackedFiles: string[],
-  getRelativePath: (str: string) => string,
+  getRelativePath: (line: string) => string,
 ): { path: string; line: number } | undefined {
-  const lines = stackTrace.split(/\r?\n/);
+  const lines = stackTrace.split(LINE_BREAK_PATTERN);
 
-  for (const str of lines) {
-    const frame = getTrackedFrame(str, trackedFiles, getRelativePath);
+  for (const line of lines) {
+    const frame = getTrackedFrame(line, trackedFiles, getRelativePath);
     if (frame) {
       return frame;
     }
@@ -35,21 +38,21 @@ export function getExceptionSource(
  * Extracts the file path and line number from the parenthesized location at the end of a stack trace line.
  * The pattern is anchored at the start and skips to the first opening parenthesis with a negated class, so the
  * scan stays linear on long lines.
- * @param str - A single line of the stack trace.
+ * @param text - A single line of the stack trace.
  * @returns The file path and the line number text, or undefined when the line has no location.
  * @example
  * const match = matchStackFrame('at run (/work/src/index.ts:10:5)');
  */
 export function matchStackFrame(
-  str: string,
+  text: string,
 ): [path: string, line: string] | undefined {
-  const match = /^[^(]*\((.*):(\d+):\d+\)$/.exec(str);
+  const match = STACK_FRAME_PATTERN.exec(text);
   return match === null ? undefined : [match[1], match[2]];
 }
 
 /**
  * Parses one stack trace line and returns it when it points to a tracked project file.
- * @param str - A single line of the stack trace.
+ * @param text - A single line of the stack trace.
  * @param trackedFiles - The files tracked by Git.
  * @param getRelativePath - Converts a frame path into a path relative to the repository.
  * @returns The relative path and line of the frame, or undefined when the line does not match.
@@ -57,16 +60,16 @@ export function matchStackFrame(
  * const frame = getTrackedFrame('at run (/work/src/index.ts:10:5)', files, (p) => p);
  */
 function getTrackedFrame(
-  str: string,
+  text: string,
   trackedFiles: string[],
-  getRelativePath: (str: string) => string,
+  getRelativePath: (line: string) => string,
 ): { path: string; line: number } | undefined {
-  const match = matchStackFrame(str);
+  const match = matchStackFrame(text);
   if (match === undefined) {
     return undefined;
   }
-  const [fileStr, lineStr] = match;
-  const filePath = normalizeFilePath(fileStr);
+  const [fileString, lineString] = match;
+  const filePath = normalizeFilePath(fileString);
   if (filePath.startsWith('internal/') || filePath.includes('/node_modules/')) {
     return undefined;
   }
@@ -74,5 +77,5 @@ function getTrackedFrame(
   if (!path || !trackedFiles.includes(path)) {
     return undefined;
   }
-  return { path, line: Number.parseInt(lineStr) };
+  return { path, line: Number.parseInt(lineString) };
 }

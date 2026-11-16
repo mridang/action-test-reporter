@@ -52,13 +52,15 @@ export class GocoverParser implements CoverageParser {
 
     const fileDataMap = new Map<string, GocoverFileData>();
 
-    for (let i = 1; i < lines.length; i++) {
-      const line = lines[i].trim();
+    for (let index = 1; index < lines.length; index++) {
+      const line = lines[index].trim();
       if (line === '') continue;
 
       const match = GocoverParser.BLOCK_REGEX.exec(line);
       if (!match) {
-        throw new Error(`Invalid Go coverage format at line ${i + 1}: ${line}`);
+        throw new Error(
+          `Invalid Go coverage format at line ${index + 1}: ${line}`,
+        );
       }
 
       const [
@@ -68,7 +70,7 @@ export class GocoverParser implements CoverageParser {
         startCol,
         endLine,
         endCol,
-        numStmts,
+        numberStmts,
         count,
       ] = match;
 
@@ -77,7 +79,7 @@ export class GocoverParser implements CoverageParser {
         startCol: Number.parseInt(startCol, 10),
         endLine: Number.parseInt(endLine, 10),
         endCol: Number.parseInt(endCol, 10),
-        numStatements: Number.parseInt(numStmts, 10),
+        numStatements: Number.parseInt(numberStmts, 10),
         count: Number.parseInt(count, 10),
       };
 
@@ -91,7 +93,7 @@ export class GocoverParser implements CoverageParser {
       throw new Error('No valid Go coverage data found in content');
     }
 
-    const details = [...fileDataMap.values()].map((fileData) =>
+    const details = Array.from(fileDataMap.values(), (fileData) =>
       this.processFileToDetails(fileData),
     );
     const overall = this.aggregateOverallCoverage(details);
@@ -123,7 +125,7 @@ export class GocoverParser implements CoverageParser {
     const coveredLines = [...lineCoverage.values()].filter(Boolean).length;
     const uncoveredLines = [...lineCoverage.entries()]
       .filter(([, covered]) => !covered)
-      .map(([lineNum]) => lineNum)
+      .map(([lineNumber]) => lineNumber)
       .toSorted((a, b) => a - b);
 
     // Calculate statement coverage from blocks

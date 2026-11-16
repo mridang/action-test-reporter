@@ -6,8 +6,8 @@ import { ParseOptions, TestParser } from '../../test-parser.js';
 import { parseStringPromise } from 'xml2js';
 
 import { NunitReport, TestCase, TestSuite } from './dotnet-nunit-types.js';
-import { getExceptionSource } from '../../utils/node-utils.js';
-import { getBasePath, normalizeFilePath } from '../../utils/path-utils.js';
+import { getExceptionSource } from '../../utils/node-utilities.js';
+import { getBasePath, normalizeFilePath } from '../../utils/path-utilities.js';
 
 import {
   TestExecutionResult,
