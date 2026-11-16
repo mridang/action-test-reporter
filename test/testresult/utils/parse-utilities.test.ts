@@ -2,6 +2,7 @@
  * @file Tests the duration, date and stack trace helpers in the parse utilities.
  */
 
+import { describe, expect, test } from '@jest/globals';
 import { parseNetDuration } from '../../../src/testresult/utils/parse-utilities.js';
 
 const INVALID_FORMAT_MESSAGE = /^Invalid format/;

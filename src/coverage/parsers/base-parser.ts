@@ -3,7 +3,7 @@
  */
 
 import { parseStringPromise } from 'xml2js';
-import { CoverageParser, CoverageData } from './coverage-parser.js';
+import type { CoverageParser, CoverageData } from './coverage-parser.js';
 
 /**
  * An abstract base class for XML-based coverage report parsers.
@@ -23,7 +23,7 @@ export abstract class BaseParser<T> implements CoverageParser {
    * coverage data.
    */
   public async parse(content: string): Promise<CoverageData> {
-    const xml: T = await parseStringPromise(content);
+    const xml = (await parseStringPromise(content)) as T;
     return this.process(xml);
   }
 

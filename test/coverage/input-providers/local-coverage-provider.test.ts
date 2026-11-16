@@ -2,6 +2,7 @@
  * @file Tests that the local coverage provider finds the coverage files it is pointed at.
  */
 
+import { describe, expect, test } from '@jest/globals';
 import { promises as fs } from 'node:fs';
 import path from 'node:path';
 import { tmpdir } from 'node:os';

@@ -2,7 +2,7 @@
  * @file Defines the contract that every coverage output formatter implements.
  */
 
-import { CoverageData } from '../parsers/coverage-parser.js';
+import type { CoverageData } from '../parsers/coverage-parser.js';
 
 /**
  * Defines the contract for a coverage report formatter.

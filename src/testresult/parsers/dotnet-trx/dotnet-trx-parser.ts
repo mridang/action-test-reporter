@@ -4,22 +4,21 @@
 
 import { parseStringPromise } from 'xml2js';
 
-import {
+import type {
   ErrorInfo,
   Outcome,
   TrxReport,
   UnitTest,
   UnitTestResult,
 } from './dotnet-trx-types.js';
-import { ParseOptions, TestParser } from '../../test-parser.js';
+import type { ParseOptions, TestParser } from '../../test-parser.js';
 
 import { getBasePath, normalizeFilePath } from '../../utils/path-utilities.js';
 import { parseIsoDate, parseNetDuration } from '../../utils/parse-utilities.js';
 
+import type { TestCaseError, TestExecutionResult } from '../../test-results.js';
 import {
-  TestCaseError,
   TestCaseResult,
-  TestExecutionResult,
   TestGroupResult,
   TestRunResult,
   TestSuiteResult,
@@ -87,7 +86,7 @@ export class DotnetTrxParser implements TestParser {
     try {
       return (await parseStringPromise(content)) as TrxReport;
     } catch (error) {
-      throw new Error(`Invalid XML at ${path}\n\n${error}`);
+      throw new Error(`Invalid XML at ${path}\n\n${String(error)}`);
     }
   }
 
@@ -207,7 +206,7 @@ export class DotnetTrxParser implements TestParser {
       path,
       line,
       message,
-      details: `${message}`,
+      details: message,
     };
   }
 

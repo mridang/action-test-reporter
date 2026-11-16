@@ -2,7 +2,7 @@
  * @file Declares the options and contract that every test result parser implements.
  */
 
-import { TestRunResult } from './test-results.js';
+import type { TestRunResult } from './test-results.js';
 
 export interface ParseOptions {
   parseErrors: boolean;

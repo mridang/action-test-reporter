@@ -10,7 +10,7 @@ export class TestRunResult {
   constructor(
     readonly path: string,
     readonly suites: TestSuiteResult[],
-    private totalTime?: number,
+    private readonly totalTime?: number,
   ) {}
 
   get tests(): number {
@@ -51,7 +51,7 @@ export class TestSuiteResult {
   constructor(
     readonly name: string,
     readonly groups: TestGroupResult[],
-    private totalTime?: number,
+    private readonly totalTime?: number,
   ) {}
 
   get tests(): number {

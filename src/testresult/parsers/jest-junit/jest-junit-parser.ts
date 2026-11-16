@@ -2,17 +2,16 @@
  * @file Parses JUnit XML test results produced by Jest.
  */
 
-import { ParseOptions, TestParser } from '../../test-parser.js';
+import type { ParseOptions, TestParser } from '../../test-parser.js';
 import { parseStringPromise } from 'xml2js';
 
-import { JunitReport, TestCase, TestSuite } from './jest-junit-types.js';
+import type { JunitReport, TestCase, TestSuite } from './jest-junit-types.js';
 import { getExceptionSource } from '../../utils/node-utilities.js';
 import { getBasePath, normalizeFilePath } from '../../utils/path-utilities.js';
 
+import type { TestCaseError, TestExecutionResult } from '../../test-results.js';
 import {
-  TestCaseError,
   TestCaseResult,
-  TestExecutionResult,
   TestGroupResult,
   TestRunResult,
   TestSuiteResult,
@@ -46,7 +45,7 @@ export class JestJunitParser implements TestParser {
     try {
       return (await parseStringPromise(content)) as JunitReport;
     } catch (error) {
-      throw new Error(`Invalid XML at ${path}\n\n${error}`);
+      throw new Error(`Invalid XML at ${path}\n\n${String(error)}`);
     }
   }
 
@@ -148,7 +147,7 @@ export class JestJunitParser implements TestParser {
     }
 
     const details =
-      typeof tc.failure[0] === 'string' ? tc.failure[0] : tc.failure[0]['_'];
+      typeof tc.failure[0] === 'string' ? tc.failure[0] : tc.failure[0]._;
     let path;
     let line;
 

@@ -3,8 +3,8 @@
  */
 
 import path from 'node:path';
-import { CoverageFormatter } from './coverage-formatter.js';
-import {
+import type { CoverageFormatter } from './coverage-formatter.js';
+import type {
   CoverageData,
   FileCoverageDetails,
   CoverageMetrics,
@@ -168,8 +168,8 @@ export class SummaryFormatter implements CoverageFormatter<SummaryOptions> {
   private renderTree(
     node: CoverageNode,
     options: SummaryOptions,
-    indent: number = 0,
-    prefix: string = '',
+    indent = 0,
+    prefix = '',
   ): string[] {
     let rows: string[] = [];
     const sortedKeys = [...node.children.keys()].toSorted((a, b) =>

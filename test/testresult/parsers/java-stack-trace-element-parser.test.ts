@@ -2,6 +2,7 @@
  * @file Tests the parsing of Java stack trace lines.
  */
 
+import { describe, expect, test } from '@jest/globals';
 import { randomStrings, referencePattern } from '../helpers/fuzz.js';
 import {
   parseStackTraceElement,
@@ -132,7 +133,7 @@ describe('java stack trace patterns match the original pattern', () => {
       14,
     );
     for (const sample of samples) {
-      const match = originalPrefixRe.exec(sample) as RegExpExecArray;
+      const match = originalPrefixRe.exec(sample)!;
       expect({ sample, split: splitClassLoaderPrefix(sample) }).toEqual({
         sample,
         split: [match[1], match[2]],

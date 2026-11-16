@@ -2,6 +2,7 @@
  * @file Tests the Markdown coverage summary formatter against the expected output.
  */
 
+import { describe, expect, test } from '@jest/globals';
 import { mkdir, readFile, writeFile } from 'node:fs/promises';
 import path from 'node:path';
 

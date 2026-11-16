@@ -2,18 +2,17 @@
  * @file Parses the JSON report written by Mocha.
  */
 
-import { ParseOptions, TestParser } from '../../test-parser.js';
+import type { ParseOptions, TestParser } from '../../test-parser.js';
+import type { TestCaseError, TestExecutionResult } from '../../test-results.js';
 import {
-  TestCaseError,
   TestCaseResult,
-  TestExecutionResult,
   TestGroupResult,
   TestRunResult,
   TestSuiteResult,
 } from '../../test-results.js';
 import { getExceptionSource } from '../../utils/node-utilities.js';
 import { getBasePath, normalizeFilePath } from '../../utils/path-utilities.js';
-import { MochaJson, MochaJsonTest } from './mocha-json-types.js';
+import type { MochaJson, MochaJsonTest } from './mocha-json-types.js';
 
 /**
  * Parser for JSON reports produced by Mocha's built-in JSON reporter.
@@ -32,9 +31,9 @@ export class MochaJsonParser implements TestParser {
 
   private getMochaJson(path: string, content: string): MochaJson {
     try {
-      return JSON.parse(content);
+      return JSON.parse(content) as MochaJson;
     } catch (error) {
-      throw new Error(`Invalid JSON at ${path}\n\n${error}`);
+      throw new Error(`Invalid JSON at ${path}\n\n${String(error)}`);
     }
   }
 

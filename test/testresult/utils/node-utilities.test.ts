@@ -2,6 +2,7 @@
  * @file Tests how stack trace frames are read from Node-based results.
  */
 
+import { describe, expect, test } from '@jest/globals';
 import { randomStrings, referencePattern } from '../helpers/fuzz.js';
 import { matchStackFrame } from '../../../src/testresult/utils/node-utilities.js';
 

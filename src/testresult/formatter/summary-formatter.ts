@@ -3,7 +3,7 @@
  */
 
 import { info, warning } from '@actions/core';
-import {
+import type {
   TestExecutionResult,
   TestRunResult,
   TestSuiteResult,

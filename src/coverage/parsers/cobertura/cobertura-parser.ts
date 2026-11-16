@@ -4,12 +4,12 @@
 
 import path from 'node:path';
 import { BaseParser } from '../base-parser.js';
-import {
+import type {
   CoverageData,
   FileCoverageDetails,
   CoverageMetrics,
 } from '../coverage-parser.js';
-import {
+import type {
   CoberturaXml,
   CoberturaClass,
   CoberturaLine,
@@ -34,7 +34,7 @@ export class CoberturaParser extends BaseParser<CoberturaXml> {
    * @example
    * const data = await parser.parse(xml);
    */
-  protected process(xml: CoberturaXml): Promise<CoverageData> {
+  protected async process(xml: CoberturaXml): Promise<CoverageData> {
     const coverage = xml.coverage;
     const overall: CoverageData['overall'] = {
       lines: {
@@ -76,7 +76,7 @@ export class CoberturaParser extends BaseParser<CoberturaXml> {
       };
     });
 
-    return Promise.resolve({ overall, details });
+    return { overall, details };
   }
 
   /**
@@ -142,7 +142,7 @@ export class CoberturaParser extends BaseParser<CoberturaXml> {
    * const branches = this.getBranchCoverage(classElement);
    */
   private getBranchCoverage(c: CoberturaClass): CoverageMetrics {
-    if (!c.lines || !c.lines[0].line) {
+    if (!c.lines?.[0].line) {
       return { total: 0, covered: 0 };
     }
 

@@ -3,7 +3,7 @@
  */
 
 import { promises as fs } from 'node:fs';
-import { CoverageData, CoverageParser } from './coverage-parser.js';
+import type { CoverageData, CoverageParser } from './coverage-parser.js';
 import { CloverParser } from './clover/clover-parser.js';
 import { CoberturaParser } from './cobertura/cobertura-parser.js';
 import { GcovParser } from './gcov/gcov-parser.js';

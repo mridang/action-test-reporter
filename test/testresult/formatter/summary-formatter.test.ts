@@ -2,10 +2,11 @@
  * @file Tests the test result badge and the Markdown summary formatter.
  */
 
+import { describe, expect, test } from '@jest/globals';
+import type { ReportOptions } from '../../../src/testresult/formatter/summary-formatter.js';
 import {
   getBadge,
   DEFAULT_OPTIONS,
-  ReportOptions,
 } from '../../../src/testresult/formatter/summary-formatter.js';
 
 describe('getBadge', () => {

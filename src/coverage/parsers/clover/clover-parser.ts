@@ -3,8 +3,8 @@
  */
 
 import { BaseParser } from '../base-parser.js';
-import { CoverageData, FileCoverageDetails } from '../coverage-parser.js';
-import { CloverFile, CloverXml } from './clover-types.js';
+import type { CoverageData, FileCoverageDetails } from '../coverage-parser.js';
+import type { CloverFile, CloverXml } from './clover-types.js';
 
 /**
  * A parser for Clover XML coverage reports.
@@ -22,7 +22,7 @@ export class CloverParser extends BaseParser<CloverXml> {
    * @example
    * const data = await parser.parse(xml);
    */
-  protected process(xml: CloverXml): Promise<CoverageData> {
+  protected async process(xml: CloverXml): Promise<CoverageData> {
     const project = xml.coverage.project[0];
     const projectMetrics = project.metrics[0].$;
     const overall: CoverageData['overall'] = {
@@ -78,6 +78,6 @@ export class CloverParser extends BaseParser<CloverXml> {
       },
     );
 
-    return Promise.resolve({ overall, details });
+    return { overall, details };
   }
 }

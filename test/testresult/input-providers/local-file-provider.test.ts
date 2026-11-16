@@ -2,6 +2,7 @@
  * @file Tests that the local file provider reads the test result files it matches.
  */
 
+import { describe, expect, test } from '@jest/globals';
 import { promises as fs } from 'node:fs';
 import path from 'node:path';
 import { tmpdir } from 'node:os';
@@ -16,8 +17,8 @@ describe('LocalFileProvider', () => {
     const provider = new LocalFileProvider('unit', [path.join(dir, '*.xml')]);
     const files = await provider.load();
 
-    expect(files['unit']).toHaveLength(1);
-    expect(files['unit'][0].file).toBe(reportPath);
-    expect(files['unit'][0].content).toContain('testsuites');
+    expect(files.unit).toHaveLength(1);
+    expect(files.unit[0].file).toBe(reportPath);
+    expect(files.unit[0].content).toContain('testsuites');
   });
 });

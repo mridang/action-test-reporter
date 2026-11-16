@@ -2,7 +2,7 @@
  * @file Parses xUnit XML test results produced by Python test runners.
  */
 
-import { ParseOptions } from '../../test-parser.js';
+import type { ParseOptions } from '../../test-parser.js';
 import { JavaJunitParser } from '../java-junit/java-junit-parser.js';
 
 /**
