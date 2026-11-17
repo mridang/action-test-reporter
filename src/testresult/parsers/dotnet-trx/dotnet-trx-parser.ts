@@ -4,6 +4,14 @@
 
 import { parseStringPromise } from 'xml2js';
 
+import { getBasePath, normalizeFilePath } from '../../utils/path-utilities.js';
+import { parseIsoDate, parseNetDuration } from '../../utils/parse-utilities.js';
+import {
+  TestCaseResult,
+  TestGroupResult,
+  TestRunResult,
+  TestSuiteResult,
+} from '../../test-results.js';
 import type {
   ErrorInfo,
   Outcome,
@@ -13,28 +21,21 @@ import type {
 } from './dotnet-trx-types.js';
 import type { ParseOptions, TestParser } from '../../test-parser.js';
 
-import { getBasePath, normalizeFilePath } from '../../utils/path-utilities.js';
-import { parseIsoDate, parseNetDuration } from '../../utils/parse-utilities.js';
-
 import type { TestCaseError, TestExecutionResult } from '../../test-results.js';
-import {
-  TestCaseResult,
-  TestGroupResult,
-  TestRunResult,
-  TestSuiteResult,
-} from '../../test-results.js';
 
-const DOTNET_EXCEPTION_LOCATION = / in (.+):line (\d+)$/;
+const DOTNET_EXCEPTION_LOCATION = / in (.+):line (\d+)$/u;
 
 /**
  * Matches a line break together with the carriage returns in front of it. The lookbehind makes the match start at
  * the first carriage return of a run, so a long run of carriage returns without a line feed is scanned only once.
  */
-export const STACK_TRACE_LINE_BREAK = /(?<!\r)\r*\n/;
+export const STACK_TRACE_LINE_BREAK = /(?<!\r)\r*\n/u;
 
 class TestClass {
-  constructor(readonly name: string) {}
-  readonly tests: Test[] = [];
+  constructor(
+    readonly name: string,
+    readonly tests: Test[],
+  ) {}
 }
 
 class Test {
@@ -86,7 +87,9 @@ export class DotnetTrxParser implements TestParser {
     try {
       return (await parseStringPromise(content)) as TrxReport;
     } catch (error) {
-      throw new Error(`Invalid XML at ${path}\n\n${String(error)}`);
+      throw new Error(`Invalid XML at ${path}\n\n${String(error)}`, {
+        cause: error,
+      });
     }
   }
 
@@ -101,12 +104,11 @@ export class DotnetTrxParser implements TestParser {
       return [];
     }
 
-    const unitTests: { [id: string]: UnitTest } = {};
-    for (const td of trx.TestRun.TestDefinitions) {
-      for (const ut of td.UnitTest) {
-        unitTests[ut.$.id] = ut;
-      }
-    }
+    const unitTests: { [id: string]: UnitTest } = Object.fromEntries(
+      trx.TestRun.TestDefinitions.flatMap((td) =>
+        td.UnitTest.map((ut): [string, UnitTest] => [ut.$.id, ut]),
+      ),
+    );
 
     const unitTestsResults = trx.TestRun.Results.flatMap(
       (r) => r.UnitTestResult,
@@ -115,14 +117,8 @@ export class DotnetTrxParser implements TestParser {
       test: unitTests[result.$.testId],
     }));
 
-    const testClasses: { [name: string]: TestClass } = {};
-    for (const r of unitTestsResults) {
+    const entries = unitTestsResults.map((r) => {
       const testClassName = r.test.TestMethod[0].$.className ?? 'Unclassified';
-      let tc = testClasses[testClassName] as TestClass | undefined;
-      if (tc === undefined) {
-        tc = new TestClass(testClassName);
-        testClasses[tc.name] = tc;
-      }
       const error = this.getErrorInfo(r.result);
       const durationAttribute = r.result.$.duration;
       const duration = durationAttribute
@@ -136,11 +132,22 @@ export class DotnetTrxParser implements TestParser {
           ? resultTestName.slice(testClassName.length + 1)
           : resultTestName;
 
-      const test = new Test(testName, r.result.$.outcome, duration, error);
-      tc.tests.push(test);
-    }
+      return {
+        testClassName,
+        test: new Test(testName, r.result.$.outcome, duration, error),
+      };
+    });
 
-    return Object.values(testClasses);
+    return Array.from(
+      new Set(entries.map((entry) => entry.testClassName)),
+      (name) =>
+        new TestClass(
+          name,
+          entries
+            .filter((entry) => entry.testClassName === name)
+            .map((entry) => entry.test),
+        ),
+    );
   }
 
   private getTestRunResult(
@@ -193,14 +200,9 @@ export class DotnetTrxParser implements TestParser {
 
     const stackTrace = test.error.StackTrace[0];
     const message = `${test.error.Message[0]}\n${stackTrace}`;
-    let path;
-    let line;
-
     const src = this.exceptionThrowSource(stackTrace);
-    if (src) {
-      path = src.path;
-      line = src.line;
-    }
+    const path = src?.path;
+    const line = src?.line;
 
     return {
       path,
@@ -217,6 +219,7 @@ export class DotnetTrxParser implements TestParser {
     const re = DOTNET_EXCEPTION_LOCATION;
     const { trackedFiles } = this.options;
 
+    // eslint-disable-next-line functional/no-loop-statements -- the lines are scanned in order and the first tracked frame wins, so later lines are never evaluated
     for (const text of lines) {
       const match = re.exec(text);
       if (match !== null) {
@@ -225,11 +228,11 @@ export class DotnetTrxParser implements TestParser {
         const workDir = this.getWorkDir(filePath);
         const file = workDir ? filePath.slice(workDir.length) : undefined;
         if (file !== undefined && trackedFiles.includes(file)) {
-          const line = Number.parseInt(lineString);
-          return { path: file, line };
+          return { path: file, line: Number.parseInt(lineString, 10) };
         }
       }
     }
+    return undefined;
   }
 
   private getWorkDir(path: string): string | undefined {

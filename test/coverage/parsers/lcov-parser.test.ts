@@ -2,9 +2,9 @@
  * @file Tests the LCOV coverage parser and its summary output.
  */
 
-import { describe, expect, test } from '@jest/globals';
 import { mkdir, readFile, writeFile } from 'node:fs/promises';
 import path from 'node:path';
+import { describe, expect, test } from '@jest/globals';
 
 import { SummaryFormatter } from '../../../src/coverage/formatter/summary-formatter.js';
 import { LcovParser } from '../../../src/coverage/parsers/lcov/lcov-parser.js';

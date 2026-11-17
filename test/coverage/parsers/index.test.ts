@@ -2,15 +2,15 @@
  * @file Tests the detection of the coverage format of a report.
  */
 
-import { describe, expect, it } from '@jest/globals';
-import { promises as fs } from 'node:fs';
+import { promises } from 'node:fs';
 import path from 'node:path';
+import { describe, expect, it } from '@jest/globals';
 import { detectCoverage } from '../../../src/coverage/parsers/index.js';
 import { LlvmCovParser } from '../../../src/coverage/parsers/llvm-cov/llvm-cov-parser.js';
 
 describe('detectCoverage', () => {
   it('should detect an llvm-cov JSON export', async () => {
-    const content = await fs.readFile(
+    const content = await promises.readFile(
       path.join(
         process.cwd(),
         'test',

@@ -14,15 +14,17 @@ export class LocalCoverageProvider implements CoverageInputProvider {
   constructor(private readonly patterns: string[]) {}
 
   public async load(): Promise<CoverageFile[]> {
-    const result: CoverageFile[] = [];
-    for (const pattern of this.patterns) {
-      const paths = await glob(pattern, { dot: true });
-      for (const file of paths) {
-        const content = await readFile(file, { encoding: 'utf8' });
-        result.push({ file, content });
-      }
-    }
-
-    return result;
+    const perPattern = await Promise.all(
+      this.patterns.map(async (pattern) => {
+        const paths = await glob(pattern, { dot: true });
+        return Promise.all(
+          paths.map(async (file) => ({
+            file,
+            content: await readFile(file, { encoding: 'utf8' }),
+          })),
+        );
+      }),
+    );
+    return perPattern.flat();
   }
 }

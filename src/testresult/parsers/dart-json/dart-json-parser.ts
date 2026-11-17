@@ -2,9 +2,23 @@
  * @file Parses the JSON event stream written by the Dart test runner.
  */
 
-import type { ParseOptions, TestParser } from '../../test-parser.js';
-
 import { getBasePath, normalizeFilePath } from '../../utils/path-utilities.js';
+import {
+  TestRunResult,
+  TestSuiteResult,
+  TestGroupResult,
+  TestCaseResult,
+} from '../../test-results.js';
+import {
+  isSuiteEvent,
+  isGroupEvent,
+  isTestStartEvent,
+  isTestDoneEvent,
+  isErrorEvent,
+  isDoneEvent,
+  isMessageEvent,
+} from './dart-json-types.js';
+import type { ParseOptions, TestParser } from '../../test-parser.js';
 
 import type {
   ReportEvent,
@@ -15,35 +29,20 @@ import type {
   ErrorEvent,
   MessageEvent,
 } from './dart-json-types.js';
-import {
-  isSuiteEvent,
-  isGroupEvent,
-  isTestStartEvent,
-  isTestDoneEvent,
-  isErrorEvent,
-  isDoneEvent,
-  isMessageEvent,
-} from './dart-json-types.js';
 
 import type { TestExecutionResult, TestCaseError } from '../../test-results.js';
-import {
-  TestRunResult,
-  TestSuiteResult,
-  TestGroupResult,
-  TestCaseResult,
-} from '../../test-results.js';
 
-const DART_FRAME_PATTERN = /^(?!package:)(.*)\s(\d+):\d+\s/;
-const FLUTTER_FRAME_PATTERN = /^(#\d+\s)(.*):(\d+):\d+\)$/;
+const DART_FRAME_PATTERN = /^(?!package:)(.*)\s(\d+):\d+\s/u;
+const FLUTTER_FRAME_PATTERN = /^(#\d+\s)(.*):(\d+):\d+\)$/u;
 const USELESS_MESSAGE_PATTERN =
-  /^Test failed\. See exception logs above\.\nThe test description was:/m;
+  /^Test failed\. See exception logs above\.\nThe test description was:/mu;
 
 /**
  * Captures the exception text of a Flutter test print. A single whitespace character separates the text from its
  * surroundings in the pattern, which keeps the scan linear, so callers trim the leading whitespace of the capture.
  */
 export const FLUTTER_EXCEPTION_PRINT =
-  /^══╡ EXCEPTION CAUGHT BY FLUTTER TEST FRAMEWORK ╞═+\s(.*)\sWhen the exception was thrown, this was the stack:/ms;
+  /^══╡ EXCEPTION CAUGHT BY FLUTTER TEST FRAMEWORK ╞═+\s(.*)\sWhen the exception was thrown, this was the stack:/msu;
 
 /**
  * Extracts the file path and line number from a Dart stack trace line such as
@@ -79,10 +78,10 @@ export function matchFlutterFrame(
     return undefined;
   }
   const [, head, middle, lineString] = match;
-  let open = middle.lastIndexOf('(');
-  while (open !== -1 && line.startsWith('package:', head.length + open + 1)) {
-    open = open === 0 ? -1 : middle.lastIndexOf('(', open - 1);
-  }
+  const open =
+    Array.from(middle.matchAll(/\(/gu), (opening) => opening.index).findLast(
+      (index) => !line.startsWith('package:', head.length + index + 1),
+    ) ?? -1;
   return open === -1 ? undefined : [middle.slice(open + 1), lineString];
 }
 
@@ -96,23 +95,29 @@ class TestRun {
 }
 
 class TestSuite {
-  constructor(readonly suite: Suite) {}
-  readonly groups: { [id: number]: TestGroup } = {};
+  constructor(
+    readonly suite: Suite,
+    readonly groups: TestGroup[],
+  ) {}
 }
 
 class TestGroup {
-  constructor(readonly group: Group) {}
-  readonly tests: TestCase[] = [];
+  constructor(
+    readonly group: Group,
+    readonly tests: TestCase[],
+  ) {}
 }
 
 class TestCase {
-  constructor(readonly testStart: TestStartEvent) {
+  constructor(
+    readonly testStart: TestStartEvent,
+    readonly testDone?: TestDoneEvent,
+    readonly error?: ErrorEvent,
+    readonly print: MessageEvent[] = [],
+  ) {
     this.groupId = testStart.test.groupIDs.at(-1)!;
   }
   readonly groupId: number;
-  readonly print: MessageEvent[] = [];
-  testDone?: TestDoneEvent;
-  error?: ErrorEvent;
 
   get result(): TestExecutionResult {
     if (this.testDone?.skipped) {
@@ -154,7 +159,7 @@ export class DartJsonParser implements TestParser {
   }
 
   private getTestRun(path: string, content: string): TestRun {
-    const lines = content.split(/\n\r?/g);
+    const lines = content.split(/\n\r?/gu);
     const events = lines
       .map((text, index) => {
         if (text.trim() === '') {
@@ -170,71 +175,100 @@ export class DartJsonParser implements TestParser {
               : `:${errWithCol.columnNumber}`;
           throw new Error(
             `Invalid JSON at ${path}:${index + 1}${col}\n\n${String(error)}`,
+            { cause: error },
           );
         }
       })
-      .filter((reportEvent): reportEvent is ReportEvent => reportEvent != null);
+      .filter(
+        (reportEvent): reportEvent is ReportEvent => reportEvent !== null,
+      );
 
-    let success = false;
-    let totalTime = 0;
-    const suites: { [id: number]: TestSuite } = {};
-    const tests: { [id: number]: TestCase } = {};
+    const doneEvent = events.findLast((reportEvent) =>
+      isDoneEvent(reportEvent),
+    );
+    const testStarts = events
+      .filter((reportEvent) => isTestStartEvent(reportEvent))
+      .filter((reportEvent) => reportEvent.test.url !== null);
+    const testDones = new Map(
+      events
+        .filter((reportEvent) => isTestDoneEvent(reportEvent))
+        .map((reportEvent) => [reportEvent.testID, reportEvent]),
+    );
+    const testErrors = new Map(
+      events
+        .filter((reportEvent) => isErrorEvent(reportEvent))
+        .map((reportEvent) => [reportEvent.testID, reportEvent]),
+    );
+    const messages = events.filter((reportEvent) =>
+      isMessageEvent(reportEvent),
+    );
+    const tests = testStarts.map(
+      (testStart) =>
+        new TestCase(
+          testStart,
+          testDones.get(testStart.test.id),
+          testErrors.get(testStart.test.id),
+          messages.filter((message) => message.testID === testStart.test.id),
+        ),
+    );
+    const groups = events
+      .filter((reportEvent) => isGroupEvent(reportEvent))
+      .map((reportEvent) => reportEvent.group)
+      .toSorted((a, b) => a.id - b.id);
+    const suites = events
+      .filter((reportEvent) => isSuiteEvent(reportEvent))
+      .map((reportEvent) => reportEvent.suite)
+      .toSorted((a, b) => a.id - b.id)
+      .map(
+        (suite) =>
+          new TestSuite(
+            suite,
+            groups
+              .filter((group) => group.suiteID === suite.id)
+              .map(
+                (group) =>
+                  new TestGroup(
+                    group,
+                    tests.filter(
+                      (test) =>
+                        test.testStart.test.suiteID === suite.id &&
+                        test.groupId === group.id,
+                    ),
+                  ),
+              ),
+          ),
+      );
 
-    for (const reportEvent of events) {
-      if (isSuiteEvent(reportEvent)) {
-        suites[reportEvent.suite.id] = new TestSuite(reportEvent.suite);
-      } else if (isGroupEvent(reportEvent)) {
-        suites[reportEvent.group.suiteID].groups[reportEvent.group.id] =
-          new TestGroup(reportEvent.group);
-      } else if (
-        isTestStartEvent(reportEvent) &&
-        reportEvent.test.url !== null
-      ) {
-        const test: TestCase = new TestCase(reportEvent);
-        const suite = suites[reportEvent.test.suiteID];
-        const groupIndex = reportEvent.test.groupIDs.length - 1;
-        const group = suite.groups[reportEvent.test.groupIDs[groupIndex]];
-        group.tests.push(test);
-        tests[reportEvent.test.id] = test;
-      } else if (isTestDoneEvent(reportEvent) && tests[reportEvent.testID]) {
-        tests[reportEvent.testID].testDone = reportEvent;
-      } else if (isErrorEvent(reportEvent) && tests[reportEvent.testID]) {
-        tests[reportEvent.testID].error = reportEvent;
-      } else if (isMessageEvent(reportEvent) && tests[reportEvent.testID]) {
-        tests[reportEvent.testID].print.push(reportEvent);
-      } else if (isDoneEvent(reportEvent)) {
-        success = reportEvent.success;
-        totalTime = reportEvent.time;
-      } else {
-        // Start, suite and group events do not contribute to the totals.
-      }
-    }
-
-    return new TestRun(path, Object.values(suites), success, totalTime);
+    return new TestRun(
+      path,
+      suites,
+      doneEvent?.success ?? false,
+      doneEvent?.time ?? 0,
+    );
   }
 
   private getTestRunResult(tr: TestRun): TestRunResult {
-    const suites = tr.suites.map((s) => {
-      return new TestSuiteResult(
-        this.getRelativePath(s.suite.path),
-        this.getGroups(s),
-      );
-    });
+    const suites = tr.suites.map(
+      (s) =>
+        new TestSuiteResult(
+          this.getRelativePath(s.suite.path),
+          this.getGroups(s),
+        ),
+    );
 
     return new TestRunResult(tr.path, suites, tr.time);
   }
 
   private getGroups(suite: TestSuite): TestGroupResult[] {
-    const groups = Object.values(suite.groups).filter(
-      (grp) => grp.tests.length > 0,
-    );
-    groups.sort((a, b) => (a.group.line ?? 0) - (b.group.line ?? 0));
+    const groups = suite.groups
+      .filter((grp) => grp.tests.length > 0)
+      .toSorted((a, b) => (a.group.line ?? 0) - (b.group.line ?? 0));
 
     return groups.map((group) => {
-      group.tests.sort(
-        (a, b) => (a.testStart.test.line ?? 0) - (b.testStart.test.line ?? 0),
-      );
       const tests = group.tests
+        .toSorted(
+          (a, b) => (a.testStart.test.line ?? 0) - (b.testStart.test.line ?? 0),
+        )
         .filter((tc) => !tc.testDone?.hidden)
         .map((tc) => {
           const error = this.getError(suite, tc);
@@ -268,22 +302,23 @@ export class DartJsonParser implements TestParser {
       .join('\n');
     const src = this.exceptionThrowSource(details, trackedFiles);
     const message = this.getErrorMessage(test.error?.error ?? '', print);
-    let path;
-    let line;
-
-    if (src === undefined) {
-      const testStartPath = this.getRelativePath(testSuite.suite.path);
-      if (trackedFiles.includes(testStartPath)) {
-        path = testStartPath;
-        line =
-          test.testStart.test.root_line ??
-          test.testStart.test.line ??
-          undefined;
-      }
-    } else {
-      path = src.path;
-      line = src.line;
-    }
+    const testStartPath =
+      src === undefined
+        ? this.getRelativePath(testSuite.suite.path)
+        : undefined;
+    const location =
+      src ??
+      (testStartPath !== undefined && trackedFiles.includes(testStartPath)
+        ? {
+            path: testStartPath,
+            line:
+              test.testStart.test.root_line ??
+              test.testStart.test.line ??
+              undefined,
+          }
+        : undefined);
+    const path = location?.path;
+    const line = location?.line;
 
     return {
       path,
@@ -310,17 +345,19 @@ export class DartJsonParser implements TestParser {
     ex: string,
     trackedFiles: string[],
   ): { path: string; line: number } | undefined {
-    const lines = ex.split(/\r?\n/g);
+    const lines = ex.split(/\r?\n/gu);
 
     // Try both Dart and Flutter stack trace patterns.
     const matchers = [matchDartFrame, matchFlutterFrame];
 
+    // eslint-disable-next-line functional/no-loop-statements -- the matchers are tried in order and the first one that finds a frame wins
     for (const matcher of matchers) {
       const found = this.findTrackedFrame(lines, matcher, trackedFiles);
       if (found) {
         return found;
       }
     }
+    return undefined;
   }
 
   /**
@@ -337,13 +374,14 @@ export class DartJsonParser implements TestParser {
     matcher: (line: string) => [path: string, line: string] | undefined,
     trackedFiles: string[],
   ): { path: string; line: number } | undefined {
+    // eslint-disable-next-line functional/no-loop-statements -- the lines are scanned in order and the first tracked frame wins, so later lines are never evaluated
     for (const text of lines) {
       const match = matcher(text);
       if (match !== undefined) {
         const [pathString, lineString] = match;
         const path = normalizeFilePath(this.getRelativePath(pathString));
         if (trackedFiles.includes(path)) {
-          return { path, line: Number.parseInt(lineString) };
+          return { path, line: Number.parseInt(lineString, 10) };
         }
       }
     }
@@ -352,16 +390,13 @@ export class DartJsonParser implements TestParser {
 
   private getRelativePath(path: string): string {
     const prefix = 'file://';
-    if (path.startsWith(prefix)) {
-      path = path.slice(prefix.length);
-    }
-
-    path = normalizeFilePath(path);
-    const workDir = this.getWorkDir(path);
-    if (workDir !== undefined && path.startsWith(workDir)) {
-      path = path.slice(workDir.length);
-    }
-    return path;
+    const normalized = normalizeFilePath(
+      path.startsWith(prefix) ? path.slice(prefix.length) : path,
+    );
+    const workDir = this.getWorkDir(normalized);
+    return workDir !== undefined && normalized.startsWith(workDir)
+      ? normalized.slice(workDir.length)
+      : normalized;
   }
 
   private getWorkDir(path: string): string | undefined {

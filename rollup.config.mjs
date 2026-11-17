@@ -2,18 +2,18 @@
  * @file Rollup configuration that bundles the action into a single CommonJS file and writes the progress bar SVGs.
  */
 
+import { builtinModules } from 'node:module';
+import path from 'node:path';
+import { mkdir, writeFile } from 'node:fs/promises';
 import resolve from '@rollup/plugin-node-resolve';
 import commonjs from '@rollup/plugin-commonjs';
 import typescript from '@rollup/plugin-typescript';
-import { builtinModules } from 'node:module';
 import json from '@rollup/plugin-json';
-import path from 'node:path';
-import { mkdir, writeFile } from 'node:fs/promises';
 
 const NODE_BUILTINS = builtinModules.flatMap((name) => [name, `node:${name}`]);
 
 /** Matches the dependencies that are installed under node_modules. */
-const NODE_MODULES_PATH = /node_modules/;
+const NODE_MODULES_PATH = /node_modules/u;
 
 /**
  * Emits one progress bar SVG per colour and percentage into the output directory.
@@ -29,9 +29,9 @@ const progressBarSvgs = ({ outputDir = 'dist/res', maxPct = 100 } = {}) => ({
   async buildStart() {
     const colors = { yellow: '#eac54f', red: '#F85149', green: '#3FB950' };
     const background = '#e9ecef';
-    const W = 100,
-      H = 16,
-      R = 4;
+    const W = 100;
+    const H = 16;
+    const R = 4;
     const target = path.resolve(outputDir);
     await mkdir(target, { recursive: true });
     const files = Object.entries(colors).flatMap(([n, hex]) =>
@@ -39,11 +39,11 @@ const progressBarSvgs = ({ outputDir = 'dist/res', maxPct = 100 } = {}) => ({
         filename: `progress-${n}-${String(p).padStart(3, '0')}.svg`,
         content:
           `<svg width="${W}" height="${H}" viewBox="0 0 ${W} ${H}" xmlns="http://www.w3.org/2000/svg">` +
-          `<rect width="${W}" height="${H}" rx="${R}" ry="${R}" fill="${background}" />` +
-          (p
-            ? `<rect width="${(p / 100) * W}" height="${H}" rx="${R}" ry="${R}" fill="${hex}" />`
-            : '') +
-          '</svg>',
+          `<rect width="${W}" height="${H}" rx="${R}" ry="${R}" fill="${background}" />${
+            p
+              ? `<rect width="${(p / 100) * W}" height="${H}" rx="${R}" ry="${R}" fill="${hex}" />`
+              : ''
+          }</svg>`,
       })),
     );
     await Promise.all(

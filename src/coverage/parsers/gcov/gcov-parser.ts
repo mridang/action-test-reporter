@@ -10,13 +10,13 @@ import type {
 } from '../coverage-parser.js';
 import type { GcovFileSection, GcovLine } from './gcov-types.js';
 
-const GCOV_FILE_HEADER = /^File\s+'(.+)'$/;
-const GCOV_CREATING_HEADER = /^Creating\s+'(.+)'$/;
-const GCOV_EXTENSION = /\.gcov$/;
-const GCOV_LINES_SUMMARY = /^Lines executed:(\d+\.\d+)% of (\d+)$/;
-const GCOV_BRANCHES_SUMMARY = /^Branches executed:(\d+\.\d+)% of (\d+)$/;
-const GCOV_FUNCTIONS_SUMMARY = /^Functions executed:(\d+\.\d+)% of (\d+)$/;
-const GCOV_SOURCE_LINE = /^\s*([#\d-]+):\s*(\d+):\s*(.*)/;
+const GCOV_FILE_HEADER = /^File\s+'(.+)'$/u;
+const GCOV_CREATING_HEADER = /^Creating\s+'(.+)'$/u;
+const GCOV_EXTENSION = /\.gcov$/u;
+const GCOV_LINES_SUMMARY = /^Lines executed:(\d+\.\d+)% of (\d+)$/u;
+const GCOV_BRANCHES_SUMMARY = /^Branches executed:(\d+\.\d+)% of (\d+)$/u;
+const GCOV_FUNCTIONS_SUMMARY = /^Functions executed:(\d+\.\d+)% of (\d+)$/u;
+const GCOV_SOURCE_LINE = /^\s*([#\d-]+):\s*(\d+):\s*(.*)/u;
 
 /**
  * A parser for gcov text output files.
@@ -54,33 +54,32 @@ export class GcovParser implements CoverageParser {
    * @private
    */
   private parseGcovContent(content: string): GcovFileSection[] {
-    const lines = content.split('\n');
-    const sections: GcovFileSection[] = [];
-    let currentSection: GcovFileSection | null = null;
+    const lines = content.split('\n').map((rawLine) => rawLine.trim());
+    const starts = lines.flatMap((line, index) =>
+      parseSectionFilename(line) === undefined ? [] : [index],
+    );
 
-    for (const rawLine of lines) {
-      const line = rawLine.trim();
-      const filename = parseSectionFilename(line);
-
-      if (filename !== undefined) {
-        if (currentSection) {
-          sections.push(currentSection);
-        }
-        currentSection = { filename, lines: [] };
-      }
-      if (currentSection && !applySummaryLine(currentSection, line)) {
-        const sourceLine = parseSourceLine(line);
-        if (sourceLine) {
-          currentSection.lines.push(sourceLine);
-        }
-      }
-    }
-
-    if (currentSection) {
-      sections.push(currentSection);
-    }
-
-    return sections;
+    return starts.map((start, position): GcovFileSection => {
+      const body = lines.slice(start, starts[position + 1] ?? lines.length);
+      const summaries = body.flatMap((line) => parseSummaryLine(line) ?? []);
+      return {
+        filename: parseSectionFilename(lines[start])!,
+        lines: body.flatMap((line) =>
+          parseSummaryLine(line) === undefined
+            ? (parseSourceLine(line) ?? [])
+            : [],
+        ),
+        summary:
+          summaries.length > 0
+            ? {
+                linesExecuted: { covered: 0, total: 0 },
+                ...Object.fromEntries(
+                  summaries.map(({ key, value }) => [key, value]),
+                ),
+              }
+            : undefined,
+      };
+    });
   }
 
   /**
@@ -103,24 +102,18 @@ export class GcovParser implements CoverageParser {
       .filter((line: GcovLine) => line.executionCount === 0)
       .map((line: GcovLine) => line.lineNumber);
 
-    let lines: CoverageMetrics;
-    const branches: CoverageMetrics = { total: 0, covered: 0 };
-    const methods: CoverageMetrics = { total: 0, covered: 0 };
-
-    lines = section.summary?.linesExecuted ?? {
+    const lines: CoverageMetrics = section.summary?.linesExecuted ?? {
       total: executableLines.length,
       covered: coveredLines.length,
     };
-
-    if (section.summary?.branchesExecuted) {
-      branches.total = section.summary.branchesExecuted.total;
-      branches.covered = section.summary.branchesExecuted.covered;
-    }
-
-    if (section.summary?.functionsExecuted) {
-      methods.total = section.summary.functionsExecuted.total;
-      methods.covered = section.summary.functionsExecuted.covered;
-    }
+    const branches: CoverageMetrics = {
+      total: section.summary?.branchesExecuted?.total ?? 0,
+      covered: section.summary?.branchesExecuted?.covered ?? 0,
+    };
+    const methods: CoverageMetrics = {
+      total: section.summary?.functionsExecuted?.total ?? 0,
+      covered: section.summary?.functionsExecuted?.covered ?? 0,
+    };
 
     return {
       file: section.filename,
@@ -142,25 +135,18 @@ export class GcovParser implements CoverageParser {
   private aggregateOverallCoverage(
     details: FileCoverageDetails[],
   ): CoverageData['overall'] {
-    return details.reduce(
-      (acc, detail) => {
-        acc.lines.total += detail.lines.total;
-        acc.lines.covered += detail.lines.covered;
-        acc.statements.total += detail.statements.total;
-        acc.statements.covered += detail.statements.covered;
-        acc.methods.total += detail.methods.total;
-        acc.methods.covered += detail.methods.covered;
-        acc.branches.total += detail.branches.total;
-        acc.branches.covered += detail.branches.covered;
-        return acc;
-      },
-      {
-        lines: { total: 0, covered: 0 },
-        statements: { total: 0, covered: 0 },
-        methods: { total: 0, covered: 0 },
-        branches: { total: 0, covered: 0 },
-      },
-    );
+    const sum = (
+      pick: (detail: FileCoverageDetails) => CoverageMetrics,
+    ): CoverageMetrics => ({
+      total: details.reduce((total, d) => total + pick(d).total, 0),
+      covered: details.reduce((total, d) => total + pick(d).covered, 0),
+    });
+    return {
+      lines: sum((d) => d.lines),
+      statements: sum((d) => d.statements),
+      methods: sum((d) => d.methods),
+      branches: sum((d) => d.branches),
+    };
   }
 }
 
@@ -184,14 +170,18 @@ function parseSectionFilename(line: string): string | undefined {
 }
 
 /**
- * Stores the lines, branches or functions percentage from a gcov summary line in the section.
- * @param section - The section that receives the summary value.
+ * Reads the lines, branches or functions percentage from a gcov summary line.
  * @param line - The trimmed line to inspect.
- * @returns True when the line was a summary line and has been applied.
+ * @returns The summary key and its value, or undefined when the line is not a summary line.
  * @example
- * const applied = applySummaryLine(section, 'Lines executed:50.00% of 4');
+ * const parsed = parseSummaryLine('Lines executed:50.00% of 4');
  */
-function applySummaryLine(section: GcovFileSection, line: string): boolean {
+function parseSummaryLine(line: string):
+  | {
+      key: 'linesExecuted' | 'branchesExecuted' | 'functionsExecuted';
+      value: { covered: number; total: number };
+    }
+  | undefined {
   const summaryPatterns = [
     { key: 'linesExecuted', re: GCOV_LINES_SUMMARY },
     { key: 'branchesExecuted', re: GCOV_BRANCHES_SUMMARY },
@@ -201,19 +191,20 @@ function applySummaryLine(section: GcovFileSection, line: string): boolean {
     },
   ] as const;
 
-  for (const { key, re } of summaryPatterns) {
+  return summaryPatterns.flatMap(({ key, re }) => {
     const match = re.exec(line);
-    if (match) {
-      const percentage = Number.parseFloat(match[1]);
-      const total = Number.parseInt(match[2], 10);
-      const covered = Math.round((percentage / 100) * total);
-
-      section.summary ??= { linesExecuted: { covered: 0, total: 0 } };
-      section.summary[key] = { covered, total };
-      return true;
+    if (!match) {
+      return [];
     }
-  }
-  return false;
+    const percentage = Number.parseFloat(match[1]);
+    const total = Number.parseInt(match[2], 10);
+    return [
+      {
+        key,
+        value: { covered: Math.round((percentage / 100) * total), total },
+      },
+    ];
+  })[0];
 }
 
 /**

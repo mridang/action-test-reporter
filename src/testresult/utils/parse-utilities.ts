@@ -1,7 +1,7 @@
-const NET_DURATION_PATTERN = /^(\d\d):(\d\d):(\d\d(?:\.\d+)?)$/;
+const NET_DURATION_PATTERN = /^(\d\d):(\d\d):(\d\d(?:\.\d+)?)$/u;
 const ISO_DATE_PATTERN =
-  /^\d{4}-[01]\d-[0-3]\dT[0-2]\d:[0-5]\d:[0-5]\d\.\d+([+-][0-2]\d:[0-5]\d|Z)$/;
-const BLANK_LINE_PATTERN = /^\s*$/;
+  /^\d{4}-[01]\d-[0-3]\dT[0-2]\d:[0-5]\d:[0-5]\d\.\d+([+-][0-2]\d:[0-5]\d|Z)$/u;
+const BLANK_LINE_PATTERN = /^\s*$/u;
 /**
  * @file Provides helpers that parse durations, dates and stack traces from test reports.
  */
@@ -23,8 +23,8 @@ export function parseNetDuration(text: string): number {
 
   const [, hourString, minString, secString] = durationMatch;
   return (
-    (Number.parseInt(hourString) * 3600 +
-      Number.parseInt(minString) * 60 +
+    (Number.parseInt(hourString, 10) * 3600 +
+      Number.parseInt(minString, 10) * 60 +
       Number.parseFloat(secString)) *
     1000
   );
@@ -55,6 +55,6 @@ export function parseIsoDate(text: string): Date {
  * const line = getFirstNonEmptyLine('\n  Error: boom');
  */
 export function getFirstNonEmptyLine(stackTrace: string): string | undefined {
-  const lines = stackTrace?.split(/\r?\n/g);
+  const lines = stackTrace?.split(/\r?\n/gu);
   return lines?.find((line) => !BLANK_LINE_PATTERN.test(line));
 }

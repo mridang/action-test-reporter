@@ -39,6 +39,7 @@ const coreMock = {
   },
 };
 
+// eslint-disable-next-line tslop/no-module-mocking -- the entry point calls @actions/core directly, which reads the job environment and writes to the job log, so the module is the only seam
 jest.unstable_mockModule('@actions/core', () => coreMock);
 
 const { run } = await import('../src/index.js');
@@ -50,7 +51,9 @@ const { run } = await import('../src/index.js');
  * setInputs({ 'results-path': 'results.xml' });
  */
 function setInputs(map: Inputs): void {
-  for (const key of Object.keys(inputs)) delete inputs[key];
+  for (const key of Object.keys(inputs)) {
+    delete inputs[key];
+  }
   Object.assign(inputs, map);
   summaryBuffer = '';
   recordedSummary = '';

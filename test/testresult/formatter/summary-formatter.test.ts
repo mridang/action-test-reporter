@@ -3,11 +3,11 @@
  */
 
 import { describe, expect, test } from '@jest/globals';
-import type { ReportOptions } from '../../../src/testresult/formatter/summary-formatter.js';
 import {
   getBadge,
   DEFAULT_OPTIONS,
 } from '../../../src/testresult/formatter/summary-formatter.js';
+import type { ReportOptions } from '../../../src/testresult/formatter/summary-formatter.js';
 
 describe('getBadge', () => {
   describe('URI encoding with special characters', () => {

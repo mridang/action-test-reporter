@@ -4,8 +4,8 @@
 
 import { getInput, info, setFailed, summary } from '@actions/core';
 
-import type { CoverageRunOutput } from './runner.js';
 import { runCoverage } from './runner.js';
+import type { CoverageRunOutput } from './runner.js';
 
 /**
  * Entrypoint for executing the coverage reporter flow from the GitHub Action.
@@ -49,6 +49,7 @@ class CoverageReporter {
       if (writeSummary && output.summaries.length > 0) {
         await summary.addRaw(output.summaries.join('\n\n')).write();
       }
+      // eslint-disable-next-line functional/no-loop-statements -- the loop only writes each console output to the job log
       for (const message of output.consoleOutputs) {
         info(message);
       }

@@ -12,7 +12,8 @@
 function createRandom(seed: number): () => number {
   let state = seed;
   return () => {
-    state = (Math.imul(state, 1_664_525) + 1_013_904_223) >>> 0;
+    const mixed = Math.imul(state, 1_664_525) + 1_013_904_223;
+    state = ((mixed % 4_294_967_296) + 4_294_967_296) % 4_294_967_296;
     return state / 4_294_967_296;
   };
 }

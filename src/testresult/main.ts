@@ -4,23 +4,23 @@
 
 import {
   endGroup,
-  error as coreError,
+  error,
   getInput,
   info,
   setFailed,
   setOutput,
   startGroup,
-  summary as coreSummary,
+  summary,
   warning,
 } from '@actions/core';
 
 import { LocalFileProvider } from './input-providers/local-file-provider.js';
-import type { FileContent } from './input-providers/input-provider.js';
 import { detectTestFormat } from './parsers/index.js';
 import { SummaryFormatter } from './formatter/summary-formatter.js';
+import { normalizeDirPath, normalizeFilePath } from './utils/path-utilities.js';
+import type { FileContent } from './input-providers/input-provider.js';
 import type { ParseOptions } from './test-parser.js';
 import type { TestRunResult } from './test-results.js';
-import { normalizeDirPath, normalizeFilePath } from './utils/path-utilities.js';
 
 export interface TestReporterOutput {
   results: TestRunResult[];
@@ -37,6 +37,7 @@ class TestReporter {
     'all' | 'failed' | 'none';
   readonly maxAnnotations = Number.parseInt(
     getInput('max-annotations', { required: true }),
+    10,
   );
   readonly failOnError =
     getInput('fail-on-error', { required: true }) === 'true';
@@ -116,30 +117,33 @@ class TestReporter {
       parseErrors,
     };
 
-    const results: TestRunResult[] = [];
-    const summaries: string[] = [];
-    const shortSummaries: string[] = [];
     const input = await inputProvider.load();
-    for (const [reportName, files] of Object.entries(input)) {
-      try {
-        startGroup(`Creating test report ${reportName}`);
-        const reportOutput = await this.createReport(
-          reportName,
-          files,
-          options,
-          writeSummary,
-        );
-        results.push(...reportOutput.results);
-        if (reportOutput.summary) {
-          summaries.push(reportOutput.summary);
+    // Reports are created one after the other so each one gets its own log group in order.
+    const reportOutputs = await Object.entries(input).reduce(
+      async (previous, [reportName, files]) => {
+        const outputs = await previous;
+        try {
+          startGroup(`Creating test report ${reportName}`);
+          const reportOutput = await this.createReport(
+            reportName,
+            files,
+            options,
+            writeSummary,
+          );
+          return [...outputs, reportOutput];
+        } finally {
+          endGroup();
         }
-        if (reportOutput.shortSummary) {
-          shortSummaries.push(reportOutput.shortSummary);
-        }
-      } finally {
-        endGroup();
-      }
-    }
+      },
+      Promise.resolve<TestReporterOutput[]>([]),
+    );
+    const results = reportOutputs.flatMap((output) => output.results);
+    const summaries = reportOutputs
+      .map((output) => output.summary)
+      .filter(Boolean);
+    const shortSummaries = reportOutputs
+      .map((output) => output.shortSummary)
+      .filter(Boolean);
 
     const isFailed = results.some((tr) => tr.result === 'failed');
     const conclusion = isFailed ? 'failure' : 'success';
@@ -154,22 +158,22 @@ class TestReporter {
     setOutput('skipped', skipped);
     setOutput('time', time);
 
-    const summary = summaries.join('\n\n');
+    const combinedSummary = summaries.join('\n\n');
     const shortSummary = shortSummaries.join(' ');
 
     if (this.failOnError && isFailed) {
       setFailed(
         `Failed tests were found and 'fail-on-error' option is set to ${this.failOnError}`,
       );
-      return { results, summary, shortSummary };
+      return { results, summary: combinedSummary, shortSummary };
     }
 
     if (results.length === 0 && this.failOnEmpty) {
       setFailed(`No test report files were found`);
-      return { results, summary, shortSummary };
+      return { results, summary: combinedSummary, shortSummary };
     }
 
-    return { results, summary, shortSummary };
+    return { results, summary: combinedSummary, shortSummary };
   }
 
   async createReport(
@@ -188,8 +192,6 @@ class TestReporter {
     }
 
     info(`Processing test results for ${name}`);
-    const results: TestRunResult[] = [];
-
     // Detect format from first file
     const firstFile = files[0];
     const {
@@ -198,18 +200,20 @@ class TestReporter {
       format,
     } = await detectTestFormat(firstFile.file, firstFile.content, options);
     info(`Auto-detected test result format: ${format}`);
-    results.push(firstResult);
 
     // Parse remaining files with the same parser
-    for (const { file, content } of files.slice(1)) {
-      try {
-        const tr = await parser.parse(file, content);
-        results.push(tr);
-      } catch (error) {
-        coreError(`Processing test results from ${file} failed`);
-        throw error;
-      }
-    }
+    const remainingResults = await Promise.all(
+      files.slice(1).map(async ({ file, content }) => {
+        try {
+          return await parser.parse(file, content);
+          // eslint-disable-next-line sonarjs/variable-name -- unicorn/catch-error-name requires this name because the catch binding would otherwise shadow the imported core error
+        } catch (error_) {
+          error(`Processing test results from ${file} failed`);
+          throw error_;
+        }
+      }),
+    );
+    const results = [firstResult, ...remainingResults];
 
     const {
       listSuites,
@@ -226,7 +230,7 @@ class TestReporter {
     const shortSummary = `${passed} passed, ${failed} failed and ${skipped} skipped `;
 
     const summaryFormatter = new SummaryFormatter();
-    const summary = summaryFormatter.format(
+    const reportSummary = summaryFormatter.format(
       results,
       {
         listSuites,
@@ -242,12 +246,12 @@ class TestReporter {
     );
 
     info('Summary content:');
-    info(summary);
+    info(reportSummary);
     if (writeSummary) {
-      await coreSummary.addRaw(summary).write();
+      await summary.addRaw(reportSummary).write();
     }
 
-    return { results, summary, shortSummary };
+    return { results, summary: reportSummary, shortSummary };
   }
 }
 
@@ -264,11 +268,12 @@ export async function run(
   try {
     const testReporter = new TestReporter();
     return await testReporter.run(writeSummary);
-  } catch (error) {
-    if (error instanceof Error) {
-      setFailed(error);
+    // eslint-disable-next-line sonarjs/variable-name -- unicorn/catch-error-name requires this name because the catch binding would otherwise shadow the imported core error
+  } catch (error_) {
+    if (error_ instanceof Error) {
+      setFailed(error_);
     } else {
-      setFailed(JSON.stringify(error));
+      setFailed(JSON.stringify(error_));
     }
   }
   return undefined;

@@ -38,8 +38,10 @@ export class TestRunResult {
   }
 
   sort(deep: boolean): void {
+    // eslint-disable-next-line functional/immutable-data -- the result classes expose in-place sorting as their public API, and callers hold references to these arrays
     this.suites.sort((a, b) => collator.compare(a.name, b.name));
     if (deep) {
+      // eslint-disable-next-line functional/no-loop-statements -- sorts each nested suite in place, which has no return value to map
       for (const suite of this.suites) {
         suite.sort(deep);
       }
@@ -78,8 +80,10 @@ export class TestSuiteResult {
   }
 
   sort(deep: boolean): void {
+    // eslint-disable-next-line functional/immutable-data -- the result classes expose in-place sorting as their public API, and callers hold references to these arrays
     this.groups.sort((a, b) => collator.compare(a.name ?? '', b.name ?? ''));
     if (deep) {
+      // eslint-disable-next-line functional/no-loop-statements -- sorts each nested group in place, which has no return value to map
       for (const grp of this.groups) {
         grp.sort();
       }
@@ -120,6 +124,7 @@ export class TestGroupResult {
   }
 
   sort(): void {
+    // eslint-disable-next-line functional/immutable-data -- the result classes expose in-place sorting as their public API, and callers hold references to these arrays
     this.tests.sort((a, b) => collator.compare(a.name, b.name));
   }
 }

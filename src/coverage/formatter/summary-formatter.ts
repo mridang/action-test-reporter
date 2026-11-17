@@ -3,15 +3,22 @@
  */
 
 import path from 'node:path';
+import { formatUncoveredLines } from './index.js';
 import type { CoverageFormatter } from './coverage-formatter.js';
 import type {
   CoverageData,
   FileCoverageDetails,
   CoverageMetrics,
 } from '../parsers/coverage-parser.js';
-import { formatUncoveredLines } from './index.js';
 
 const collator = new Intl.Collator();
+
+/** Formats a coverage percentage with two decimals and no digit grouping. */
+const PERCENT = new Intl.NumberFormat('en', {
+  minimumFractionDigits: 2,
+  maximumFractionDigits: 2,
+  useGrouping: false,
+});
 
 /**
  * Represents a node in the file coverage tree. It can be a directory
@@ -49,8 +56,9 @@ export class SummaryFormatter implements CoverageFormatter<SummaryOptions> {
    * const markdown = new SummaryFormatter().format(coverageData, { rootDir: process.cwd() });
    */
   public format(coverageData: CoverageData, options: SummaryOptions): string {
-    const tree = this.buildTree(coverageData.details, options.rootDir);
-    this.calculateAggregates(tree);
+    const tree = this.calculateAggregates(
+      this.buildTree(coverageData.details, options.rootDir),
+    );
 
     const body = this.renderTree(tree, options);
     const summaryRow = this.buildRow(
@@ -88,72 +96,84 @@ export class SummaryFormatter implements CoverageFormatter<SummaryOptions> {
     details: FileCoverageDetails[],
     rootDir?: string,
   ): CoverageNode {
-    const root: CoverageNode = { children: new Map(), _isFile: false };
-    for (const detail of details) {
-      const relativePath = rootDir
-        ? path.relative(rootDir, detail.file)
-        : detail.file;
+    return details.reduce<CoverageNode>(
+      (root, detail) =>
+        this.insertFile(
+          root,
+          (rootDir ? path.relative(rootDir, detail.file) : detail.file).split(
+            path.sep,
+          ),
+          detail,
+        ),
+      { children: new Map<string, CoverageNode>(), _isFile: false },
+    );
+  }
 
-      let currentNode = root;
-      const pathParts = relativePath.split(path.sep);
-
-      for (const part of pathParts.slice(0, -1)) {
-        if (!currentNode.children.has(part)) {
-          currentNode.children.set(part, {
-            children: new Map(),
-            _isFile: false,
-          });
-        }
-        currentNode = currentNode.children.get(part)!;
-      }
-
-      const [fileName] = pathParts.slice(-1);
-      currentNode.children.set(fileName, {
-        children: new Map(),
-        _coverage: detail,
-        _isFile: true,
-      });
-    }
-    return root;
+  /**
+   * Returns a copy of the tree with the file added below the directories named by its path parts.
+   * @param node - The directory node to add the file to.
+   * @param pathParts - The remaining path segments, ending with the file name.
+   * @param detail - The coverage data of the file.
+   * @returns The updated copy of the node.
+   * @private
+   */
+  private insertFile(
+    node: CoverageNode,
+    [part, ...rest]: string[],
+    detail: FileCoverageDetails,
+  ): CoverageNode {
+    const child: CoverageNode =
+      rest.length === 0
+        ? {
+            children: new Map<string, CoverageNode>(),
+            _coverage: detail,
+            _isFile: true,
+          }
+        : this.insertFile(
+            node.children.get(part) ?? {
+              children: new Map<string, CoverageNode>(),
+              _isFile: false,
+            },
+            rest,
+            detail,
+          );
+    return { ...node, children: new Map([...node.children, [part, child]]) };
   }
 
   /**
    * Recursively calculates aggregate coverage for all directories in the tree.
    * @param node - The current node in the tree to process.
-   * @returns A flat list of all descendant file coverages.
+   * @returns A copy of the node whose directories carry their aggregate coverage.
    * @private
    */
-  private calculateAggregates(node: CoverageNode): FileCoverageDetails[] {
-    const descendantFiles: FileCoverageDetails[] = [];
-    for (const child of node.children.values()) {
-      descendantFiles.push(
-        ...(child._isFile
-          ? [child._coverage as FileCoverageDetails]
-          : this.calculateAggregates(child)),
-      );
-    }
-
-    node._coverage = descendantFiles.reduce(
-      (acc, detail) => {
-        acc.statements.covered += detail.statements.covered;
-        acc.statements.total += detail.statements.total;
-        acc.branches.covered += detail.branches.covered;
-        acc.branches.total += detail.branches.total;
-        acc.methods.covered += detail.methods.covered;
-        acc.methods.total += detail.methods.total;
-        acc.lines.covered += detail.lines.covered;
-        acc.lines.total += detail.lines.total;
-        return acc;
-      },
-      {
-        statements: { covered: 0, total: 0 },
-        branches: { covered: 0, total: 0 },
-        methods: { covered: 0, total: 0 },
-        lines: { covered: 0, total: 0 },
-      },
+  private calculateAggregates(node: CoverageNode): CoverageNode {
+    const children = new Map<string, CoverageNode>(
+      Array.from(node.children, ([key, child]) => [
+        key,
+        child._isFile ? child : this.calculateAggregates(child),
+      ]),
     );
+    const coverages = Array.from(
+      children.values(),
+      (child) => child._coverage as FileCoverageDetails,
+    );
+    const sum = (
+      pick: (detail: FileCoverageDetails) => CoverageMetrics,
+    ): CoverageMetrics => ({
+      covered: coverages.reduce((total, d) => total + pick(d).covered, 0),
+      total: coverages.reduce((total, d) => total + pick(d).total, 0),
+    });
 
-    return descendantFiles;
+    return {
+      ...node,
+      children,
+      _coverage: {
+        statements: sum((d) => d.statements),
+        branches: sum((d) => d.branches),
+        methods: sum((d) => d.methods),
+        lines: sum((d) => d.lines),
+      },
+    };
   }
 
   /**
@@ -171,35 +191,30 @@ export class SummaryFormatter implements CoverageFormatter<SummaryOptions> {
     indent = 0,
     prefix = '',
   ): string[] {
-    let rows: string[] = [];
     const sortedKeys = [...node.children.keys()].toSorted((a, b) =>
       collator.compare(a, b),
     );
 
-    for (const key of sortedKeys) {
+    return sortedKeys.flatMap((key) => {
       const child = node.children.get(key)!;
       const currentPath = path.join(prefix, key);
 
-      if (child._isFile) {
-        rows.push(
-          this.buildRow(
-            key,
-            child._coverage!,
-            options,
-            indent,
-            false,
-            currentPath,
-          ),
-        );
-      } else {
-        const dirName = `**${key}/**`;
-        rows.push(
-          this.buildRow(dirName, child._coverage!, options, indent),
-          ...this.renderTree(child, options, indent + 2, currentPath),
-        );
-      }
-    }
-    return rows;
+      return child._isFile
+        ? [
+            this.buildRow(
+              key,
+              child._coverage!,
+              options,
+              indent,
+              false,
+              currentPath,
+            ),
+          ]
+        : [
+            this.buildRow(`**${key}/**`, child._coverage!, options, indent),
+            ...this.renderTree(child, options, indent + 2, currentPath),
+          ];
+    });
   }
 
   /**
@@ -247,7 +262,7 @@ export class SummaryFormatter implements CoverageFormatter<SummaryOptions> {
     const pct =
       metric.total === 0 ? 100 : (metric.covered / metric.total) * 100;
     const progressBar = this.buildProgressBar(pct);
-    return `${progressBar} ${pct.toFixed(2)}%`;
+    return `${progressBar} ${PERCENT.format(pct)}%`;
   }
 
   /**
@@ -266,39 +281,33 @@ export class SummaryFormatter implements CoverageFormatter<SummaryOptions> {
       data.uncoveredLines.length === 0
     ) {
       return '';
-    } else {
-      const ranges = formatUncoveredLines(data.uncoveredLines, {
-        maxLength: 15,
-      }).split(',');
-      const canLink = Boolean(options.repoUrl && options.sha);
-      const fileUrl = canLink
-        ? `${options.repoUrl}/blob/${options.sha}/${filePath}`
-        : '';
-
-      return ranges
-        .map((range) => {
-          const [start, end] = range.split('-');
-          if (!fileUrl) {
-            return `\`${range}\``;
-          }
-          const link = end
-            ? `${fileUrl}#L${start}-L${end}`
-            : `${fileUrl}#L${start}`;
-          return `[\`${range}\`](${link})`;
-        })
-        .join(', ');
     }
+    const ranges = formatUncoveredLines(data.uncoveredLines, {
+      maxLength: 15,
+    }).split(',');
+    const canLink = Boolean(options.repoUrl && options.sha);
+    const fileUrl = canLink
+      ? `${options.repoUrl}/blob/${options.sha}/${filePath}`
+      : '';
+
+    return ranges
+      .map((range) => {
+        const [start, end] = range.split('-');
+        if (!fileUrl) {
+          return `\`${range}\``;
+        }
+        const link = end
+          ? `${fileUrl}#L${start}-L${end}`
+          : `${fileUrl}#L${start}`;
+        return `[\`${range}\`](${link})`;
+      })
+      .join(', ');
   }
 
   private buildProgressBar(percentage: number): string {
     const pct = Math.round(percentage);
-    let color = 'green';
-    if (pct < 80) {
-      color = 'yellow';
-    }
-    if (pct < 50) {
-      color = 'red';
-    }
+    const baseColor = pct < 80 ? 'yellow' : 'green';
+    const color = pct < 50 ? 'red' : baseColor;
 
     const padded = String(Math.round(pct / 5) * 5).padStart(3, '0');
 

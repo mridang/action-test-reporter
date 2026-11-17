@@ -26,16 +26,12 @@ export async function run(): Promise<void> {
   }
 
   if (hasResults && hasCoverage) {
-    const sections: string[] = [];
     const testRun = await runTestReporter(false);
-    if (testRun?.summary) {
-      sections.push(testRun.summary);
-    }
-
     const coverageRun = await runCoverageReporter(false);
-    if (coverageRun.summaries.length > 0) {
-      sections.push(...coverageRun.summaries);
-    }
+    const sections = [
+      ...(testRun?.summary ? [testRun.summary] : []),
+      ...coverageRun.summaries,
+    ];
 
     if (sections.length > 0) {
       const cleared = await summary.clear();

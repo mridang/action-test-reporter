@@ -2,8 +2,6 @@
  * @file Registers the test result parsers and detects the format of a results file.
  */
 
-import type { ParseOptions, TestParser } from '../test-parser.js';
-import type { TestRunResult } from '../test-results.js';
 import { DartJsonParser } from './dart-json/dart-json-parser.js';
 import { DotnetNunitParser } from './dotnet-nunit/dotnet-nunit-parser.js';
 import { DotnetTrxParser } from './dotnet-trx/dotnet-trx-parser.js';
@@ -12,6 +10,8 @@ import { JavaJunitParser } from './java-junit/java-junit-parser.js';
 import { JestJunitParser } from './jest-junit/jest-junit-parser.js';
 import { MochaJsonParser } from './mocha-json/mocha-json-parser.js';
 import { RspecJsonParser } from './rspec-json/rspec-json-parser.js';
+import type { TestRunResult } from '../test-results.js';
+import type { ParseOptions, TestParser } from '../test-parser.js';
 
 type ParserFactory = (options: ParseOptions) => TestParser;
 
@@ -69,6 +69,7 @@ export async function detectTestFormat(
   content: string,
   options: ParseOptions,
 ): Promise<DetectedTestResult> {
+  // eslint-disable-next-line functional/no-loop-statements -- the parsers are tried in order and the first one that understands the content wins
   for (const { name, factory } of orderedParsers) {
     try {
       const parser = factory(options);

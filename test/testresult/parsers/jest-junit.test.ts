@@ -2,25 +2,25 @@
  * @file Tests the Jest JUnit test result parser against its fixtures.
  */
 
-import { describe, expect, test } from '@jest/globals';
 import { mkdir, readFile, writeFile } from 'node:fs/promises';
 import path from 'node:path';
+import { describe, expect, test } from '@jest/globals';
 
 import { JestJunitParser } from '../../../src/testresult/parsers/jest-junit/jest-junit-parser.js';
-import type { ParseOptions } from '../../../src/testresult/test-parser.js';
 import {
   DEFAULT_OPTIONS,
   getReport,
 } from '../../../src/testresult/formatter/summary-formatter.js';
 import { normalizeFilePath } from '../../../src/testresult/utils/path-utilities.js';
 import { getDirname } from '../helpers/dir.js';
+import type { ParseOptions } from '../../../src/testresult/test-parser.js';
 
-const TESTS_FAILED_BADGE = /^!\[Tests failed]/;
-const CUSTOM_TITLE_HEADING = /^# My Custom Title\n/;
-const SUMMARY_HEADING = /^## 1 passed, 4 failed and 1 skipped\n/;
+const TESTS_FAILED_BADGE = /^!\[Tests failed\]/u;
+const CUSTOM_TITLE_HEADING = /^# My Custom Title\n/u;
+const SUMMARY_HEADING = /^## 1 passed, 4 failed and 1 skipped\n/u;
 const CUSTOM_TITLE_WITH_SUMMARY =
-  /^# My Custom Title\n## 1 passed, 4 failed and 1 skipped\n/;
-const NOT_JEST_JUNIT_REPORT = /Not a Jest JUnit report/;
+  /^# My Custom Title\n## 1 passed, 4 failed and 1 skipped\n/u;
+const NOT_JEST_JUNIT_REPORT = /Not a Jest JUnit report/u;
 
 const testDir = getDirname(import.meta.url);
 
@@ -154,7 +154,7 @@ describe('jest-junit tests', () => {
     const rawTrackedFiles = await readFile(trackedFilesPath, {
       encoding: 'utf8',
     });
-    const trackedFiles = rawTrackedFiles.split(/\n\r?/g);
+    const trackedFiles = rawTrackedFiles.split(/\n\r?/gu);
     const opts: ParseOptions = {
       parseErrors: true,
       trackedFiles,
@@ -200,7 +200,7 @@ describe('jest-junit tests', () => {
     const rawTrackedFiles = await readFile(trackedFilesPath, {
       encoding: 'utf8',
     });
-    const trackedFiles = rawTrackedFiles.split(/\n\r?/g);
+    const trackedFiles = rawTrackedFiles.split(/\n\r?/gu);
     const opts: ParseOptions = {
       parseErrors: true,
       trackedFiles,

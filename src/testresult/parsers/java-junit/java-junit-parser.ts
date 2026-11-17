@@ -3,8 +3,16 @@
  */
 
 import path from 'node:path';
-import type { ParseOptions, TestParser } from '../../test-parser.js';
 import { parseStringPromise } from 'xml2js';
+import { normalizeFilePath } from '../../utils/path-utilities.js';
+import {
+  TestCaseResult,
+  TestGroupResult,
+  TestRunResult,
+  TestSuiteResult,
+} from '../../test-results.js';
+import { parseStackTraceElement } from './java-stack-trace-element-parser.js';
+import type { ParseOptions, TestParser } from '../../test-parser.js';
 
 import type {
   JunitReport,
@@ -12,18 +20,10 @@ import type {
   TestCase,
   TestSuite,
 } from './java-junit-types.js';
-import { parseStackTraceElement } from './java-stack-trace-element-parser.js';
-import { normalizeFilePath } from '../../utils/path-utilities.js';
 
 import type { TestCaseError, TestExecutionResult } from '../../test-results.js';
-import {
-  TestCaseResult,
-  TestGroupResult,
-  TestRunResult,
-  TestSuiteResult,
-} from '../../test-results.js';
 
-const LINE_BREAK_PATTERN = /\r?\n/;
+const LINE_BREAK_PATTERN = /\r?\n/u;
 
 /**
  * Parser for JUnit-style XML reports commonly produced by Java test frameworks.
@@ -32,13 +32,16 @@ export class JavaJunitParser implements TestParser {
   readonly trackedFiles: { [fileName: string]: string[] };
 
   constructor(readonly options: ParseOptions) {
-    this.trackedFiles = {};
-    for (const filePath of options.trackedFiles) {
-      const fileName = path.basename(filePath);
-      const files =
-        this.trackedFiles[fileName] ?? (this.trackedFiles[fileName] = []);
-      files.push(normalizeFilePath(filePath));
-    }
+    this.trackedFiles = Object.fromEntries(
+      options.trackedFiles.reduce((byName, filePath) => {
+        const fileName = path.basename(filePath);
+        // eslint-disable-next-line functional/immutable-data -- builds the lookup in a single pass; copying the map for every file would be quadratic
+        return byName.set(fileName, [
+          ...(byName.get(fileName) ?? []),
+          normalizeFilePath(filePath),
+        ]);
+      }, new Map<string, string[]>()),
+    );
   }
 
   async parse(filePath: string, content: string): Promise<TestRunResult> {
@@ -46,18 +49,14 @@ export class JavaJunitParser implements TestParser {
     const isReport =
       (reportOrSuite as { testsuites?: unknown }).testsuites !== undefined;
 
-    let ju: JunitReport;
-    if (isReport) {
-      ju = reportOrSuite as JunitReport;
-    } else {
-      const suite = (reportOrSuite as SingleSuiteReport).testsuite;
-      ju = {
-        testsuites: {
-          $: { time: suite.$.time },
-          testsuite: [suite],
-        },
-      };
-    }
+    const ju: JunitReport = isReport
+      ? (reportOrSuite as JunitReport)
+      : {
+          testsuites: {
+            $: { time: (reportOrSuite as SingleSuiteReport).testsuite.$.time },
+            testsuite: [(reportOrSuite as SingleSuiteReport).testsuite],
+          },
+        };
 
     return this.getTestRunResult(filePath, ju);
   }
@@ -70,7 +69,9 @@ export class JavaJunitParser implements TestParser {
       return (await parseStringPromise(content)) as
         JunitReport | SingleSuiteReport;
     } catch (error) {
-      throw new Error(`Invalid XML at ${filePath}\n\n${String(error)}`);
+      throw new Error(`Invalid XML at ${filePath}\n\n${String(error)}`, {
+        cause: error,
+      });
     }
   }
 
@@ -91,22 +92,25 @@ export class JavaJunitParser implements TestParser {
     suites: TestSuite[],
     filePath: string,
   ): TestSuiteResult[] {
-    const results: TestSuiteResult[] = [];
-    for (const suite of suites) {
-      if (suite.testsuite && suite.testsuite.length > 0) {
-        results.push(...this.flattenSuites(suite.testsuite, filePath));
+    return suites.flatMap((suite): TestSuiteResult[] => {
+      const nested =
+        suite.testsuite && suite.testsuite.length > 0
+          ? this.flattenSuites(suite.testsuite, filePath)
+          : [];
+      if (suite.testcase === undefined || suite.testcase.length === 0) {
+        return nested;
       }
-      if (suite.testcase !== undefined && suite.testcase.length > 0) {
-        const rawName = suite.$.name?.trim() ?? '';
-        const name =
-          rawName === '' || rawName === 'undefined'
-            ? path.basename(filePath)
-            : rawName;
-        const time = Number.parseFloat(suite.$.time) * 1000;
-        results.push(new TestSuiteResult(name, this.getGroups(suite), time));
-      }
-    }
-    return results;
+      const rawName = suite.$.name?.trim() ?? '';
+      const name =
+        rawName === '' || rawName === 'undefined'
+          ? path.basename(filePath)
+          : rawName;
+      const time = Number.parseFloat(suite.$.time) * 1000;
+      return [
+        ...nested,
+        new TestSuiteResult(name, this.getGroups(suite), time),
+      ];
+    });
   }
 
   private getGroups(suite: TestSuite): TestGroupResult[] {
@@ -114,32 +118,33 @@ export class JavaJunitParser implements TestParser {
       return [];
     }
 
-    const groups: { name: string; tests: TestCase[] }[] = [];
-    for (const tc of suite.testcase) {
-      const groupName = tc.$.classname === suite.$.name ? '' : tc.$.classname;
-      let grp = groups.find((g) => g.name === groupName);
-      if (grp === undefined) {
-        grp = { name: groupName, tests: [] };
-        groups.push(grp);
-      }
-      grp.tests.push(tc);
-    }
+    const groupNameOf = (tc: TestCase): string =>
+      tc.$.classname === suite.$.name ? '' : tc.$.classname;
 
-    return groups.map((grp) => {
-      const tests = grp.tests.map((tc) => {
-        const name = tc.$.name.trim();
-        const result = this.getTestCaseResult(tc);
-        const time = Number.parseFloat(tc.$.time) * 1000;
-        const error = this.getTestCaseError(tc);
-        return new TestCaseResult(name, result, time, error);
-      });
-      return new TestGroupResult(grp.name, tests);
-    });
+    return Array.from(
+      new Set(suite.testcase.map((tc) => groupNameOf(tc))),
+      (groupName) => {
+        const tests = suite
+          .testcase!.filter((tc) => groupNameOf(tc) === groupName)
+          .map((tc) => {
+            const name = tc.$.name.trim();
+            const result = this.getTestCaseResult(tc);
+            const time = Number.parseFloat(tc.$.time) * 1000;
+            const error = this.getTestCaseError(tc);
+            return new TestCaseResult(name, result, time, error);
+          });
+        return new TestGroupResult(groupName, tests);
+      },
+    );
   }
 
   private getTestCaseResult(test: TestCase): TestExecutionResult {
-    if (test.failure || test.error) return 'failed';
-    if (test.skipped) return 'skipped';
+    if (test.failure || test.error) {
+      return 'failed';
+    }
+    if (test.skipped) {
+      return 'skipped';
+    }
     return 'success';
   }
 
@@ -155,24 +160,17 @@ export class JavaJunitParser implements TestParser {
 
     const failure = failures[0];
     const details = typeof failure === 'object' ? failure._ : failure;
-    let filePath;
-    let line;
+    const src = details ? this.exceptionThrowSource(details) : undefined;
+    const filePath = src?.filePath;
+    const line = src?.line;
 
-    if (details != null) {
-      const src = this.exceptionThrowSource(details);
-      if (src) {
-        filePath = src.filePath;
-        line = src.line;
-      }
-    }
-
-    let message;
-    if (typeof failure === 'object') {
-      message = failure.$.message;
-      if (failure.$?.type) {
-        message = failure.$.type + ': ' + message;
-      }
-    }
+    const failureType =
+      typeof failure === 'object' ? failure.$?.type : undefined;
+    const failureMessage =
+      typeof failure === 'object' ? failure.$.message : undefined;
+    const message = failureType
+      ? `${failureType}: ${failureMessage}`
+      : failureMessage;
     return {
       path: filePath,
       line,
@@ -186,17 +184,18 @@ export class JavaJunitParser implements TestParser {
   ): { filePath: string; line: number } | undefined {
     const lines = stackTrace.split(LINE_BREAK_PATTERN);
 
+    // eslint-disable-next-line functional/no-loop-statements -- the lines are scanned in order and the first tracked frame wins, so later lines are never evaluated
     for (const text of lines) {
       const stackTraceElement = parseStackTraceElement(text);
       if (stackTraceElement) {
         const { tracePath, fileName, lineStr } = stackTraceElement;
         const filePath = this.getFilePath(tracePath, fileName);
         if (filePath !== undefined) {
-          const line = Number.parseInt(lineStr);
-          return { filePath, line };
+          return { filePath, line: Number.parseInt(lineStr, 10) };
         }
       }
     }
+    return undefined;
   }
 
   private getFilePath(tracePath: string, fileName: string): string | undefined {
@@ -205,32 +204,24 @@ export class JavaJunitParser implements TestParser {
       return undefined;
     }
 
-    const packageParts = tracePath.split(/\./g);
-    const packageIndex = packageParts.findIndex((part) => part[0] <= 'Z');
-    if (packageIndex !== -1) {
-      packageParts.splice(packageIndex, packageParts.length - packageIndex);
-    }
+    const allParts = tracePath.split(/\./gu);
+    const packageIndex = allParts.findIndex((part) => part[0] <= 'Z');
+    const packageParts =
+      packageIndex === -1 ? allParts : allParts.slice(0, packageIndex);
 
     if (packageParts.length === 0) {
       return undefined;
     }
 
-    for (const filePath of files) {
-      const directories = path.dirname(filePath).split(/\//g);
+    return files.find((filePath) => {
+      const directories = path.dirname(filePath).split(/\//gu);
       if (packageParts.length > directories.length) {
-        continue;
+        return false;
       }
-      if (directories.length > packageParts.length) {
-        directories.splice(0, directories.length - packageParts.length);
-      }
-      const isMatch = packageParts.every(
-        (part, index) => part === directories[index],
+      const trailing = directories.slice(
+        directories.length - packageParts.length,
       );
-      if (isMatch) {
-        return filePath;
-      }
-    }
-
-    return undefined;
+      return packageParts.every((part, index) => part === trailing[index]);
+    });
   }
 }

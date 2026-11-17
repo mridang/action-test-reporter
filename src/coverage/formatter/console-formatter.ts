@@ -3,15 +3,22 @@
  */
 
 import path from 'node:path';
+import { formatUncoveredLines } from './index.js';
 import type { CoverageFormatter } from './coverage-formatter.js';
 import type {
   CoverageData,
   FileCoverageDetails,
   CoverageMetrics,
 } from '../parsers/coverage-parser.js';
-import { formatUncoveredLines } from './index.js';
 
 const collator = new Intl.Collator();
+
+/** Formats a coverage percentage with two decimals and no digit grouping. */
+const PERCENT = new Intl.NumberFormat('en', {
+  minimumFractionDigits: 2,
+  maximumFractionDigits: 2,
+  useGrouping: false,
+});
 
 /**
  * ANSI color codes for console output.
@@ -58,8 +65,9 @@ export class ConsoleFormatter implements CoverageFormatter<{
     options: { rootDir?: string } = {},
   ): string {
     const { rootDir } = options;
-    const tree = this.buildTree(coverageData.details, rootDir);
-    this.calculateAggregates(tree);
+    const tree = this.calculateAggregates(
+      this.buildTree(coverageData.details, rootDir),
+    );
 
     const fileColWidth = this.calculateFileColumnWidth(tree);
     const { separator, header } = this.buildHeader(fileColWidth);
@@ -93,70 +101,84 @@ export class ConsoleFormatter implements CoverageFormatter<{
     details: FileCoverageDetails[],
     rootDir?: string,
   ): CoverageNode {
-    const root: CoverageNode = { children: new Map(), _isFile: false };
-    for (const detail of details) {
-      const relativePath = rootDir
-        ? path.relative(rootDir, detail.file)
-        : detail.file;
-      let currentNode = root;
-      const pathParts = relativePath.split(path.sep);
+    return details.reduce<CoverageNode>(
+      (root, detail) =>
+        this.insertFile(
+          root,
+          (rootDir ? path.relative(rootDir, detail.file) : detail.file).split(
+            path.sep,
+          ),
+          detail,
+        ),
+      { children: new Map<string, CoverageNode>(), _isFile: false },
+    );
+  }
 
-      for (const part of pathParts.slice(0, -1)) {
-        if (!currentNode.children.has(part)) {
-          currentNode.children.set(part, {
-            children: new Map(),
-            _isFile: false,
-          });
-        }
-        currentNode = currentNode.children.get(part)!;
-      }
-      const fileName = pathParts.at(-1)!;
-      currentNode.children.set(fileName, {
-        children: new Map(),
-        _coverage: detail,
-        _isFile: true,
-      });
-    }
-    return root;
+  /**
+   * Returns a copy of the tree with the file added below the directories named by its path parts.
+   * @param node - The directory node to add the file to.
+   * @param pathParts - The remaining path segments, ending with the file name.
+   * @param detail - The coverage data of the file.
+   * @returns The updated copy of the node.
+   * @private
+   */
+  private insertFile(
+    node: CoverageNode,
+    [part, ...rest]: string[],
+    detail: FileCoverageDetails,
+  ): CoverageNode {
+    const child: CoverageNode =
+      rest.length === 0
+        ? {
+            children: new Map<string, CoverageNode>(),
+            _coverage: detail,
+            _isFile: true,
+          }
+        : this.insertFile(
+            node.children.get(part) ?? {
+              children: new Map<string, CoverageNode>(),
+              _isFile: false,
+            },
+            rest,
+            detail,
+          );
+    return { ...node, children: new Map([...node.children, [part, child]]) };
   }
 
   /**
    * Recursively calculates aggregate coverage for all directories in the tree.
    * @param node - The current node in the tree to process.
-   * @returns A flat list of all descendant file coverages.
+   * @returns A copy of the node whose directories carry their aggregate coverage.
    * @private
    */
-  private calculateAggregates(node: CoverageNode): FileCoverageDetails[] {
-    const descendantFiles: FileCoverageDetails[] = [];
-    for (const child of node.children.values()) {
-      descendantFiles.push(
-        ...(child._isFile
-          ? [child._coverage as FileCoverageDetails]
-          : this.calculateAggregates(child)),
-      );
-    }
-
-    node._coverage = descendantFiles.reduce(
-      (acc, detail) => {
-        acc.statements.covered += detail.statements.covered;
-        acc.statements.total += detail.statements.total;
-        acc.branches.covered += detail.branches.covered;
-        acc.branches.total += detail.branches.total;
-        acc.methods.covered += detail.methods.covered;
-        acc.methods.total += detail.methods.total;
-        acc.lines.covered += detail.lines.covered;
-        acc.lines.total += detail.lines.total;
-        return acc;
-      },
-      {
-        statements: { covered: 0, total: 0 },
-        branches: { covered: 0, total: 0 },
-        methods: { covered: 0, total: 0 },
-        lines: { covered: 0, total: 0 },
-      },
+  private calculateAggregates(node: CoverageNode): CoverageNode {
+    const children = new Map<string, CoverageNode>(
+      Array.from(node.children, ([key, child]) => [
+        key,
+        child._isFile ? child : this.calculateAggregates(child),
+      ]),
     );
+    const coverages = Array.from(
+      children.values(),
+      (child) => child._coverage as FileCoverageDetails,
+    );
+    const sum = (
+      pick: (detail: FileCoverageDetails) => CoverageMetrics,
+    ): CoverageMetrics => ({
+      covered: coverages.reduce((total, d) => total + pick(d).covered, 0),
+      total: coverages.reduce((total, d) => total + pick(d).total, 0),
+    });
 
-    return descendantFiles;
+    return {
+      ...node,
+      children,
+      _coverage: {
+        statements: sum((d) => d.statements),
+        branches: sum((d) => d.branches),
+        methods: sum((d) => d.methods),
+        lines: sum((d) => d.lines),
+      },
+    };
   }
 
   /**
@@ -172,24 +194,24 @@ export class ConsoleFormatter implements CoverageFormatter<{
     fileWidth: number,
     indent = 0,
   ): string[] {
-    const rows: string[] = [];
     const sortedKeys = [...node.children.keys()].toSorted((a, b) =>
       collator.compare(a, b),
     );
 
-    for (const key of sortedKeys) {
+    return sortedKeys.flatMap((key) => {
       const child = node.children.get(key)!;
-      if (child._isFile) {
-        rows.push(this.buildRow(key, child._coverage!, fileWidth, indent));
-      } else {
-        const dirName = `${key}${path.sep}`;
-        rows.push(
-          this.buildRow(dirName, child._coverage!, fileWidth, indent),
-          ...this.renderTree(child, fileWidth, indent + 2),
-        );
-      }
-    }
-    return rows;
+      return child._isFile
+        ? [this.buildRow(key, child._coverage!, fileWidth, indent)]
+        : [
+            this.buildRow(
+              `${key}${path.sep}`,
+              child._coverage!,
+              fileWidth,
+              indent,
+            ),
+            ...this.renderTree(child, fileWidth, indent + 2),
+          ];
+    });
   }
 
   /**
@@ -210,16 +232,14 @@ export class ConsoleFormatter implements CoverageFormatter<{
     const { statements, branches, methods, lines } = data;
     const getPct = (m: CoverageMetrics) =>
       m.total === 0 ? 100 : (m.covered / m.total) * 100;
-    const colorize = (p: number, t: string) => {
-      let color = colors.green;
-      if (p < 80) {
-        color = colors.yellow;
-      }
+    const colorFor = (p: number) => {
       if (p < 50) {
-        color = colors.red;
+        return colors.red;
       }
-      return `${color}${t}${colors.reset}`;
+      return p < 80 ? colors.yellow : colors.green;
     };
+    const colorize = (p: number, t: string) =>
+      `${colorFor(p)}${t}${colors.reset}`;
     const pcts = {
       stmts: getPct(statements),
       branch: getPct(branches),
@@ -235,10 +255,10 @@ export class ConsoleFormatter implements CoverageFormatter<{
 
     return [
       nameColor.padEnd(fileWidth + (nameColor.length - nameIndented.length)),
-      colorize(pcts.stmts, pcts.stmts.toFixed(2).padStart(8)),
-      colorize(pcts.branch, pcts.branch.toFixed(2).padStart(9)),
-      colorize(pcts.funcs, pcts.funcs.toFixed(2).padStart(8)),
-      colorize(pcts.lines, pcts.lines.toFixed(2).padStart(8)),
+      colorize(pcts.stmts, PERCENT.format(pcts.stmts).padStart(8)),
+      colorize(pcts.branch, PERCENT.format(pcts.branch).padStart(9)),
+      colorize(pcts.funcs, PERCENT.format(pcts.funcs).padStart(8)),
+      colorize(pcts.lines, PERCENT.format(pcts.lines).padStart(8)),
       ` ${colors.red}${uncovered}${colors.reset}`,
     ].join(' |');
   }
@@ -249,10 +269,7 @@ export class ConsoleFormatter implements CoverageFormatter<{
    * @returns The header components.
    * @private
    */
-  private buildHeader(fileWidth: number): {
-    separator: string;
-    header: string;
-  } {
+  private buildHeader(fileWidth: number) {
     const headers = [
       'File'.padEnd(fileWidth),
       '% Stmts'.padStart(8),
@@ -278,16 +295,14 @@ export class ConsoleFormatter implements CoverageFormatter<{
     indent = 0,
     currentMax = 0,
   ): number {
-    let max = currentMax;
-    for (const [key, child] of node.children.entries()) {
-      const currentLength = indent + key.length + (child._isFile ? 0 : 1);
-      if (currentLength > max) {
-        max = currentLength;
-      }
-      if (!child._isFile) {
-        max = this.calculateFileColumnWidth(child, indent + 2, max);
-      }
-    }
-    return max;
+    return [...node.children.entries()].reduce((max, [key, child]) => {
+      const widest = Math.max(
+        max,
+        indent + key.length + (child._isFile ? 0 : 1),
+      );
+      return child._isFile
+        ? widest
+        : this.calculateFileColumnWidth(child, indent + 2, widest);
+    }, currentMax);
   }
 }

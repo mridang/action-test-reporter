@@ -2,19 +2,19 @@
  * @file Parses the JSON event stream written by go test -json.
  */
 
-import type { ParseOptions, TestParser } from '../../test-parser.js';
-
-import type { GoTestEvent } from './golang-json-types.js';
-
-import type { TestExecutionResult, TestCaseError } from '../../test-results.js';
 import {
   TestRunResult,
   TestSuiteResult,
   TestGroupResult,
   TestCaseResult,
 } from '../../test-results.js';
+import type { ParseOptions, TestParser } from '../../test-parser.js';
 
-const GO_OUTPUT_INDENT = /^ {4}/;
+import type { GoTestEvent } from './golang-json-types.js';
+
+import type { TestExecutionResult, TestCaseError } from '../../test-results.js';
+
+const GO_OUTPUT_INDENT = /^ {4}/u;
 
 /**
  * Maps the final action of a Go test to the result that is reported for it.
@@ -48,55 +48,27 @@ export class GolangJsonParser implements TestParser {
         } catch (error) {
           throw new Error(
             `Invalid JSON at ${path} line ${index + 1}\n\n${String(error)}`,
+            { cause: error },
           );
         }
       });
   }
 
   private getTestRunResult(path: string, events: GoTestEvent[]): TestRunResult {
-    const eventGroups = new Map<string, GoTestEvent[]>();
-    for (const event of events) {
-      if (!event.Test) {
-        continue;
-      }
-      const k = `${event.Package}/${event.Test}`;
-      let g = eventGroups.get(k);
-      if (!g) {
-        g = [];
-        eventGroups.set(k, g);
-      }
-      g.push(event);
-    }
+    const eventGroups = events
+      .filter((event) => event.Test)
+      .reduce((groups, event) => {
+        const key = `${event.Package}/${event.Test}`;
+        // eslint-disable-next-line functional/immutable-data -- builds the lookup in a single pass; copying the map for every event would be quadratic
+        return groups.set(key, [...(groups.get(key) ?? []), event]);
+      }, new Map<string, GoTestEvent[]>());
 
-    const suites: TestSuiteResult[] = [];
-
-    for (const eventGroup of eventGroups.values()) {
+    const entries = Array.from(eventGroups.values(), (eventGroup) => {
       const event = eventGroup[0];
-
-      let suite = suites.find((s) => s.name === event.Package);
-      if (!suite) {
-        suite = new TestSuiteResult(event.Package, []);
-        suites.push(suite);
-      }
-
-      if (!event.Test) {
-        continue;
-      }
-
-      let groupName: string | null;
-      let rest: string[];
-      [groupName, ...rest] = event.Test.split('/');
-      let testName = rest.join('/');
-      if (!testName) {
-        testName = groupName;
-        groupName = null;
-      }
-
-      let group = suite.groups.find((g) => g.name === groupName);
-      if (!group) {
-        group = new TestGroupResult(groupName, []);
-        suite.groups.push(group);
-      }
+      const [first, ...rest] = event.Test!.split('/');
+      const joined = rest.join('/');
+      const groupName: string | null = joined ? first : null;
+      const testName = joined || first;
 
       const lastEvent = eventGroup.at(-1)!;
 
@@ -107,25 +79,43 @@ export class GolangJsonParser implements TestParser {
       }
       const time: number = lastEvent.Elapsed * 1000;
 
-      let error: TestCaseError | undefined;
-      if (result !== 'success') {
-        const outputEvents = eventGroup
-          .filter((event) => event.Action === 'output')
-          .map((event) => event.Output ?? '')
-          .map((o) => o.replace(GO_OUTPUT_INDENT, ''));
+      const details = eventGroup
+        .filter((outputEvent) => outputEvent.Action === 'output')
+        .map((outputEvent) => outputEvent.Output ?? '')
+        .map((o) => o.replace(GO_OUTPUT_INDENT, ''))
+        .slice(1, -1)
+        .join('');
+      const error: TestCaseError | undefined =
+        result === 'success' ? undefined : { message: details, details };
 
-        outputEvents.splice(0, 1);
-        outputEvents.splice(-1, 1);
+      return {
+        packageName: event.Package,
+        groupName,
+        testCase: new TestCaseResult(testName, result, time, error),
+      };
+    });
 
-        const details = outputEvents.join('');
-        error = {
-          message: details,
-          details: details,
-        };
-      }
-
-      group.tests.push(new TestCaseResult(testName, result, time, error));
-    }
+    const suites = Array.from(
+      new Set(entries.map((entry) => entry.packageName)),
+      (packageName) => {
+        const inSuite = entries.filter(
+          (entry) => entry.packageName === packageName,
+        );
+        return new TestSuiteResult(
+          packageName,
+          Array.from(
+            new Set(inSuite.map((entry) => entry.groupName)),
+            (groupName) =>
+              new TestGroupResult(
+                groupName,
+                inSuite
+                  .filter((entry) => entry.groupName === groupName)
+                  .map((entry) => entry.testCase),
+              ),
+          ),
+        );
+      },
+    );
 
     return new TestRunResult(path, suites);
   }

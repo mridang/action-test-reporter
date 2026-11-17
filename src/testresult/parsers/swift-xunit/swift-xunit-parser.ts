@@ -2,8 +2,8 @@
  * @file Parses xUnit XML test results produced by Swift test runners.
  */
 
-import type { ParseOptions } from '../../test-parser.js';
 import { JavaJunitParser } from '../java-junit/java-junit-parser.js';
+import type { ParseOptions } from '../../test-parser.js';
 
 /**
  * Parser for xUnit-style XML reports produced by Swift test tools.
