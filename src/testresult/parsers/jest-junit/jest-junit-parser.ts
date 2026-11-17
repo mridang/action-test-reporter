@@ -3,6 +3,7 @@
  */
 
 import { parseStringPromise } from 'xml2js';
+import { isRecord } from '../../../record-guard.js';
 
 import { getExceptionSource } from '../../utils/node-utilities.js';
 import { getBasePath, normalizeFilePath } from '../../utils/path-utilities.js';
@@ -19,6 +20,17 @@ import type { ParseOptions, TestParser } from '../../test-parser.js';
 
 const JEST_SUITE_NAME_PATTERN = /jest|__tests__|\.test|\.spec/iu;
 const JEST_CLASS_NAME_PATTERN = /›|__tests__|\.test|\.spec|\/|\\/iu;
+
+/**
+ * Tells whether a parsed value has the root structure of a JUnit report.
+ * @param value - The parsed value.
+ * @returns True when the value has the expected root.
+ * @example
+ * const supported = isJunitReport(parsed);
+ */
+function isJunitReport(value: unknown): value is JunitReport {
+  return isRecord(value) && isRecord(value.testsuites);
+}
 
 /**
  * Parser for JUnit XML reports emitted by Jest with the jest-junit reporter.
@@ -43,7 +55,11 @@ export class JestJunitParser implements TestParser {
     content: string,
   ): Promise<JunitReport> {
     try {
-      return (await parseStringPromise(content)) as JunitReport;
+      const report: unknown = await parseStringPromise(content);
+      if (!isJunitReport(report)) {
+        throw new TypeError('The XML content is not a JUnit report');
+      }
+      return report;
     } catch (error) {
       throw new Error(`Invalid XML at ${path}\n\n${String(error)}`, {
         cause: error,
@@ -72,11 +88,11 @@ export class JestJunitParser implements TestParser {
       nested.flatMap((suite) => [suite, ...flatten(suite.testsuite ?? [])]);
     const allSuites = flatten(suites);
     const suiteNames = allSuites.flatMap((suite) =>
-      suite.$?.name ? [suite.$.name] : [],
+      suite.$.name ? [suite.$.name] : [],
     );
     const testcaseClassNames = allSuites
       .flatMap((suite) => suite.testcase ?? [])
-      .map((tc) => tc.$?.classname as string | undefined)
+      .map((tc) => tc.$.classname)
       .filter((name): name is string => name !== undefined);
     const hasNestedSuites = allSuites.some(
       (suite) => suite.testsuite && suite.testsuite.length > 0,
@@ -91,7 +107,7 @@ export class JestJunitParser implements TestParser {
       JEST_SUITE_NAME_PATTERN.test(n),
     );
     const testcaseClassHint = testcaseClassNames.some(
-      (cn) => cn === '' || JEST_CLASS_NAME_PATTERN.test(cn ?? ''),
+      (cn) => cn === '' || JEST_CLASS_NAME_PATTERN.test(cn),
     );
     const topLevelHint = topLevelName.includes('jest');
 

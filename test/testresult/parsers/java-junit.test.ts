@@ -22,6 +22,13 @@ const testDir = getDirname(import.meta.url);
 
 // eslint-disable-next-line sonarjs/max-lines-per-function -- one suite groups every fixture of this parser
 describe('java-junit tests', () => {
+  test('rejects XML that is not a JUnit report', async () => {
+    const parser = new JavaJunitParser({ parseErrors: true, trackedFiles: [] });
+    await expect(parser.parse('report.xml', '<report/>')).rejects.toThrow(
+      'The XML content is not a JUnit report',
+    );
+  });
+
   test('produces empty test run result when there are no test cases', async () => {
     const fixturePath = path.join(
       testDir,

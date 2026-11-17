@@ -11,7 +11,7 @@ export interface SingleSuiteReport {
 }
 
 interface TestSuites {
-  $: {
+  $?: {
     time: string;
     name?: string;
   };
@@ -20,7 +20,7 @@ interface TestSuites {
 
 export interface TestSuite {
   $: {
-    name: string;
+    name?: string;
     tests: string;
     errors: string;
     failures: string;

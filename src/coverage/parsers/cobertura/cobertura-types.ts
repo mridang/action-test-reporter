@@ -19,26 +19,26 @@ export type CoberturaMethod = {
 export type CoberturaClass = {
   $: { name: string; filename: string };
   methods?: [{ method: CoberturaMethod[] }];
-  lines?: [{ line: CoberturaLine[] }];
+  lines?: [{ line?: CoberturaLine[] }];
 };
 
 export type CoberturaPackage = {
-  classes: [{ class: CoberturaClass[] }];
+  classes?: [{ class: CoberturaClass[] }];
 };
 
 export type CoberturaPackages = {
-  package: CoberturaPackage[];
+  package?: CoberturaPackage[];
 };
 
 export type CoberturaXml = {
   coverage: {
     $: {
-      'lines-valid': string;
-      'lines-covered': string;
-      'branches-valid': string;
-      'branches-covered': string;
+      'lines-valid'?: string;
+      'lines-covered'?: string;
+      'branches-valid'?: string;
+      'branches-covered'?: string;
     };
     sources: [{ source: string[] }];
-    packages: CoberturaPackages[];
+    packages?: CoberturaPackages[];
   };
 };

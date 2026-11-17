@@ -7,7 +7,7 @@ export interface JunitReport {
 }
 
 interface TestSuites {
-  $: {
+  $?: {
     time: string;
     name?: string;
   };
@@ -30,7 +30,7 @@ export interface TestSuite {
 
 export interface TestCase {
   $: {
-    classname: string;
+    classname?: string;
     file?: string;
     name: string;
     time: string;

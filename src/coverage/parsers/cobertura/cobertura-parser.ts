@@ -3,6 +3,7 @@
  */
 
 import path from 'node:path';
+import { isRecord } from '../../../record-guard.js';
 import { BaseParser } from '../base-parser.js';
 import type {
   CoverageData,
@@ -24,6 +25,19 @@ import type {
  * @augments {BaseParser}
  */
 export class CoberturaParser extends BaseParser<CoberturaXml> {
+  /**
+   * Tells whether the parsed XML has the root element of a Cobertura report.
+   * @memberof CoberturaParser
+   * @param xml - The parsed XML data.
+   * @returns True when the data has the root element.
+   * @protected
+   * @example
+   * const supported = this.isReport(xml);
+   */
+  protected isReport(xml: unknown): xml is CoberturaXml {
+    return isRecord(xml) && isRecord(xml.coverage);
+  }
+
   /**
    * Processes the parsed Cobertura XML object to extract coverage data.
    * @memberof CoberturaParser
@@ -53,7 +67,7 @@ export class CoberturaParser extends BaseParser<CoberturaXml> {
         uncoveredLines:
           c.lines?.[0]?.line
             ?.filter((l: CoberturaLine) => l.$.hits === '0')
-            .map((l: CoberturaLine) => Number(l.$.number)) || [],
+            .map((l: CoberturaLine) => Number(l.$.number)) ?? [],
       };
     });
 
@@ -88,10 +102,12 @@ export class CoberturaParser extends BaseParser<CoberturaXml> {
    * @example
    * const classes = this.classesFromPackages(xml.coverage.packages[0].package);
    */
-  private classesFromPackages(packages: CoberturaPackages[]): CoberturaClass[] {
-    return (packages || []).flatMap((p) =>
-      (p.package || []).flatMap((pack: CoberturaPackage) =>
-        (pack.classes || []).flatMap((c) => c.class),
+  private classesFromPackages(
+    packages: CoberturaPackages[] | undefined,
+  ): CoberturaClass[] {
+    return (packages ?? []).flatMap((p) =>
+      (p.package ?? []).flatMap((pack: CoberturaPackage) =>
+        (pack.classes ?? []).flatMap((c) => c.class),
       ),
     );
   }
@@ -106,7 +122,7 @@ export class CoberturaParser extends BaseParser<CoberturaXml> {
    * const lines = this.getLineCoverage(classElement);
    */
   private getLineCoverage(c: CoberturaClass): CoverageMetrics {
-    const lines = c.lines?.[0]?.line || [];
+    const lines = c.lines?.[0]?.line ?? [];
     return {
       total: lines.length,
       covered: lines.filter((l: CoberturaLine) => l.$.hits > '0').length,
@@ -123,7 +139,7 @@ export class CoberturaParser extends BaseParser<CoberturaXml> {
    * const functions = this.getFunctionCoverage(classElement);
    */
   private getFunctionCoverage(c: CoberturaClass): CoverageMetrics {
-    const methods = c.methods?.[0]?.method || [];
+    const methods = c.methods?.[0]?.method ?? [];
     return {
       total: methods.length,
       covered: methods.filter(

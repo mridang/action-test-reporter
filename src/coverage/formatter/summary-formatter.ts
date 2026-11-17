@@ -153,12 +153,11 @@ export class SummaryFormatter implements CoverageFormatter<SummaryOptions> {
         child._isFile ? child : this.calculateAggregates(child),
       ]),
     );
-    const coverages = Array.from(
-      children.values(),
-      (child) => child._coverage as FileCoverageDetails,
+    const coverages = Array.from(children.values()).flatMap((child) =>
+      child._coverage ? [child._coverage] : [],
     );
     const sum = (
-      pick: (detail: FileCoverageDetails) => CoverageMetrics,
+      pick: (detail: CoverageData['overall']) => CoverageMetrics,
     ): CoverageMetrics => ({
       covered: coverages.reduce((total, d) => total + pick(d).covered, 0),
       total: coverages.reduce((total, d) => total + pick(d).total, 0),

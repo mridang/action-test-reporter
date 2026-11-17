@@ -10,9 +10,26 @@ import {
 } from '../../test-results.js';
 import { getExceptionSource } from '../../utils/node-utilities.js';
 import { getBasePath, normalizeFilePath } from '../../utils/path-utilities.js';
+import { isRecord } from '../../../record-guard.js';
 import type { TestCaseError, TestExecutionResult } from '../../test-results.js';
 import type { ParseOptions, TestParser } from '../../test-parser.js';
 import type { MochaJson, MochaJsonTest } from './mocha-json-types.js';
+
+/**
+ * Tells whether a parsed value has the root structure of a Mocha JSON report.
+ * @param value - The parsed value.
+ * @returns True when the value has the expected root.
+ * @example
+ * const supported = isMochaJson(parsed);
+ */
+function isMochaJson(value: unknown): value is MochaJson {
+  return (
+    isRecord(value) &&
+    isRecord(value.stats) &&
+    Array.isArray(value.passes) &&
+    Array.isArray(value.failures)
+  );
+}
 
 /**
  * Parser for JSON reports produced by Mocha's built-in JSON reporter.
@@ -31,7 +48,11 @@ export class MochaJsonParser implements TestParser {
 
   private getMochaJson(path: string, content: string): MochaJson {
     try {
-      return JSON.parse(content) as MochaJson;
+      const report: unknown = JSON.parse(content);
+      if (!isMochaJson(report)) {
+        throw new TypeError('The content is not a Mocha JSON report');
+      }
+      return report;
     } catch (error) {
       throw new Error(`Invalid JSON at ${path}\n\n${String(error)}`, {
         cause: error,

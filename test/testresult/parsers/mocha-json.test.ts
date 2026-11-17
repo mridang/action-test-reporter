@@ -21,6 +21,13 @@ const CUSTOM_TITLE_HEADING = /^# My Custom Title\n/u;
 const testDir = getDirname(import.meta.url);
 
 describe('mocha-json tests', () => {
+  test('rejects JSON that is not a mocha report', async () => {
+    const parser = new MochaJsonParser({ parseErrors: true, trackedFiles: [] });
+    await expect(parser.parse('report.json', '{"stats":1}')).rejects.toThrow(
+      'The content is not a Mocha JSON report',
+    );
+  });
+
   test('produces empty test run result when there are no test cases', async () => {
     const fixturePath = path.join(
       testDir,

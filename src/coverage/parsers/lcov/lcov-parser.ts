@@ -47,7 +47,7 @@ export class LcovParser implements CoverageParser {
     }
 
     const entries = record.split('\n').flatMap((line): [string, string][] => {
-      const [type, value] = line.split(':') as [string, string | undefined];
+      const [type, value] = line.split(':');
       return type && value ? [[type.toUpperCase(), value]] : [];
     });
     const lastValue = (type: string): string | undefined =>

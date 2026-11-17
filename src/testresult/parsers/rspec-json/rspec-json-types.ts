@@ -16,7 +16,7 @@ export interface RspecExample {
   status: TestStatus;
   file_path: string;
   line_number: number;
-  run_time: number;
+  run_time?: number;
   pending_message: string | null;
   exception?: RspecException;
 }

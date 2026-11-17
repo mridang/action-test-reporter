@@ -8,6 +8,7 @@ import {
   TestGroupResult,
   TestCaseResult,
 } from '../../test-results.js';
+import { isRecord } from '../../../record-guard.js';
 import type { ParseOptions, TestParser } from '../../test-parser.js';
 
 import type { GoTestEvent } from './golang-json-types.js';
@@ -23,6 +24,17 @@ const RESULT_BY_ACTION = new Map<string, TestExecutionResult>([
   ['pass', 'success'],
   ['skip', 'skipped'],
 ]);
+
+/**
+ * Tells whether a parsed value has the root structure of a Go test event.
+ * @param value - The parsed value.
+ * @returns True when the value has the expected root.
+ * @example
+ * const supported = isGoTestEvent(parsed);
+ */
+function isGoTestEvent(value: unknown): value is GoTestEvent {
+  return isRecord(value) && typeof value.Action === 'string';
+}
 
 /**
  * Parser for Go test JSON output produced with `go test -json`.
@@ -44,7 +56,11 @@ export class GolangJsonParser implements TestParser {
       .split('\n')
       .map((line, index) => {
         try {
-          return JSON.parse(line) as GoTestEvent;
+          const event: unknown = JSON.parse(line);
+          if (!isGoTestEvent(event)) {
+            throw new TypeError('The line is not a Go test event');
+          }
+          return event;
         } catch (error) {
           throw new Error(
             `Invalid JSON at ${path} line ${index + 1}\n\n${String(error)}`,

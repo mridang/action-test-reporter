@@ -2,6 +2,7 @@
  * @file Parses llvm-cov JSON exports into the shared coverage model.
  */
 
+import { isRecord } from '../../../record-guard.js';
 import type {
   CoverageParser,
   CoverageData,
@@ -32,7 +33,7 @@ type LlvmFile = {
  */
 type LlvmFunction = {
   count: number;
-  filenames: string[];
+  filenames?: string[];
 };
 
 /**
@@ -41,10 +42,48 @@ type LlvmFunction = {
 type LlvmExport = {
   type: string;
   data: {
-    files: LlvmFile[];
+    files?: LlvmFile[];
     functions?: LlvmFunction[];
   }[];
 };
+
+/**
+ * Tells whether parsed JSON is an llvm-cov export.
+ * @param value - The parsed JSON.
+ * @returns True when the value is an llvm-cov JSON export.
+ * @internal
+ * @example
+ * isLlvmExport({ type: 'llvm.coverage.json.export', data: [] }); // true
+ */
+function isLlvmExport(value: unknown): value is LlvmExport {
+  return (
+    isRecord(value) &&
+    typeof value.type === 'string' &&
+    value.type.startsWith('llvm.coverage.json.export') &&
+    Array.isArray(value.data)
+  );
+}
+
+/**
+ * Parses the content of an llvm-cov JSON export.
+ * @param content - The JSON content of the coverage report.
+ * @returns The parsed export.
+ * @throws {Error} If the content is not valid JSON or not an llvm-cov export.
+ * @internal
+ * @example
+ * const report = parseLlvmExport(content);
+ */
+function parseLlvmExport(content: string): LlvmExport {
+  try {
+    const parsed: unknown = JSON.parse(content);
+    if (isLlvmExport(parsed)) {
+      return parsed;
+    }
+  } catch (error) {
+    throw new Error('Content is not valid JSON', { cause: error });
+  }
+  throw new Error('Not an llvm-cov JSON export');
+}
 
 /**
  * Matches paths inside a `.build` directory, where SwiftPM keeps checked-out
@@ -71,22 +110,7 @@ export class LlvmCovParser implements CoverageParser {
    * @throws {Error} If the content is not an llvm-cov JSON export.
    */
   public async parse(content: string): Promise<CoverageData> {
-    const json = ((): LlvmExport => {
-      try {
-        return JSON.parse(content) as LlvmExport;
-      } catch (error) {
-        throw new Error('Content is not valid JSON', { cause: error });
-      }
-    })();
-
-    if (
-      !json ||
-      typeof json.type !== 'string' ||
-      !json.type.startsWith('llvm.coverage.json.export') ||
-      !Array.isArray(json.data)
-    ) {
-      throw new Error('Not an llvm-cov JSON export');
-    }
+    const json = parseLlvmExport(content);
 
     const files = json.data.flatMap((entry) => entry.files ?? []);
     const functions = json.data.flatMap((entry) => entry.functions ?? []);
