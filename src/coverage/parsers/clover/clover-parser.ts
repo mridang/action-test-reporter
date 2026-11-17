@@ -2,6 +2,7 @@
  * @file Parses Clover XML coverage reports into the shared coverage model.
  */
 
+import { isRecord } from '../../../record-guard.js';
 import { BaseParser } from '../base-parser.js';
 import type { CoverageData, FileCoverageDetails } from '../coverage-parser.js';
 import type { CloverFile, CloverXml } from './clover-types.js';
@@ -12,6 +13,19 @@ import type { CloverFile, CloverXml } from './clover-types.js';
  * @augments {BaseParser}
  */
 export class CloverParser extends BaseParser<CloverXml> {
+  /**
+   * Tells whether the parsed XML has the root element of a Clover report.
+   * @memberof CloverParser
+   * @param xml - The parsed XML data.
+   * @returns True when the data has the root element.
+   * @protected
+   * @example
+   * const supported = this.isReport(xml);
+   */
+  protected isReport(xml: unknown): xml is CloverXml {
+    return isRecord(xml) && isRecord(xml.coverage);
+  }
+
   /**
    * Processes the parsed Clover XML object to extract coverage data.
    * @memberof CloverParser
@@ -45,8 +59,8 @@ export class CloverParser extends BaseParser<CloverXml> {
     };
 
     const filesFromPackages =
-      project.package?.flatMap((p) => p.file || []) || [];
-    const filesFromProject = project.file || [];
+      project.package?.flatMap((p) => p.file ?? []) ?? [];
+    const filesFromProject = project.file ?? [];
     const allFiles: CloverFile[] = [...filesFromPackages, ...filesFromProject];
 
     const details: FileCoverageDetails[] = allFiles.map(
@@ -73,7 +87,7 @@ export class CloverParser extends BaseParser<CloverXml> {
           uncoveredLines:
             f.line
               ?.filter((l) => l.$.count === '0')
-              .map((l) => Number(l.$.num)) || [],
+              .map((l) => Number(l.$.num)) ?? [],
         };
       },
     );

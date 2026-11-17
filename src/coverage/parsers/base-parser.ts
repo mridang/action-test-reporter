@@ -23,9 +23,22 @@ export abstract class BaseParser<T> implements CoverageParser {
    * coverage data.
    */
   public async parse(content: string): Promise<CoverageData> {
-    const xml = (await parseStringPromise(content)) as T;
+    const xml: unknown = await parseStringPromise(content);
+    if (!this.isReport(xml)) {
+      throw new TypeError('The XML content is not a supported coverage report');
+    }
     return this.process(xml);
   }
+
+  /**
+   * Tells whether the parsed XML has the root structure of the report format.
+   * @abstract
+   * @memberof BaseParser
+   * @param {unknown} xml - The parsed XML data.
+   * @returns {boolean} True when the data has the report's root element.
+   * @protected
+   */
+  protected abstract isReport(xml: unknown): xml is T;
 
   /**
    * Abstract method for format-specific logic, to be implemented by

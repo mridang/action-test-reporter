@@ -9,6 +9,7 @@ import {
   TestGroupResult,
   TestCaseResult,
 } from '../../test-results.js';
+import { isRecord } from '../../../record-guard.js';
 import {
   isSuiteEvent,
   isGroupEvent,
@@ -31,6 +32,17 @@ import type {
 } from './dart-json-types.js';
 
 import type { TestExecutionResult, TestCaseError } from '../../test-results.js';
+
+/**
+ * Tells whether a parsed value has the root structure of a Dart report event.
+ * @param value - The parsed value.
+ * @returns True when the value has the expected root.
+ * @example
+ * const supported = isReportEvent(parsed);
+ */
+function isReportEvent(value: unknown): value is ReportEvent {
+  return isRecord(value) && typeof value.type === 'string';
+}
 
 const DART_FRAME_PATTERN = /^(?!package:)(.*)\s(\d+):\d+\s/u;
 const FLUTTER_FRAME_PATTERN = /^(#\d+\s)(.*):(\d+):\d+\)$/u;
@@ -166,13 +178,15 @@ export class DartJsonParser implements TestParser {
           return null;
         }
         try {
-          return JSON.parse(text) as ReportEvent;
+          const event: unknown = JSON.parse(text);
+          if (!isReportEvent(event)) {
+            throw new TypeError('The line is not a Dart report event');
+          }
+          return event;
         } catch (error) {
-          const errWithCol = error as { columnNumber?: number };
+          const columnNumber = isRecord(error) ? error.columnNumber : undefined;
           const col =
-            errWithCol.columnNumber === undefined
-              ? ''
-              : `:${errWithCol.columnNumber}`;
+            typeof columnNumber === 'number' ? `:${columnNumber}` : '';
           throw new Error(
             `Invalid JSON at ${path}:${index + 1}${col}\n\n${String(error)}`,
             { cause: error },
@@ -292,7 +306,7 @@ export class DartJsonParser implements TestParser {
     }
 
     const { trackedFiles } = this.options;
-    const stackTrace = test.error?.stackTrace ?? '';
+    const stackTrace = test.error.stackTrace;
     const print = test.print
       .filter((p) => p.messageType === 'print')
       .map((p) => p.message)
@@ -301,7 +315,7 @@ export class DartJsonParser implements TestParser {
       .filter((text) => text !== '')
       .join('\n');
     const src = this.exceptionThrowSource(details, trackedFiles);
-    const message = this.getErrorMessage(test.error?.error ?? '', print);
+    const message = this.getErrorMessage(test.error.error, print);
     const testStartPath =
       src === undefined
         ? this.getRelativePath(testSuite.suite.path)

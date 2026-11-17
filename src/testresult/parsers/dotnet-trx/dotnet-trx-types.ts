@@ -22,7 +22,7 @@ interface Times {
 }
 
 interface TestDefinitions {
-  UnitTest: UnitTest[];
+  UnitTest?: UnitTest[];
 }
 
 export interface UnitTest {
@@ -35,7 +35,7 @@ export interface UnitTest {
 interface TestMethod {
   $: {
     // eslint-disable-next-line unicorn/no-keyword-prefix -- mirrors the className XML attribute of the TRX TestMethod element
-    className: string;
+    className?: string;
     name: string;
   };
 }
@@ -51,11 +51,11 @@ export interface UnitTestResult {
     duration?: string;
     outcome: Outcome;
   };
-  Output: Output[];
+  Output?: Output[];
 }
 
 interface Output {
-  ErrorInfo: ErrorInfo[];
+  ErrorInfo?: ErrorInfo[];
 }
 export interface ErrorInfo {
   Message: string[];

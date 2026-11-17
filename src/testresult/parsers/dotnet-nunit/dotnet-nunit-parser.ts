@@ -3,6 +3,7 @@
  */
 
 import { parseStringPromise } from 'xml2js';
+import { isRecord } from '../../../record-guard.js';
 
 import { getExceptionSource } from '../../utils/node-utilities.js';
 import { getBasePath, normalizeFilePath } from '../../utils/path-utilities.js';
@@ -16,6 +17,17 @@ import {
 import type { TestExecutionResult, TestCaseError } from '../../test-results.js';
 import type { NunitReport, TestCase, TestSuite } from './dotnet-nunit-types.js';
 import type { ParseOptions, TestParser } from '../../test-parser.js';
+
+/**
+ * Tells whether a parsed value has the root structure of an NUnit report.
+ * @param value - The parsed value.
+ * @returns True when the value has the expected root.
+ * @example
+ * const supported = isNunitReport(parsed);
+ */
+function isNunitReport(value: unknown): value is NunitReport {
+  return isRecord(value) && isRecord(value['test-run']);
+}
 
 /**
  * Parser for NUnit XML reports produced by .NET test runners.
@@ -35,7 +47,11 @@ export class DotnetNunitParser implements TestParser {
     content: string,
   ): Promise<NunitReport> {
     try {
-      return (await parseStringPromise(content)) as NunitReport;
+      const report: unknown = await parseStringPromise(content);
+      if (!isNunitReport(report)) {
+        throw new TypeError('The XML content is not an NUnit report');
+      }
+      return report;
     } catch (error) {
       throw new Error(`Invalid XML at ${path}\n\n${String(error)}`, {
         cause: error,

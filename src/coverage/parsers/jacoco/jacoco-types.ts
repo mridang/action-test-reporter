@@ -13,14 +13,14 @@ export type JacocoLine = {
 export type JacocoSourceFile = {
   $: { name: string };
   line?: JacocoLine[];
-  counter: JacocoCounter[];
+  counter?: JacocoCounter[];
 };
 
 export type JacocoPackage = {
   $: { name: string };
-  sourcefile: JacocoSourceFile[];
+  sourcefile?: JacocoSourceFile[];
 };
 
 export type JacocoReport = {
-  report: { package: JacocoPackage[]; counter: JacocoCounter[] };
+  report: { package?: JacocoPackage[]; counter?: JacocoCounter[] };
 };

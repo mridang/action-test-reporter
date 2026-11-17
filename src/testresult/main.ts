@@ -22,6 +22,33 @@ import type { FileContent } from './input-providers/input-provider.js';
 import type { ParseOptions } from './test-parser.js';
 import type { TestRunResult } from './test-results.js';
 
+const LIST_MODES = ['all', 'failed', 'none'] as const;
+const COLLAPSE_MODES = ['auto', 'always', 'never'] as const;
+
+/**
+ * Reads a list-mode input value.
+ * @param value - The raw input value.
+ * @returns The matching list mode, or undefined when the value is not one.
+ * @example
+ * const mode = toListMode('failed');
+ */
+function toListMode(value: string): (typeof LIST_MODES)[number] | undefined {
+  return LIST_MODES.find((mode) => mode === value);
+}
+
+/**
+ * Reads a collapse-mode input value.
+ * @param value - The raw input value.
+ * @returns The matching collapse mode, or undefined when the value is not one.
+ * @example
+ * const mode = toCollapseMode('auto');
+ */
+function toCollapseMode(
+  value: string,
+): (typeof COLLAPSE_MODES)[number] | undefined {
+  return COLLAPSE_MODES.find((mode) => mode === value);
+}
+
 export interface TestReporterOutput {
   results: TestRunResult[];
   summary: string;
@@ -31,10 +58,8 @@ export interface TestReporterOutput {
 class TestReporter {
   readonly name = getInput('name', { required: false }).trim() || 'tests';
   readonly resultsPath = getInput('results-path', { required: true });
-  readonly listSuites = getInput('list-suites', { required: true }) as
-    'all' | 'failed' | 'none';
-  readonly listTests = getInput('list-tests', { required: true }) as
-    'all' | 'failed' | 'none';
+  readonly listSuites = toListMode(getInput('list-suites', { required: true }));
+  readonly listTests = toListMode(getInput('list-tests', { required: true }));
   readonly maxAnnotations = Number.parseInt(
     getInput('max-annotations', { required: true }),
     10,
@@ -50,33 +75,22 @@ class TestReporter {
     getInput('only-summary', { required: false }) === 'true';
   readonly badgeTitle = getInput('badge-title', { required: false });
   readonly reportTitle = getInput('report-title', { required: false });
-  readonly collapsed = getInput('collapsed', { required: false }) as
-    'auto' | 'always' | 'never';
+  readonly collapsed = toCollapseMode(
+    getInput('collapsed', { required: false }),
+  );
 
   constructor() {
-    if (
-      this.listSuites !== 'all' &&
-      this.listSuites !== 'failed' &&
-      this.listSuites !== 'none'
-    ) {
+    if (this.listSuites === undefined) {
       setFailed(`Input parameter 'list-suites' has invalid value`);
       return;
     }
 
-    if (
-      this.listTests !== 'all' &&
-      this.listTests !== 'failed' &&
-      this.listTests !== 'none'
-    ) {
+    if (this.listTests === undefined) {
       setFailed(`Input parameter 'list-tests' has invalid value`);
       return;
     }
 
-    if (
-      this.collapsed !== 'auto' &&
-      this.collapsed !== 'always' &&
-      this.collapsed !== 'never'
-    ) {
+    if (this.collapsed === undefined) {
       setFailed(`Input parameter 'collapsed' has invalid value`);
       return;
     }
@@ -233,14 +247,14 @@ class TestReporter {
     const reportSummary = summaryFormatter.format(
       results,
       {
-        listSuites,
-        listTests,
+        listSuites: listSuites ?? 'all',
+        listTests: listTests ?? 'all',
         baseUrl: '',
         onlySummary,
         useActionsSummary: true,
         badgeTitle,
         reportTitle,
-        collapsed,
+        collapsed: collapsed ?? 'auto',
       },
       shortSummary,
     );

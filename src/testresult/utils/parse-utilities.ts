@@ -55,6 +55,6 @@ export function parseIsoDate(text: string): Date {
  * const line = getFirstNonEmptyLine('\n  Error: boom');
  */
 export function getFirstNonEmptyLine(stackTrace: string): string | undefined {
-  const lines = stackTrace?.split(/\r?\n/gu);
-  return lines?.find((line) => !BLANK_LINE_PATTERN.test(line));
+  const lines = stackTrace.split(/\r?\n/gu);
+  return lines.find((line) => !BLANK_LINE_PATTERN.test(line));
 }

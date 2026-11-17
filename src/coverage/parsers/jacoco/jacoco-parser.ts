@@ -2,6 +2,7 @@
  * @file Parses JaCoCo XML coverage reports into the shared coverage model.
  */
 
+import { isRecord } from '../../../record-guard.js';
 import { BaseParser } from '../base-parser.js';
 import type {
   CoverageData,
@@ -21,6 +22,19 @@ import type {
  */
 export class JacocoParser extends BaseParser<JacocoReport> {
   /**
+   * Tells whether the parsed XML has the root element of a Jacoco report.
+   * @memberof JacocoParser
+   * @param xml - The parsed XML data.
+   * @returns True when the data has the root element.
+   * @protected
+   * @example
+   * const supported = this.isReport(xml);
+   */
+  protected isReport(xml: unknown): xml is JacocoReport {
+    return isRecord(xml) && isRecord(xml.report);
+  }
+
+  /**
    * Processes the parsed JaCoCo XML object to extract coverage data.
    * @memberof JacocoParser
    * @param xml - The parsed JaCoCo XML report.
@@ -32,7 +46,7 @@ export class JacocoParser extends BaseParser<JacocoReport> {
    */
   protected async process(xml: JacocoReport): Promise<CoverageData> {
     const overall = this.aggregateCounters(xml.report.counter);
-    const details = (xml.report.package || []).flatMap((p) =>
+    const details = (xml.report.package ?? []).flatMap((p) =>
       this.unpackage(p),
     );
 
@@ -49,13 +63,13 @@ export class JacocoParser extends BaseParser<JacocoReport> {
    * const files = this.unpackage(pack);
    */
   private unpackage(pack: JacocoPackage): FileCoverageDetails[] {
-    return (pack.sourcefile || []).map((s) => {
+    return (pack.sourcefile ?? []).map((s) => {
       const metrics = this.aggregateCounters(s.counter);
       return {
         file: `${pack.$.name}/${s.$.name}`,
         ...metrics,
         uncoveredLines:
-          s.line?.filter((l) => l.$.ci === '0').map((l) => Number(l.$.nr)) ||
+          s.line?.filter((l) => l.$.ci === '0').map((l) => Number(l.$.nr)) ??
           [],
       };
     });
@@ -72,23 +86,24 @@ export class JacocoParser extends BaseParser<JacocoReport> {
    * const metrics = this.aggregateCounters(counters);
    */
   private aggregateCounters(
-    counters: JacocoCounter[],
+    counters: JacocoCounter[] | undefined,
   ): Omit<FileCoverageDetails, 'file' | 'uncoveredLines'> {
-    const metrics: Record<string, CoverageMetrics> = Object.fromEntries(
-      (counters || []).map((c) => [
-        c.$.type.toLowerCase(),
-        {
-          covered: Number(c.$.covered),
-          total: Number(c.$.covered) + Number(c.$.missed),
-        },
-      ]),
-    );
+    const metrics: Record<string, CoverageMetrics | undefined> =
+      Object.fromEntries(
+        (counters ?? []).map((c) => [
+          c.$.type.toLowerCase(),
+          {
+            covered: Number(c.$.covered),
+            total: Number(c.$.covered) + Number(c.$.missed),
+          },
+        ]),
+      );
 
     return {
-      lines: metrics.line || { covered: 0, total: 0 },
-      branches: metrics.branch || { covered: 0, total: 0 },
-      methods: metrics.method || { covered: 0, total: 0 },
-      statements: metrics.instruction || { covered: 0, total: 0 },
+      lines: metrics.line ?? { covered: 0, total: 0 },
+      branches: metrics.branch ?? { covered: 0, total: 0 },
+      methods: metrics.method ?? { covered: 0, total: 0 },
+      statements: metrics.instruction ?? { covered: 0, total: 0 },
     };
   }
 }

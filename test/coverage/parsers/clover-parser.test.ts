@@ -14,6 +14,12 @@ const testDir = getDirname(import.meta.url);
 const outputDir = path.join(testDir, '..', '__outputs__');
 
 describe('clover parser', () => {
+  test('rejects XML that is not a clover report', async () => {
+    await expect(new CloverParser().parse('<report/>')).rejects.toThrow(
+      'The XML content is not a supported coverage report',
+    );
+  });
+
   test('parses clover xml content', async () => {
     const fixturePath = path.join(testDir, '..', '__fixtures__', 'clover.xml');
     const content = await readFile(fixturePath, 'utf8');

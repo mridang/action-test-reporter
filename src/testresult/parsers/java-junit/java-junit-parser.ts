@@ -4,6 +4,7 @@
 
 import path from 'node:path';
 import { parseStringPromise } from 'xml2js';
+import { isRecord } from '../../../record-guard.js';
 import { normalizeFilePath } from '../../utils/path-utilities.js';
 import {
   TestCaseResult,
@@ -26,6 +27,28 @@ import type { TestCaseError, TestExecutionResult } from '../../test-results.js';
 const LINE_BREAK_PATTERN = /\r?\n/u;
 
 /**
+ * Tells whether a parsed value has the root structure of a JUnit report with a testsuites root.
+ * @param value - The parsed value.
+ * @returns True when the value has the expected root.
+ * @example
+ * const supported = isJunitReport(parsed);
+ */
+function isJunitReport(value: unknown): value is JunitReport {
+  return isRecord(value) && value.testsuites !== undefined;
+}
+
+/**
+ * Tells whether a parsed value has the root structure of a JUnit report with a single testsuite root.
+ * @param value - The parsed value.
+ * @returns True when the value has the expected root.
+ * @example
+ * const supported = isSingleSuiteReport(parsed);
+ */
+function isSingleSuiteReport(value: unknown): value is SingleSuiteReport {
+  return isRecord(value) && isRecord(value.testsuite);
+}
+
+/**
  * Parser for JUnit-style XML reports commonly produced by Java test frameworks.
  */
 export class JavaJunitParser implements TestParser {
@@ -46,15 +69,12 @@ export class JavaJunitParser implements TestParser {
 
   async parse(filePath: string, content: string): Promise<TestRunResult> {
     const reportOrSuite = await this.getJunitReport(filePath, content);
-    const isReport =
-      (reportOrSuite as { testsuites?: unknown }).testsuites !== undefined;
-
-    const ju: JunitReport = isReport
-      ? (reportOrSuite as JunitReport)
+    const ju: JunitReport = isJunitReport(reportOrSuite)
+      ? reportOrSuite
       : {
           testsuites: {
-            $: { time: (reportOrSuite as SingleSuiteReport).testsuite.$.time },
-            testsuite: [(reportOrSuite as SingleSuiteReport).testsuite],
+            $: { time: reportOrSuite.testsuite.$.time },
+            testsuite: [reportOrSuite.testsuite],
           },
         };
 
@@ -66,8 +86,11 @@ export class JavaJunitParser implements TestParser {
     content: string,
   ): Promise<JunitReport | SingleSuiteReport> {
     try {
-      return (await parseStringPromise(content)) as
-        JunitReport | SingleSuiteReport;
+      const report: unknown = await parseStringPromise(content);
+      if (!isJunitReport(report) && !isSingleSuiteReport(report)) {
+        throw new TypeError('The XML content is not a JUnit report');
+      }
+      return report;
     } catch (error) {
       throw new Error(`Invalid XML at ${filePath}\n\n${String(error)}`, {
         cause: error,
@@ -83,7 +106,7 @@ export class JavaJunitParser implements TestParser {
       ? this.flattenSuites(junit.testsuites.testsuite, filePath)
       : [];
 
-    const seconds = Number.parseFloat(junit.testsuites.$?.time);
+    const seconds = Number.parseFloat(junit.testsuites.$?.time ?? '');
     const time = Number.isNaN(seconds) ? undefined : seconds * 1000;
     return new TestRunResult(filePath, suites, time);
   }
@@ -165,7 +188,7 @@ export class JavaJunitParser implements TestParser {
     const line = src?.line;
 
     const failureType =
-      typeof failure === 'object' ? failure.$?.type : undefined;
+      typeof failure === 'object' ? failure.$.type : undefined;
     const failureMessage =
       typeof failure === 'object' ? failure.$.message : undefined;
     const message = failureType
