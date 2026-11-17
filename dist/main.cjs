@@ -38014,16 +38014,14 @@ var execExports = requireExec();
  */
 async function listFiles() {
     startGroup('Listing all files tracked by git');
-    let output = '';
     try {
         const lsFiles = await execExports.getExecOutput('git', ['ls-files', '-z']);
-        output = lsFiles.stdout;
+        return lsFiles.stdout.split('\u0000').filter((s) => s.length > 0);
     }
     finally {
         fixStdOutNullTermination();
         endGroup();
     }
-    return output.split('\u0000').filter((s) => s.length > 0);
 }
 /**
  * Writes an empty informational line to the log so the grouped output ends on its own line.
@@ -38045,15 +38043,14 @@ class LocalFileProvider {
         this.pattern = pattern;
     }
     async load() {
-        const result = [];
-        for (const pat of this.pattern) {
+        const perPattern = await Promise.all(this.pattern.map(async (pat) => {
             const paths = await glob(pat, { dot: true });
-            for (const file of paths) {
-                const content = await promises.readFile(file, { encoding: 'utf8' });
-                result.push({ file, content });
-            }
-        }
-        return { [this.name]: result };
+            return Promise.all(paths.map(async (file) => ({
+                file,
+                content: await promises.readFile(file, { encoding: 'utf8' }),
+            })));
+        }));
+        return { [this.name]: perPattern.flat() };
     }
     async listTrackedFiles() {
         return listFiles();
@@ -38075,11 +38072,10 @@ function normalizeDirPath(path, addTrailingSlash) {
     if (!path) {
         return path;
     }
-    path = normalizeFilePath(path);
-    if (!path.endsWith('/')) {
-        path += '/';
-    }
-    return path;
+    const normalized = normalizeFilePath(path);
+    return !normalized.endsWith('/')
+        ? `${normalized}/`
+        : normalized;
 }
 /**
  * Normalises a file path by trimming it and using forward slashes as separators.
@@ -38106,16 +38102,211 @@ function getBasePath(path, trackedFiles) {
     if (trackedFiles.includes(path)) {
         return '';
     }
-    let max = '';
-    for (const file of trackedFiles) {
-        if (path.endsWith(file) && file.length > max.length) {
-            max = file;
-        }
-    }
+    const max = trackedFiles
+        .filter((file) => path.endsWith(file))
+        .reduce((longest, file) => (file.length > longest.length ? file : longest), '');
     if (max === '') {
         return undefined;
     }
     return path.slice(0, path.length - max.length);
+}
+
+/**
+ * @file Provides helpers that read exception details and locale settings from Node-based results.
+ */
+const LINE_BREAK_PATTERN$1 = /\r?\n/u;
+const STACK_FRAME_PATTERN = /^[^(]*\((.*):(\d+):\d+\)$/u;
+const DEFAULT_LOCALE = 'en-US';
+/**
+ * Finds the first stack trace frame that points to a tracked project file, skipping Node internals and dependencies.
+ * @param stackTrace - The stack trace text of the exception.
+ * @param trackedFiles - The files tracked by Git, used to choose a frame.
+ * @param getRelativePath - Converts a frame path into a path relative to the repository.
+ * @returns The relative path and line of the frame, or undefined when none matches.
+ * @example
+ * const source = getExceptionSource(error.stack ?? '', files, (p) => p);
+ */
+function getExceptionSource(stackTrace, trackedFiles, getRelativePath) {
+    const lines = stackTrace.split(LINE_BREAK_PATTERN$1);
+    return lines
+        .map((line) => getTrackedFrame(line, trackedFiles, getRelativePath))
+        .find((frame) => frame !== undefined);
+}
+/**
+ * Extracts the file path and line number from the parenthesized location at the end of a stack trace line.
+ * The pattern is anchored at the start and skips to the first opening parenthesis with a negated class, so the
+ * scan stays linear on long lines.
+ * @param text - A single line of the stack trace.
+ * @returns The file path and the line number text, or undefined when the line has no location.
+ * @example
+ * const match = matchStackFrame('at run (/work/src/index.ts:10:5)');
+ */
+function matchStackFrame(text) {
+    const match = STACK_FRAME_PATTERN.exec(text);
+    return match === null ? undefined : [match[1], match[2]];
+}
+/**
+ * Parses one stack trace line and returns it when it points to a tracked project file.
+ * @param text - A single line of the stack trace.
+ * @param trackedFiles - The files tracked by Git.
+ * @param getRelativePath - Converts a frame path into a path relative to the repository.
+ * @returns The relative path and line of the frame, or undefined when the line does not match.
+ * @example
+ * const frame = getTrackedFrame('at run (/work/src/index.ts:10:5)', files, (p) => p);
+ */
+function getTrackedFrame(text, trackedFiles, getRelativePath) {
+    const match = matchStackFrame(text);
+    if (match === undefined) {
+        return undefined;
+    }
+    const [fileString, lineString] = match;
+    const filePath = normalizeFilePath(fileString);
+    if (filePath.startsWith('internal/') || filePath.includes('/node_modules/')) {
+        return undefined;
+    }
+    const path = getRelativePath(filePath);
+    if (!path || !trackedFiles.includes(path)) {
+        return undefined;
+    }
+    return { path, line: Number.parseInt(lineString, 10) };
+}
+
+/**
+ * @file Defines the in-memory model of test runs, suites, groups and cases.
+ */
+const collator$3 = new Intl.Collator(DEFAULT_LOCALE);
+class TestRunResult {
+    path;
+    suites;
+    totalTime;
+    constructor(path, suites, totalTime) {
+        this.path = path;
+        this.suites = suites;
+        this.totalTime = totalTime;
+    }
+    get tests() {
+        return this.suites.reduce((sum, g) => sum + g.tests, 0);
+    }
+    get passed() {
+        return this.suites.reduce((sum, g) => sum + g.passed, 0);
+    }
+    get failed() {
+        return this.suites.reduce((sum, g) => sum + g.failed, 0);
+    }
+    get skipped() {
+        return this.suites.reduce((sum, g) => sum + g.skipped, 0);
+    }
+    get time() {
+        return this.totalTime ?? this.suites.reduce((sum, g) => sum + g.time, 0);
+    }
+    get result() {
+        return this.suites.some((t) => t.result === 'failed')
+            ? 'failed'
+            : 'success';
+    }
+    sort(deep) {
+        // eslint-disable-next-line functional/immutable-data -- the result classes expose in-place sorting as their public API, and callers hold references to these arrays
+        this.suites.sort((a, b) => collator$3.compare(a.name, b.name));
+        if (deep) {
+            // eslint-disable-next-line functional/no-loop-statements -- sorts each nested suite in place, which has no return value to map
+            for (const suite of this.suites) {
+                suite.sort(deep);
+            }
+        }
+    }
+}
+class TestSuiteResult {
+    name;
+    groups;
+    totalTime;
+    constructor(name, groups, totalTime) {
+        this.name = name;
+        this.groups = groups;
+        this.totalTime = totalTime;
+    }
+    get tests() {
+        return this.groups.reduce((sum, g) => sum + g.tests.length, 0);
+    }
+    get passed() {
+        return this.groups.reduce((sum, g) => sum + g.passed, 0);
+    }
+    get failed() {
+        return this.groups.reduce((sum, g) => sum + g.failed, 0);
+    }
+    get skipped() {
+        return this.groups.reduce((sum, g) => sum + g.skipped, 0);
+    }
+    get time() {
+        return this.totalTime ?? this.groups.reduce((sum, g) => sum + g.time, 0);
+    }
+    get result() {
+        return this.groups.some((t) => t.result === 'failed')
+            ? 'failed'
+            : 'success';
+    }
+    sort(deep) {
+        // eslint-disable-next-line functional/immutable-data -- the result classes expose in-place sorting as their public API, and callers hold references to these arrays
+        this.groups.sort((a, b) => collator$3.compare(a.name ?? '', b.name ?? ''));
+        if (deep) {
+            // eslint-disable-next-line functional/no-loop-statements -- sorts each nested group in place, which has no return value to map
+            for (const grp of this.groups) {
+                grp.sort();
+            }
+        }
+    }
+}
+class TestGroupResult {
+    name;
+    tests;
+    constructor(name, tests) {
+        this.name = name;
+        this.tests = tests;
+    }
+    get passed() {
+        return this.tests.reduce((sum, t) => (t.result === 'success' ? sum + 1 : sum), 0);
+    }
+    get failed() {
+        return this.tests.reduce((sum, t) => (t.result === 'failed' ? sum + 1 : sum), 0);
+    }
+    get skipped() {
+        return this.tests.reduce((sum, t) => (t.result === 'skipped' ? sum + 1 : sum), 0);
+    }
+    get time() {
+        return this.tests.reduce((sum, t) => sum + t.time, 0);
+    }
+    get result() {
+        return this.tests.some((t) => t.result === 'failed') ? 'failed' : 'success';
+    }
+    sort() {
+        // eslint-disable-next-line functional/immutable-data -- the result classes expose in-place sorting as their public API, and callers hold references to these arrays
+        this.tests.sort((a, b) => collator$3.compare(a.name, b.name));
+    }
+}
+class TestCaseResult {
+    name;
+    result;
+    time;
+    error;
+    constructor(name, result, time, error) {
+        this.name = name;
+        this.result = result;
+        this.time = time;
+        this.error = error;
+    }
+}
+
+/**
+ * @file Narrows parsed JSON and XML values before the parsers read them.
+ */
+/**
+ * Tells whether a parsed JSON or XML value is an object whose properties can be inspected.
+ * @param value - The parsed value.
+ * @returns True when the value is a non-null object.
+ * @example
+ * isRecord({ coverage: {} }); // true
+ */
+function isRecord(value) {
+    return typeof value === 'object' && value !== null;
 }
 
 /**
@@ -38193,199 +38384,26 @@ function isMessageEvent(event) {
 }
 
 /**
- * @file Provides helpers that read exception details and locale settings from Node-based results.
- */
-const LINE_BREAK_PATTERN$1 = /\r?\n/;
-const STACK_FRAME_PATTERN = /^[^(]*\((.*):(\d+):\d+\)$/;
-const DEFAULT_LOCALE = 'en-US';
-/**
- * Finds the first stack trace frame that points to a tracked project file, skipping Node internals and dependencies.
- * @param stackTrace - The stack trace text of the exception.
- * @param trackedFiles - The files tracked by Git, used to choose a frame.
- * @param getRelativePath - Converts a frame path into a path relative to the repository.
- * @returns The relative path and line of the frame, or undefined when none matches.
- * @example
- * const source = getExceptionSource(error.stack ?? '', files, (p) => p);
- */
-function getExceptionSource(stackTrace, trackedFiles, getRelativePath) {
-    const lines = stackTrace.split(LINE_BREAK_PATTERN$1);
-    for (const line of lines) {
-        const frame = getTrackedFrame(line, trackedFiles, getRelativePath);
-        if (frame) {
-            return frame;
-        }
-    }
-    return undefined;
-}
-/**
- * Extracts the file path and line number from the parenthesized location at the end of a stack trace line.
- * The pattern is anchored at the start and skips to the first opening parenthesis with a negated class, so the
- * scan stays linear on long lines.
- * @param text - A single line of the stack trace.
- * @returns The file path and the line number text, or undefined when the line has no location.
- * @example
- * const match = matchStackFrame('at run (/work/src/index.ts:10:5)');
- */
-function matchStackFrame(text) {
-    const match = STACK_FRAME_PATTERN.exec(text);
-    return match === null ? undefined : [match[1], match[2]];
-}
-/**
- * Parses one stack trace line and returns it when it points to a tracked project file.
- * @param text - A single line of the stack trace.
- * @param trackedFiles - The files tracked by Git.
- * @param getRelativePath - Converts a frame path into a path relative to the repository.
- * @returns The relative path and line of the frame, or undefined when the line does not match.
- * @example
- * const frame = getTrackedFrame('at run (/work/src/index.ts:10:5)', files, (p) => p);
- */
-function getTrackedFrame(text, trackedFiles, getRelativePath) {
-    const match = matchStackFrame(text);
-    if (match === undefined) {
-        return undefined;
-    }
-    const [fileString, lineString] = match;
-    const filePath = normalizeFilePath(fileString);
-    if (filePath.startsWith('internal/') || filePath.includes('/node_modules/')) {
-        return undefined;
-    }
-    const path = getRelativePath(filePath);
-    if (!path || !trackedFiles.includes(path)) {
-        return undefined;
-    }
-    return { path, line: Number.parseInt(lineString) };
-}
-
-/**
- * @file Defines the in-memory model of test runs, suites, groups and cases.
- */
-const collator$3 = new Intl.Collator(DEFAULT_LOCALE);
-class TestRunResult {
-    path;
-    suites;
-    totalTime;
-    constructor(path, suites, totalTime) {
-        this.path = path;
-        this.suites = suites;
-        this.totalTime = totalTime;
-    }
-    get tests() {
-        return this.suites.reduce((sum, g) => sum + g.tests, 0);
-    }
-    get passed() {
-        return this.suites.reduce((sum, g) => sum + g.passed, 0);
-    }
-    get failed() {
-        return this.suites.reduce((sum, g) => sum + g.failed, 0);
-    }
-    get skipped() {
-        return this.suites.reduce((sum, g) => sum + g.skipped, 0);
-    }
-    get time() {
-        return this.totalTime ?? this.suites.reduce((sum, g) => sum + g.time, 0);
-    }
-    get result() {
-        return this.suites.some((t) => t.result === 'failed')
-            ? 'failed'
-            : 'success';
-    }
-    sort(deep) {
-        this.suites.sort((a, b) => collator$3.compare(a.name, b.name));
-        if (deep) {
-            for (const suite of this.suites) {
-                suite.sort(deep);
-            }
-        }
-    }
-}
-class TestSuiteResult {
-    name;
-    groups;
-    totalTime;
-    constructor(name, groups, totalTime) {
-        this.name = name;
-        this.groups = groups;
-        this.totalTime = totalTime;
-    }
-    get tests() {
-        return this.groups.reduce((sum, g) => sum + g.tests.length, 0);
-    }
-    get passed() {
-        return this.groups.reduce((sum, g) => sum + g.passed, 0);
-    }
-    get failed() {
-        return this.groups.reduce((sum, g) => sum + g.failed, 0);
-    }
-    get skipped() {
-        return this.groups.reduce((sum, g) => sum + g.skipped, 0);
-    }
-    get time() {
-        return this.totalTime ?? this.groups.reduce((sum, g) => sum + g.time, 0);
-    }
-    get result() {
-        return this.groups.some((t) => t.result === 'failed')
-            ? 'failed'
-            : 'success';
-    }
-    sort(deep) {
-        this.groups.sort((a, b) => collator$3.compare(a.name ?? '', b.name ?? ''));
-        if (deep) {
-            for (const grp of this.groups) {
-                grp.sort();
-            }
-        }
-    }
-}
-class TestGroupResult {
-    name;
-    tests;
-    constructor(name, tests) {
-        this.name = name;
-        this.tests = tests;
-    }
-    get passed() {
-        return this.tests.reduce((sum, t) => (t.result === 'success' ? sum + 1 : sum), 0);
-    }
-    get failed() {
-        return this.tests.reduce((sum, t) => (t.result === 'failed' ? sum + 1 : sum), 0);
-    }
-    get skipped() {
-        return this.tests.reduce((sum, t) => (t.result === 'skipped' ? sum + 1 : sum), 0);
-    }
-    get time() {
-        return this.tests.reduce((sum, t) => sum + t.time, 0);
-    }
-    get result() {
-        return this.tests.some((t) => t.result === 'failed') ? 'failed' : 'success';
-    }
-    sort() {
-        this.tests.sort((a, b) => collator$3.compare(a.name, b.name));
-    }
-}
-class TestCaseResult {
-    name;
-    result;
-    time;
-    error;
-    constructor(name, result, time, error) {
-        this.name = name;
-        this.result = result;
-        this.time = time;
-        this.error = error;
-    }
-}
-
-/**
  * @file Parses the JSON event stream written by the Dart test runner.
  */
-const DART_FRAME_PATTERN = /^(?!package:)(.*)\s(\d+):\d+\s/;
-const FLUTTER_FRAME_PATTERN = /^(#\d+\s)(.*):(\d+):\d+\)$/;
-const USELESS_MESSAGE_PATTERN = /^Test failed\. See exception logs above\.\nThe test description was:/m;
+/**
+ * Tells whether a parsed value has the root structure of a Dart report event.
+ * @param value - The parsed value.
+ * @returns True when the value has the expected root.
+ * @example
+ * const supported = isReportEvent(parsed);
+ */
+function isReportEvent(value) {
+    return isRecord(value) && typeof value.type === 'string';
+}
+const DART_FRAME_PATTERN = /^(?!package:)(.*)\s(\d+):\d+\s/u;
+const FLUTTER_FRAME_PATTERN = /^(#\d+\s)(.*):(\d+):\d+\)$/u;
+const USELESS_MESSAGE_PATTERN = /^Test failed\. See exception logs above\.\nThe test description was:/mu;
 /**
  * Captures the exception text of a Flutter test print. A single whitespace character separates the text from its
  * surroundings in the pattern, which keeps the scan linear, so callers trim the leading whitespace of the capture.
  */
-const FLUTTER_EXCEPTION_PRINT = /^══╡ EXCEPTION CAUGHT BY FLUTTER TEST FRAMEWORK ╞═+\s(.*)\sWhen the exception was thrown, this was the stack:/ms;
+const FLUTTER_EXCEPTION_PRINT = /^══╡ EXCEPTION CAUGHT BY FLUTTER TEST FRAMEWORK ╞═+\s(.*)\sWhen the exception was thrown, this was the stack:/msu;
 /**
  * Extracts the file path and line number from a Dart stack trace line such as
  * `lib/main.dart 12:5  main`. A single whitespace character must precede the line number, because the greedy
@@ -38415,10 +38433,7 @@ function matchFlutterFrame(line) {
         return undefined;
     }
     const [, head, middle, lineString] = match;
-    let open = middle.lastIndexOf('(');
-    while (open !== -1 && line.startsWith('package:', head.length + open + 1)) {
-        open = open === 0 ? -1 : middle.lastIndexOf('(', open - 1);
-    }
+    const open = Array.from(middle.matchAll(/\(/gu), (opening) => opening.index).findLast((index) => !line.startsWith('package:', head.length + index + 1)) ?? -1;
     return open === -1 ? undefined : [middle.slice(open + 1), lineString];
 }
 class TestRun {
@@ -38435,28 +38450,33 @@ class TestRun {
 }
 class TestSuite {
     suite;
-    constructor(suite) {
+    groups;
+    constructor(suite, groups) {
         this.suite = suite;
+        this.groups = groups;
     }
-    groups = {};
 }
 class TestGroup {
     group;
-    constructor(group) {
+    tests;
+    constructor(group, tests) {
         this.group = group;
+        this.tests = tests;
     }
-    tests = [];
 }
 class TestCase {
     testStart;
-    constructor(testStart) {
+    testDone;
+    error;
+    print;
+    constructor(testStart, testDone, error, print = []) {
         this.testStart = testStart;
+        this.testDone = testDone;
+        this.error = error;
+        this.print = print;
         this.groupId = testStart.test.groupIDs.at(-1);
     }
     groupId;
-    print = [];
-    testDone;
-    error;
     get result() {
         if (this.testDone?.skipped) {
             return 'skipped';
@@ -38491,74 +38511,63 @@ class DartJsonParser {
         return this.getTestRunResult(tr);
     }
     getTestRun(path, content) {
-        const lines = content.split(/\n\r?/g);
+        const lines = content.split(/\n\r?/gu);
         const events = lines
             .map((text, index) => {
             if (text.trim() === '') {
                 return null;
             }
             try {
-                return JSON.parse(text);
+                const event = JSON.parse(text);
+                if (!isReportEvent(event)) {
+                    throw new TypeError('The line is not a Dart report event');
+                }
+                return event;
             }
             catch (error) {
-                const errWithCol = error;
-                const col = errWithCol.columnNumber === undefined
-                    ? ''
-                    : `:${errWithCol.columnNumber}`;
-                throw new Error(`Invalid JSON at ${path}:${index + 1}${col}\n\n${error}`);
+                const columnNumber = isRecord(error) ? error.columnNumber : undefined;
+                const col = typeof columnNumber === 'number' ? `:${columnNumber}` : '';
+                throw new Error(`Invalid JSON at ${path}:${index + 1}${col}\n\n${String(error)}`, { cause: error });
             }
         })
-            .filter((reportEvent) => reportEvent != null);
-        let success = false;
-        let totalTime = 0;
-        const suites = {};
-        const tests = {};
-        for (const reportEvent of events) {
-            if (isSuiteEvent(reportEvent)) {
-                suites[reportEvent.suite.id] = new TestSuite(reportEvent.suite);
-            }
-            else if (isGroupEvent(reportEvent)) {
-                suites[reportEvent.group.suiteID].groups[reportEvent.group.id] =
-                    new TestGroup(reportEvent.group);
-            }
-            else if (isTestStartEvent(reportEvent) &&
-                reportEvent.test.url !== null) {
-                const test = new TestCase(reportEvent);
-                const suite = suites[reportEvent.test.suiteID];
-                const groupIndex = reportEvent.test.groupIDs.length - 1;
-                const group = suite.groups[reportEvent.test.groupIDs[groupIndex]];
-                group.tests.push(test);
-                tests[reportEvent.test.id] = test;
-            }
-            else if (isTestDoneEvent(reportEvent) && tests[reportEvent.testID]) {
-                tests[reportEvent.testID].testDone = reportEvent;
-            }
-            else if (isErrorEvent(reportEvent) && tests[reportEvent.testID]) {
-                tests[reportEvent.testID].error = reportEvent;
-            }
-            else if (isMessageEvent(reportEvent) && tests[reportEvent.testID]) {
-                tests[reportEvent.testID].print.push(reportEvent);
-            }
-            else if (isDoneEvent(reportEvent)) {
-                success = reportEvent.success;
-                totalTime = reportEvent.time;
-            }
-            else ;
-        }
-        return new TestRun(path, Object.values(suites), success, totalTime);
+            .filter((reportEvent) => reportEvent !== null);
+        const doneEvent = events.findLast((reportEvent) => isDoneEvent(reportEvent));
+        const testStarts = events
+            .filter((reportEvent) => isTestStartEvent(reportEvent))
+            .filter((reportEvent) => reportEvent.test.url !== null);
+        const testDones = new Map(events
+            .filter((reportEvent) => isTestDoneEvent(reportEvent))
+            .map((reportEvent) => [reportEvent.testID, reportEvent]));
+        const testErrors = new Map(events
+            .filter((reportEvent) => isErrorEvent(reportEvent))
+            .map((reportEvent) => [reportEvent.testID, reportEvent]));
+        const messages = events.filter((reportEvent) => isMessageEvent(reportEvent));
+        const tests = testStarts.map((testStart) => new TestCase(testStart, testDones.get(testStart.test.id), testErrors.get(testStart.test.id), messages.filter((message) => message.testID === testStart.test.id)));
+        const groups = events
+            .filter((reportEvent) => isGroupEvent(reportEvent))
+            .map((reportEvent) => reportEvent.group)
+            .toSorted((a, b) => a.id - b.id);
+        const suites = events
+            .filter((reportEvent) => isSuiteEvent(reportEvent))
+            .map((reportEvent) => reportEvent.suite)
+            .toSorted((a, b) => a.id - b.id)
+            .map((suite) => new TestSuite(suite, groups
+            .filter((group) => group.suiteID === suite.id)
+            .map((group) => new TestGroup(group, tests.filter((test) => test.testStart.test.suiteID === suite.id &&
+            test.groupId === group.id)))));
+        return new TestRun(path, suites, doneEvent?.success ?? false, doneEvent?.time ?? 0);
     }
     getTestRunResult(tr) {
-        const suites = tr.suites.map((s) => {
-            return new TestSuiteResult(this.getRelativePath(s.suite.path), this.getGroups(s));
-        });
+        const suites = tr.suites.map((s) => new TestSuiteResult(this.getRelativePath(s.suite.path), this.getGroups(s)));
         return new TestRunResult(tr.path, suites, tr.time);
     }
     getGroups(suite) {
-        const groups = Object.values(suite.groups).filter((grp) => grp.tests.length > 0);
-        groups.sort((a, b) => (a.group.line ?? 0) - (b.group.line ?? 0));
+        const groups = suite.groups
+            .filter((grp) => grp.tests.length > 0)
+            .toSorted((a, b) => (a.group.line ?? 0) - (b.group.line ?? 0));
         return groups.map((group) => {
-            group.tests.sort((a, b) => (a.testStart.test.line ?? 0) - (b.testStart.test.line ?? 0));
             const tests = group.tests
+                .toSorted((a, b) => (a.testStart.test.line ?? 0) - (b.testStart.test.line ?? 0))
                 .filter((tc) => !tc.testDone?.hidden)
                 .map((tc) => {
                 const error = this.getError(suite, tc);
@@ -38576,7 +38585,7 @@ class DartJsonParser {
             return undefined;
         }
         const { trackedFiles } = this.options;
-        const stackTrace = test.error?.stackTrace ?? '';
+        const stackTrace = test.error.stackTrace;
         const print = test.print
             .filter((p) => p.messageType === 'print')
             .map((p) => p.message)
@@ -38585,23 +38594,21 @@ class DartJsonParser {
             .filter((text) => text !== '')
             .join('\n');
         const src = this.exceptionThrowSource(details, trackedFiles);
-        const message = this.getErrorMessage(test.error?.error ?? '', print);
-        let path;
-        let line;
-        if (src === undefined) {
-            const testStartPath = this.getRelativePath(testSuite.suite.path);
-            if (trackedFiles.includes(testStartPath)) {
-                path = testStartPath;
-                line =
-                    test.testStart.test.root_line ??
+        const message = this.getErrorMessage(test.error.error, print);
+        const testStartPath = src === undefined
+            ? this.getRelativePath(testSuite.suite.path)
+            : undefined;
+        const location = src ??
+            (testStartPath !== undefined && trackedFiles.includes(testStartPath)
+                ? {
+                    path: testStartPath,
+                    line: test.testStart.test.root_line ??
                         test.testStart.test.line ??
-                        undefined;
-            }
-        }
-        else {
-            path = src.path;
-            line = src.line;
-        }
+                        undefined,
+                }
+                : undefined);
+        const path = location?.path;
+        const line = location?.line;
         return {
             path,
             line,
@@ -38621,15 +38628,17 @@ class DartJsonParser {
         return message || print;
     }
     exceptionThrowSource(ex, trackedFiles) {
-        const lines = ex.split(/\r?\n/g);
+        const lines = ex.split(/\r?\n/gu);
         // Try both Dart and Flutter stack trace patterns.
         const matchers = [matchDartFrame, matchFlutterFrame];
+        // eslint-disable-next-line functional/no-loop-statements -- the matchers are tried in order and the first one that finds a frame wins
         for (const matcher of matchers) {
             const found = this.findTrackedFrame(lines, matcher, trackedFiles);
             if (found) {
                 return found;
             }
         }
+        return undefined;
     }
     /**
      * Finds the first stack trace line that matches a pattern and points to a tracked file.
@@ -38641,13 +38650,14 @@ class DartJsonParser {
      * const frame = this.findTrackedFrame(lines, matchDartFrame, trackedFiles);
      */
     findTrackedFrame(lines, matcher, trackedFiles) {
+        // eslint-disable-next-line functional/no-loop-statements -- the lines are scanned in order and the first tracked frame wins, so later lines are never evaluated
         for (const text of lines) {
             const match = matcher(text);
             if (match !== undefined) {
                 const [pathString, lineString] = match;
                 const path = normalizeFilePath(this.getRelativePath(pathString));
                 if (trackedFiles.includes(path)) {
-                    return { path, line: Number.parseInt(lineString) };
+                    return { path, line: Number.parseInt(lineString, 10) };
                 }
             }
         }
@@ -38655,15 +38665,11 @@ class DartJsonParser {
     }
     getRelativePath(path) {
         const prefix = 'file://';
-        if (path.startsWith(prefix)) {
-            path = path.slice(prefix.length);
-        }
-        path = normalizeFilePath(path);
-        const workDir = this.getWorkDir(path);
-        if (workDir !== undefined && path.startsWith(workDir)) {
-            path = path.slice(workDir.length);
-        }
-        return path;
+        const normalized = normalizeFilePath(path.startsWith(prefix) ? path.slice(prefix.length) : path);
+        const workDir = this.getWorkDir(normalized);
+        return workDir !== undefined && normalized.startsWith(workDir)
+            ? normalized.slice(workDir.length)
+            : normalized;
     }
     getWorkDir(path) {
         return (this.options.workDir ??
@@ -45732,6 +45738,16 @@ var xml2jsExports = requireXml2js();
  * @file Parses NUnit XML test results from .NET test runs.
  */
 /**
+ * Tells whether a parsed value has the root structure of an NUnit report.
+ * @param value - The parsed value.
+ * @returns True when the value has the expected root.
+ * @example
+ * const supported = isNunitReport(parsed);
+ */
+function isNunitReport(value) {
+    return isRecord(value) && isRecord(value['test-run']);
+}
+/**
  * Parser for NUnit XML reports produced by .NET test runners.
  */
 class DotnetNunitParser {
@@ -45746,58 +45762,58 @@ class DotnetNunitParser {
     }
     async getNunitReport(path, content) {
         try {
-            return (await xml2jsExports.parseStringPromise(content));
+            const report = await xml2jsExports.parseStringPromise(content);
+            if (!isNunitReport(report)) {
+                throw new TypeError('The XML content is not an NUnit report');
+            }
+            return report;
         }
         catch (error) {
-            throw new Error(`Invalid XML at ${path}\n\n${error}`);
+            throw new Error(`Invalid XML at ${path}\n\n${String(error)}`, {
+                cause: error,
+            });
         }
     }
     getTestRunResult(path, nunit) {
-        const suites = [];
         const time = Number.parseFloat(nunit['test-run'].$.duration) * 1000;
-        this.populateTestCasesRecursive(suites, [], nunit['test-run']['test-suite']);
+        const entries = this.collectTestCases([], nunit['test-run']['test-suite']).map(({ suitePath, testCase }) => {
+            const suitesWithoutTheories = suitePath.filter((suite) => suite.$.type !== 'Theory');
+            return {
+                suiteName: suitesWithoutTheories
+                    .slice(0, -1)
+                    .map((suite) => suite.$.name)
+                    .join('.'),
+                groupName: suitesWithoutTheories.at(-1).$.name,
+                result: new TestCaseResult(testCase.$.name, this.getTestExecutionResult(testCase), Number.parseFloat(testCase.$.duration) * 1000, this.getTestCaseError(testCase)),
+            };
+        });
+        const suites = Array.from(new Set(entries.map((entry) => entry.suiteName)), (suiteName) => {
+            const inSuite = entries.filter((entry) => entry.suiteName === suiteName);
+            return new TestSuiteResult(suiteName, Array.from(new Set(inSuite.map((entry) => entry.groupName)), (groupName) => new TestGroupResult(groupName, inSuite
+                .filter((entry) => entry.groupName === groupName)
+                .map((entry) => entry.result))));
+        });
         return new TestRunResult(path, suites, time);
     }
-    populateTestCasesRecursive(result, suitePath, testSuites) {
-        if (testSuites === undefined) {
-            return;
-        }
-        for (const suite of testSuites) {
-            suitePath.push(suite);
-            this.populateTestCasesRecursive(result, suitePath, suite['test-suite']);
-            const testcases = suite['test-case'];
-            if (testcases !== undefined) {
-                for (const testcase of testcases) {
-                    this.addTestCase(result, suitePath, testcase);
-                }
-            }
-            suitePath.pop();
-        }
-    }
-    addTestCase(result, suitePath, testCase) {
-        const suitesWithoutTheories = suitePath.filter((suite) => suite.$.type !== 'Theory');
-        const suiteName = suitesWithoutTheories
-            .slice(0, -1)
-            .map((suite) => suite.$.name)
-            .join('.');
-        const groupName = suitesWithoutTheories.at(-1).$.name;
-        let existingSuite = result.find((suite) => suite.name === suiteName);
-        if (existingSuite === undefined) {
-            existingSuite = new TestSuiteResult(suiteName, []);
-            result.push(existingSuite);
-        }
-        let existingGroup = existingSuite.groups.find((group) => group.name === groupName);
-        if (existingGroup === undefined) {
-            existingGroup = new TestGroupResult(groupName, []);
-            existingSuite.groups.push(existingGroup);
-        }
-        existingGroup.tests.push(new TestCaseResult(testCase.$.name, this.getTestExecutionResult(testCase), Number.parseFloat(testCase.$.duration) * 1000, this.getTestCaseError(testCase)));
+    collectTestCases(suitePath, testSuites) {
+        return (testSuites ?? []).flatMap((suite) => {
+            const path = [...suitePath, suite];
+            return [
+                ...this.collectTestCases(path, suite['test-suite']),
+                ...(suite['test-case'] ?? []).map((testCase) => ({
+                    suitePath: path,
+                    testCase,
+                })),
+            ];
+        });
     }
     getTestExecutionResult(test) {
-        if (test.$.result === 'Failed' || test.failure)
+        if (test.$.result === 'Failed' || test.failure) {
             return 'failed';
-        if (test.$.result === 'Skipped')
+        }
+        if (test.$.result === 'Skipped') {
             return 'skipped';
+        }
         return 'success';
     }
     getTestCaseError(tc) {
@@ -45805,16 +45821,11 @@ class DotnetNunitParser {
             return undefined;
         }
         const details = tc.failure[0];
-        let path;
-        let line;
-        if (details['stack-trace'] !== undefined &&
-            details['stack-trace'].length > 0) {
-            const src = getExceptionSource(details['stack-trace'][0], this.options.trackedFiles, (file) => this.getRelativePath(file));
-            if (src) {
-                path = src.path;
-                line = src.line;
-            }
-        }
+        const src = details['stack-trace'] !== undefined && details['stack-trace'].length > 0
+            ? getExceptionSource(details['stack-trace'][0], this.options.trackedFiles, (file) => this.getRelativePath(file))
+            : undefined;
+        const path = src?.path;
+        const line = src?.line;
         return {
             path,
             line,
@@ -45825,12 +45836,11 @@ class DotnetNunitParser {
         };
     }
     getRelativePath(path) {
-        path = normalizeFilePath(path);
-        const workDir = this.getWorkDir(path);
-        if (workDir !== undefined && path.startsWith(workDir)) {
-            path = path.slice(workDir.length);
-        }
-        return path;
+        const normalized = normalizeFilePath(path);
+        const workDir = this.getWorkDir(normalized);
+        return workDir !== undefined && normalized.startsWith(workDir)
+            ? normalized.slice(workDir.length)
+            : normalized;
     }
     getWorkDir(path) {
         return (this.options.workDir ??
@@ -45839,9 +45849,9 @@ class DotnetNunitParser {
     }
 }
 
-const NET_DURATION_PATTERN = /^(\d\d):(\d\d):(\d\d(?:\.\d+)?)$/;
-const ISO_DATE_PATTERN = /^\d{4}-[01]\d-[0-3]\dT[0-2]\d:[0-5]\d:[0-5]\d\.\d+([+-][0-2]\d:[0-5]\d|Z)$/;
-const BLANK_LINE_PATTERN = /^\s*$/;
+const NET_DURATION_PATTERN = /^(\d\d):(\d\d):(\d\d(?:\.\d+)?)$/u;
+const ISO_DATE_PATTERN = /^\d{4}-[01]\d-[0-3]\dT[0-2]\d:[0-5]\d:[0-5]\d\.\d+([+-][0-2]\d:[0-5]\d|Z)$/u;
+const BLANK_LINE_PATTERN = /^\s*$/u;
 /**
  * @file Provides helpers that parse durations, dates and stack traces from test reports.
  */
@@ -45860,8 +45870,8 @@ function parseNetDuration(text) {
         throw new Error(`Invalid format: "${text}" is not NET duration`);
     }
     const [, hourString, minString, secString] = durationMatch;
-    return ((Number.parseInt(hourString) * 3600 +
-        Number.parseInt(minString) * 60 +
+    return ((Number.parseInt(hourString, 10) * 3600 +
+        Number.parseInt(minString, 10) * 60 +
         Number.parseFloat(secString)) *
         1000);
 }
@@ -45888,25 +45898,26 @@ function parseIsoDate(text) {
  * const line = getFirstNonEmptyLine('\n  Error: boom');
  */
 function getFirstNonEmptyLine(stackTrace) {
-    const lines = stackTrace?.split(/\r?\n/g);
-    return lines?.find((line) => !BLANK_LINE_PATTERN.test(line));
+    const lines = stackTrace.split(/\r?\n/gu);
+    return lines.find((line) => !BLANK_LINE_PATTERN.test(line));
 }
 
 /**
  * @file Parses Visual Studio TRX test results from .NET test runs.
  */
-const DOTNET_EXCEPTION_LOCATION = / in (.+):line (\d+)$/;
+const DOTNET_EXCEPTION_LOCATION = / in (.+):line (\d+)$/u;
 /**
  * Matches a line break together with the carriage returns in front of it. The lookbehind makes the match start at
  * the first carriage return of a run, so a long run of carriage returns without a line feed is scanned only once.
  */
-const STACK_TRACE_LINE_BREAK = /(?<!\r)\r*\n/;
+const STACK_TRACE_LINE_BREAK = /(?<!\r)\r*\n/u;
 class TestClass {
     name;
-    constructor(name) {
+    tests;
+    constructor(name, tests) {
         this.name = name;
+        this.tests = tests;
     }
-    tests = [];
 }
 class Test {
     name;
@@ -45937,6 +45948,16 @@ class Test {
     }
 }
 /**
+ * Tells whether a parsed value has the root structure of a TRX report.
+ * @param value - The parsed value.
+ * @returns True when the value has the expected root.
+ * @example
+ * const supported = isTrxReport(parsed);
+ */
+function isTrxReport(value) {
+    return isRecord(value) && isRecord(value.TestRun);
+}
+/**
  * Parser for TRX reports generated by Visual Studio and other .NET test runners.
  */
 class DotnetTrxParser {
@@ -45954,36 +45975,31 @@ class DotnetTrxParser {
     }
     async getTrxReport(path, content) {
         try {
-            return (await xml2jsExports.parseStringPromise(content));
+            const report = await xml2jsExports.parseStringPromise(content);
+            if (!isTrxReport(report)) {
+                throw new TypeError('The XML content is not a TRX report');
+            }
+            return report;
         }
         catch (error) {
-            throw new Error(`Invalid XML at ${path}\n\n${error}`);
+            throw new Error(`Invalid XML at ${path}\n\n${String(error)}`, {
+                cause: error,
+            });
         }
     }
     getTestClasses(trx) {
         if (trx.TestRun.TestDefinitions === undefined ||
             trx.TestRun.Results === undefined ||
-            !trx.TestRun.TestDefinitions.some((td) => td.UnitTest && Array.isArray(td.UnitTest))) {
+            !trx.TestRun.TestDefinitions.some((td) => Array.isArray(td.UnitTest))) {
             return [];
         }
-        const unitTests = {};
-        for (const td of trx.TestRun.TestDefinitions) {
-            for (const ut of td.UnitTest) {
-                unitTests[ut.$.id] = ut;
-            }
-        }
+        const unitTests = Object.fromEntries(trx.TestRun.TestDefinitions.flatMap((td) => (td.UnitTest ?? []).map((ut) => [ut.$.id, ut])));
         const unitTestsResults = trx.TestRun.Results.flatMap((r) => r.UnitTestResult).flatMap((result) => ({
             result,
             test: unitTests[result.$.testId],
         }));
-        const testClasses = {};
-        for (const r of unitTestsResults) {
+        const entries = unitTestsResults.map((r) => {
             const testClassName = r.test.TestMethod[0].$.className ?? 'Unclassified';
-            let tc = testClasses[testClassName];
-            if (tc === undefined) {
-                tc = new TestClass(testClassName);
-                testClasses[tc.name] = tc;
-            }
             const error = this.getErrorInfo(r.result);
             const durationAttribute = r.result.$.duration;
             const duration = durationAttribute
@@ -45994,10 +46010,14 @@ class DotnetTrxParser {
                 resultTestName.codePointAt(testClassName.length) === '.'.codePointAt(0)
                 ? resultTestName.slice(testClassName.length + 1)
                 : resultTestName;
-            const test = new Test(testName, r.result.$.outcome, duration, error);
-            tc.tests.push(test);
-        }
-        return Object.values(testClasses);
+            return {
+                testClassName,
+                test: new Test(testName, r.result.$.outcome, duration, error),
+            };
+        });
+        return Array.from(new Set(entries.map((entry) => entry.testClassName)), (name) => new TestClass(name, entries
+            .filter((entry) => entry.testClassName === name)
+            .map((entry) => entry.test)));
     }
     getTestRunResult(path, trx, testClasses) {
         const times = trx.TestRun.Times[0].$;
@@ -46017,9 +46037,9 @@ class DotnetTrxParser {
         if (testResult.$.outcome !== 'Failed') {
             return undefined;
         }
-        const output = testResult.Output;
-        return output?.length > 0 && output[0].ErrorInfo?.length > 0
-            ? output[0].ErrorInfo[0]
+        const errorInfos = testResult.Output?.[0]?.ErrorInfo;
+        return errorInfos !== undefined && errorInfos.length > 0
+            ? errorInfos[0]
             : undefined;
     }
     getError(test) {
@@ -46035,24 +46055,21 @@ class DotnetTrxParser {
         }
         const stackTrace = test.error.StackTrace[0];
         const message = `${test.error.Message[0]}\n${stackTrace}`;
-        let path;
-        let line;
         const src = this.exceptionThrowSource(stackTrace);
-        if (src) {
-            path = src.path;
-            line = src.line;
-        }
+        const path = src?.path;
+        const line = src?.line;
         return {
             path,
             line,
             message,
-            details: `${message}`,
+            details: message,
         };
     }
     exceptionThrowSource(stackTrace) {
         const lines = stackTrace.split(STACK_TRACE_LINE_BREAK);
         const re = DOTNET_EXCEPTION_LOCATION;
         const { trackedFiles } = this.options;
+        // eslint-disable-next-line functional/no-loop-statements -- the lines are scanned in order and the first tracked frame wins, so later lines are never evaluated
         for (const text of lines) {
             const match = re.exec(text);
             if (match !== null) {
@@ -46061,11 +46078,11 @@ class DotnetTrxParser {
                 const workDir = this.getWorkDir(filePath);
                 const file = workDir ? filePath.slice(workDir.length) : undefined;
                 if (file !== undefined && trackedFiles.includes(file)) {
-                    const line = Number.parseInt(lineString);
-                    return { path: file, line };
+                    return { path: file, line: Number.parseInt(lineString, 10) };
                 }
             }
         }
+        return undefined;
     }
     getWorkDir(path) {
         return (this.options.workDir ??
@@ -46077,7 +46094,7 @@ class DotnetTrxParser {
 /**
  * @file Parses the JSON event stream written by go test -json.
  */
-const GO_OUTPUT_INDENT = /^ {4}/;
+const GO_OUTPUT_INDENT = /^ {4}/u;
 /**
  * Maps the final action of a Go test to the result that is reported for it.
  */
@@ -46085,6 +46102,16 @@ const RESULT_BY_ACTION = new Map([
     ['pass', 'success'],
     ['skip', 'skipped'],
 ]);
+/**
+ * Tells whether a parsed value has the root structure of a Go test event.
+ * @param value - The parsed value.
+ * @returns True when the value has the expected root.
+ * @example
+ * const supported = isGoTestEvent(parsed);
+ */
+function isGoTestEvent(value) {
+    return isRecord(value) && typeof value.Action === 'string';
+}
 /**
  * Parser for Go test JSON output produced with `go test -json`.
  */
@@ -46103,79 +46130,62 @@ class GolangJsonParser {
             .split('\n')
             .map((line, index) => {
             try {
-                return JSON.parse(line);
+                const event = JSON.parse(line);
+                if (!isGoTestEvent(event)) {
+                    throw new TypeError('The line is not a Go test event');
+                }
+                return event;
             }
             catch (error) {
-                throw new Error(`Invalid JSON at ${path} line ${index + 1}\n\n${error}`);
+                throw new Error(`Invalid JSON at ${path} line ${index + 1}\n\n${String(error)}`, { cause: error });
             }
         });
     }
     getTestRunResult(path, events) {
-        const eventGroups = new Map();
-        for (const event of events) {
-            if (!event.Test) {
-                continue;
-            }
-            const k = `${event.Package}/${event.Test}`;
-            let g = eventGroups.get(k);
-            if (!g) {
-                g = [];
-                eventGroups.set(k, g);
-            }
-            g.push(event);
-        }
-        const suites = [];
-        for (const eventGroup of eventGroups.values()) {
+        const eventGroups = events
+            .filter((event) => event.Test)
+            .reduce((groups, event) => {
+            const key = `${event.Package}/${event.Test}`;
+            // eslint-disable-next-line functional/immutable-data -- builds the lookup in a single pass; copying the map for every event would be quadratic
+            return groups.set(key, [...(groups.get(key) ?? []), event]);
+        }, new Map());
+        const entries = Array.from(eventGroups.values(), (eventGroup) => {
             const event = eventGroup[0];
-            let suite = suites.find((s) => s.name === event.Package);
-            if (!suite) {
-                suite = new TestSuiteResult(event.Package, []);
-                suites.push(suite);
-            }
-            if (!event.Test) {
-                continue;
-            }
-            let groupName;
-            let rest;
-            [groupName, ...rest] = event.Test.split('/');
-            let testName = rest.join('/');
-            if (!testName) {
-                testName = groupName;
-                groupName = null;
-            }
-            let group = suite.groups.find((g) => g.name === groupName);
-            if (!group) {
-                group = new TestGroupResult(groupName, []);
-                suite.groups.push(group);
-            }
+            const [first, ...rest] = event.Test.split('/');
+            const joined = rest.join('/');
+            const groupName = joined ? first : null;
+            const testName = joined || first;
             const lastEvent = eventGroup.at(-1);
             const result = RESULT_BY_ACTION.get(lastEvent.Action) ?? 'failed';
             if (lastEvent.Elapsed === undefined) {
                 throw new Error('missing elapsed on final test event');
             }
             const time = lastEvent.Elapsed * 1000;
-            let error;
-            if (result !== 'success') {
-                const outputEvents = eventGroup
-                    .filter((event) => event.Action === 'output')
-                    .map((event) => event.Output ?? '')
-                    .map((o) => o.replace(GO_OUTPUT_INDENT, ''));
-                outputEvents.splice(0, 1);
-                outputEvents.splice(-1, 1);
-                const details = outputEvents.join('');
-                error = {
-                    message: details,
-                    details: details,
-                };
-            }
-            group.tests.push(new TestCaseResult(testName, result, time, error));
-        }
+            const details = eventGroup
+                .filter((outputEvent) => outputEvent.Action === 'output')
+                .map((outputEvent) => outputEvent.Output ?? '')
+                .map((o) => o.replace(GO_OUTPUT_INDENT, ''))
+                .slice(1, -1)
+                .join('');
+            const error = result === 'success' ? undefined : { message: details, details };
+            return {
+                packageName: event.Package,
+                groupName,
+                testCase: new TestCaseResult(testName, result, time, error),
+            };
+        });
+        const suites = Array.from(new Set(entries.map((entry) => entry.packageName)), (packageName) => {
+            const inSuite = entries.filter((entry) => entry.packageName === packageName);
+            return new TestSuiteResult(packageName, Array.from(new Set(inSuite.map((entry) => entry.groupName)), (groupName) => new TestGroupResult(groupName, inSuite
+                .filter((entry) => entry.groupName === groupName)
+                .map((entry) => entry.testCase))));
+        });
         return new TestRunResult(path, suites);
     }
 }
 
-const LEADING_NON_WHITESPACE = /^\S*/;
-const re = /^\s*at (.*)\(([^(]*):(\d+)\)$/;
+const LEADING_NON_WHITESPACE = /^\S*/u;
+const re = /^\s*at (.*)\(([^(]*):(\d+)\)$/u;
 /**
  * Splits the text between the word at and the location into the optional class loader and module prefix and the
  * trace path. The prefix is the longest run of non-whitespace characters from the start that ends with a slash and
@@ -46208,7 +46218,11 @@ function parseStackTraceElement(stackTraceLine) {
     if (match !== null) {
         const [, beforeLocation, fileName, lineString] = match;
         const [maybeClassLoaderAndModuleNameAndVersion, tracePath] = splitClassLoaderPrefix(beforeLocation);
-        const { loader, moduleNameAndVersion } = parseClassLoaderAndModule(maybeClassLoaderAndModuleNameAndVersion);
+        const loaderAndModule = maybeClassLoaderAndModuleNameAndVersion
+            ? maybeClassLoaderAndModuleNameAndVersion.split('/')
+            : [];
+        const loader = loaderAndModule[0];
+        const moduleNameAndVersion = loaderAndModule[1] || undefined;
         return {
             loader,
             moduleNameAndVersion,
@@ -46219,27 +46233,31 @@ function parseStackTraceElement(stackTraceLine) {
     }
     return undefined;
 }
-/**
- * Splits the class loader and the module name and version from a stack trace element.
- * @param maybeClassLoaderAndModuleNameAndVersion - The text before the trace path, which may be empty.
- * @returns The class loader and module with its version, each undefined when absent.
- * @example
- * const { loader, moduleNameAndVersion } = parseClassLoaderAndModule('app/module@1.0');
- */
-function parseClassLoaderAndModule(maybeClassLoaderAndModuleNameAndVersion) {
-    if (maybeClassLoaderAndModuleNameAndVersion) {
-        const res = maybeClassLoaderAndModuleNameAndVersion.split('/');
-        const loader = res[0];
-        const moduleNameAndVersion = res[1] || undefined;
-        return { loader, moduleNameAndVersion };
-    }
-    return {};
-}
 
 /**
  * @file Parses JUnit XML test results produced by Java test runners.
  */
-const LINE_BREAK_PATTERN = /\r?\n/;
+const LINE_BREAK_PATTERN = /\r?\n/u;
+/**
+ * Tells whether a parsed value has the root structure of a JUnit report with a testsuites root.
+ * @param value - The parsed value.
+ * @returns True when the value has the expected root.
+ * @example
+ * const supported = isJunitReport(parsed);
+ */
+function isJunitReport$1(value) {
+    return isRecord(value) && value.testsuites !== undefined;
+}
+/**
+ * Tells whether a parsed value has the root structure of a JUnit report with a single testsuite root.
+ * @param value - The parsed value.
+ * @returns True when the value has the expected root.
+ * @example
+ * const supported = isSingleSuiteReport(parsed);
+ */
+function isSingleSuiteReport(value) {
+    return isRecord(value) && isRecord(value.testsuite);
+}
 /**
  * Parser for JUnit-style XML reports commonly produced by Java test frameworks.
  */
@@ -46248,94 +46266,93 @@ class JavaJunitParser {
     trackedFiles;
     constructor(options) {
         this.options = options;
-        this.trackedFiles = {};
-        for (const filePath of options.trackedFiles) {
+        this.trackedFiles = Object.fromEntries(options.trackedFiles.reduce((byName, filePath) => {
             const fileName = path$1.basename(filePath);
-            const files = this.trackedFiles[fileName] ?? (this.trackedFiles[fileName] = []);
-            files.push(normalizeFilePath(filePath));
-        }
+            // eslint-disable-next-line functional/immutable-data -- builds the lookup in a single pass; copying the map for every file would be quadratic
+            return byName.set(fileName, [
+                ...(byName.get(fileName) ?? []),
+                normalizeFilePath(filePath),
+            ]);
+        }, new Map()));
     }
     async parse(filePath, content) {
         const reportOrSuite = await this.getJunitReport(filePath, content);
-        const isReport = reportOrSuite.testsuites !== undefined;
-        let ju;
-        if (isReport) {
-            ju = reportOrSuite;
-        }
-        else {
-            const suite = reportOrSuite.testsuite;
-            ju = {
+        const ju = isJunitReport$1(reportOrSuite)
+            ? reportOrSuite
+            : {
                 testsuites: {
-                    $: { time: suite.$.time },
-                    testsuite: [suite],
+                    $: { time: reportOrSuite.testsuite.$.time },
+                    testsuite: [reportOrSuite.testsuite],
                 },
             };
-        }
         return this.getTestRunResult(filePath, ju);
     }
     async getJunitReport(filePath, content) {
         try {
-            return await xml2jsExports.parseStringPromise(content);
+            const report = await xml2jsExports.parseStringPromise(content);
+            if (!isJunitReport$1(report) && !isSingleSuiteReport(report)) {
+                throw new TypeError('The XML content is not a JUnit report');
+            }
+            return report;
         }
         catch (error) {
-            throw new Error(`Invalid XML at ${filePath}\n\n${error}`);
+            throw new Error(`Invalid XML at ${filePath}\n\n${String(error)}`, {
+                cause: error,
+            });
         }
     }
     getTestRunResult(filePath, junit) {
         const suites = junit.testsuites.testsuite
             ? this.flattenSuites(junit.testsuites.testsuite, filePath)
             : [];
-        const seconds = Number.parseFloat(junit.testsuites.$?.time);
+        const seconds = Number.parseFloat(junit.testsuites.$?.time ?? '');
         const time = Number.isNaN(seconds) ? undefined : seconds * 1000;
         return new TestRunResult(filePath, suites, time);
     }
     flattenSuites(suites, filePath) {
-        const results = [];
-        for (const suite of suites) {
-            if (suite.testsuite && suite.testsuite.length > 0) {
-                results.push(...this.flattenSuites(suite.testsuite, filePath));
+        return suites.flatMap((suite) => {
+            const nested = suite.testsuite && suite.testsuite.length > 0
+                ? this.flattenSuites(suite.testsuite, filePath)
+                : [];
+            if (suite.testcase === undefined || suite.testcase.length === 0) {
+                return nested;
             }
-            if (suite.testcase !== undefined && suite.testcase.length > 0) {
-                const rawName = suite.$.name?.trim() ?? '';
-                const name = rawName === '' || rawName === 'undefined'
-                    ? path$1.basename(filePath)
-                    : rawName;
-                const time = Number.parseFloat(suite.$.time) * 1000;
-                results.push(new TestSuiteResult(name, this.getGroups(suite), time));
-            }
-        }
-        return results;
+            const rawName = suite.$.name?.trim() ?? '';
+            const name = rawName === '' || rawName === 'undefined'
+                ? path$1.basename(filePath)
+                : rawName;
+            const time = Number.parseFloat(suite.$.time) * 1000;
+            return [
+                ...nested,
+                new TestSuiteResult(name, this.getGroups(suite), time),
+            ];
+        });
     }
     getGroups(suite) {
         if (suite.testcase === undefined) {
             return [];
         }
-        const groups = [];
-        for (const tc of suite.testcase) {
-            const groupName = tc.$.classname === suite.$.name ? '' : tc.$.classname;
-            let grp = groups.find((g) => g.name === groupName);
-            if (grp === undefined) {
-                grp = { name: groupName, tests: [] };
-                groups.push(grp);
-            }
-            grp.tests.push(tc);
-        }
-        return groups.map((grp) => {
-            const tests = grp.tests.map((tc) => {
+        const groupNameOf = (tc) => tc.$.classname === suite.$.name ? '' : tc.$.classname;
+        return Array.from(new Set(suite.testcase.map((tc) => groupNameOf(tc))), (groupName) => {
+            const tests = suite
+                .testcase.filter((tc) => groupNameOf(tc) === groupName)
+                .map((tc) => {
                 const name = tc.$.name.trim();
                 const result = this.getTestCaseResult(tc);
                 const time = Number.parseFloat(tc.$.time) * 1000;
                 const error = this.getTestCaseError(tc);
                 return new TestCaseResult(name, result, time, error);
             });
-            return new TestGroupResult(grp.name, tests);
+            return new TestGroupResult(groupName, tests);
         });
     }
     getTestCaseResult(test) {
-        if (test.failure || test.error)
+        if (test.failure || test.error) {
             return 'failed';
-        if (test.skipped)
+        }
+        if (test.skipped) {
             return 'skipped';
+        }
         return 'success';
     }
     getTestCaseError(tc) {
@@ -46348,22 +46365,14 @@ class JavaJunitParser {
         }
         const failure = failures[0];
         const details = typeof failure === 'object' ? failure._ : failure;
-        let filePath;
-        let line;
-        if (details != null) {
-            const src = this.exceptionThrowSource(details);
-            if (src) {
-                filePath = src.filePath;
-                line = src.line;
-            }
-        }
-        let message;
-        if (typeof failure === 'object') {
-            message = failure.$.message;
-            if (failure.$?.type) {
-                message = failure.$.type + ': ' + message;
-            }
-        }
+        const src = details ? this.exceptionThrowSource(details) : undefined;
+        const filePath = src?.filePath;
+        const line = src?.line;
+        const failureType = typeof failure === 'object' ? failure.$.type : undefined;
+        const failureMessage = typeof failure === 'object' ? failure.$.message : undefined;
+        const message = failureType
+            ? `${failureType}: ${failureMessage}`
+            : failureMessage;
         return {
             path: filePath,
             line,
@@ -46373,53 +46382,56 @@ class JavaJunitParser {
     }
     exceptionThrowSource(stackTrace) {
         const lines = stackTrace.split(LINE_BREAK_PATTERN);
+        // eslint-disable-next-line functional/no-loop-statements -- the lines are scanned in order and the first tracked frame wins, so later lines are never evaluated
         for (const text of lines) {
             const stackTraceElement = parseStackTraceElement(text);
             if (stackTraceElement) {
                 const { tracePath, fileName, lineStr } = stackTraceElement;
                 const filePath = this.getFilePath(tracePath, fileName);
                 if (filePath !== undefined) {
-                    const line = Number.parseInt(lineStr);
-                    return { filePath, line };
+                    return { filePath, line: Number.parseInt(lineStr, 10) };
                 }
             }
         }
+        return undefined;
     }
     getFilePath(tracePath, fileName) {
         const files = this.trackedFiles[fileName];
         if (files === undefined) {
             return undefined;
         }
-        const packageParts = tracePath.split(/\./g);
-        const packageIndex = packageParts.findIndex((part) => part[0] <= 'Z');
-        if (packageIndex !== -1) {
-            packageParts.splice(packageIndex, packageParts.length - packageIndex);
-        }
+        const allParts = tracePath.split(/\./gu);
+        const packageIndex = allParts.findIndex((part) => part[0] <= 'Z');
+        const packageParts = packageIndex === -1 ? allParts : allParts.slice(0, packageIndex);
         if (packageParts.length === 0) {
             return undefined;
         }
-        for (const filePath of files) {
-            const directories = path$1.dirname(filePath).split(/\//g);
+        return files.find((filePath) => {
+            const directories = path$1.dirname(filePath).split(/\//gu);
             if (packageParts.length > directories.length) {
-                continue;
+                return false;
             }
-            if (directories.length > packageParts.length) {
-                directories.splice(0, directories.length - packageParts.length);
-            }
-            const isMatch = packageParts.every((part, index) => part === directories[index]);
-            if (isMatch) {
-                return filePath;
-            }
-        }
-        return undefined;
+            const trailing = directories.slice(directories.length - packageParts.length);
+            return packageParts.every((part, index) => part === trailing[index]);
+        });
     }
 }
 
 /**
  * @file Parses JUnit XML test results produced by Jest.
  */
-const JEST_SUITE_NAME_PATTERN = /jest|__tests__|\.test|\.spec/i;
-const JEST_CLASS_NAME_PATTERN = /›|__tests__|\.test|\.spec|\/|\\/i;
+const JEST_SUITE_NAME_PATTERN = /jest|__tests__|\.test|\.spec/iu;
+const JEST_CLASS_NAME_PATTERN = /›|__tests__|\.test|\.spec|\/|\\/iu;
+/**
+ * Tells whether a parsed value has the root structure of a JUnit report.
+ * @param value - The parsed value.
+ * @returns True when the value has the expected root.
+ * @example
+ * const supported = isJunitReport(parsed);
+ */
+function isJunitReport(value) {
+    return isRecord(value) && isRecord(value.testsuites);
+}
 /**
  * Parser for JUnit XML reports emitted by Jest with the jest-junit reporter.
  */
@@ -46438,10 +46450,16 @@ class JestJunitParser {
     }
     async getJunitReport(path, content) {
         try {
-            return (await xml2jsExports.parseStringPromise(content));
+            const report = await xml2jsExports.parseStringPromise(content);
+            if (!isJunitReport(report)) {
+                throw new TypeError('The XML content is not a JUnit report');
+            }
+            return report;
         }
         catch (error) {
-            throw new Error(`Invalid XML at ${path}\n\n${error}`);
+            throw new Error(`Invalid XML at ${path}\n\n${String(error)}`, {
+                cause: error,
+            });
         }
     }
     getTestRunResult(path, junit) {
@@ -46457,32 +46475,20 @@ class JestJunitParser {
     }
     isProbablyJestReport(junit) {
         const suites = junit.testsuites.testsuite ?? [];
-        const queue = [...suites];
-        const suiteNames = [];
-        const testcaseClassNames = [];
-        let hasNestedSuites = false;
-        while (queue.length > 0) {
-            const suite = queue.shift();
-            if (!suite)
-                break;
-            if (suite.$?.name) {
-                suiteNames.push(suite.$.name);
-            }
-            if (suite.testsuite && suite.testsuite.length > 0) {
-                hasNestedSuites = true;
-                queue.push(...suite.testsuite);
-            }
-            if (suite.testcase) {
-                const names = suite.testcase.map((tc) => tc.$?.classname);
-                testcaseClassNames.push(...names.filter((name) => name !== undefined));
-            }
-        }
+        const flatten = (nested) => nested.flatMap((suite) => [suite, ...flatten(suite.testsuite ?? [])]);
+        const allSuites = flatten(suites);
+        const suiteNames = allSuites.flatMap((suite) => suite.$.name ? [suite.$.name] : []);
+        const testcaseClassNames = allSuites
+            .flatMap((suite) => suite.testcase ?? [])
+            .map((tc) => tc.$.classname)
+            .filter((name) => name !== undefined);
+        const hasNestedSuites = allSuites.some((suite) => suite.testsuite && suite.testsuite.length > 0);
         if (hasNestedSuites) {
             return false;
         }
         const topLevelName = junit.testsuites.$?.name ?? '';
         const suiteNameHint = suiteNames.some((n) => JEST_SUITE_NAME_PATTERN.test(n));
-        const testcaseClassHint = testcaseClassNames.some((cn) => cn === '' || JEST_CLASS_NAME_PATTERN.test(cn ?? ''));
+        const testcaseClassHint = testcaseClassNames.some((cn) => cn === '' || JEST_CLASS_NAME_PATTERN.test(cn));
         const topLevelHint = topLevelName.includes('jest');
         const hasNameHint = suiteNameHint || testcaseClassHint || topLevelHint;
         return hasNameHint || suites.length > 0 || testcaseClassNames.length > 0;
@@ -46491,45 +46497,37 @@ class JestJunitParser {
         if (!suite.testcase) {
             return [];
         }
-        const groups = [];
-        for (const tc of suite.testcase) {
-            let grp = groups.find((g) => g.describe === tc.$.classname);
-            if (grp === undefined) {
-                grp = { describe: tc.$.classname, tests: [] };
-                groups.push(grp);
-            }
-            grp.tests.push(tc);
-        }
-        return groups.map((grp) => {
-            const tests = grp.tests.map((tc) => {
+        const testcases = suite.testcase;
+        return Array.from(new Set(testcases.map((tc) => tc.$.classname)), (describe) => {
+            const tests = testcases
+                .filter((tc) => tc.$.classname === describe)
+                .map((tc) => {
                 const name = tc.$.name.trim();
                 const result = this.getTestCaseResult(tc);
                 const time = Number.parseFloat(tc.$.time) * 1000;
                 const error = this.getTestCaseError(tc);
                 return new TestCaseResult(name, result, time, error);
             });
-            return new TestGroupResult(grp.describe, tests);
+            return new TestGroupResult(describe, tests);
         });
     }
     getTestCaseResult(test) {
-        if (test.failure)
+        if (test.failure) {
             return 'failed';
-        if (test.skipped)
+        }
+        if (test.skipped) {
             return 'skipped';
+        }
         return 'success';
     }
     getTestCaseError(tc) {
         if (!this.options.parseErrors || !tc.failure) {
             return undefined;
         }
-        const details = typeof tc.failure[0] === 'string' ? tc.failure[0] : tc.failure[0]['_'];
-        let path;
-        let line;
+        const details = typeof tc.failure[0] === 'string' ? tc.failure[0] : tc.failure[0]._;
         const src = getExceptionSource(details, this.options.trackedFiles, (file) => this.getRelativePath(file));
-        if (src) {
-            path = src.path;
-            line = src.line;
-        }
+        const path = src?.path;
+        const line = src?.line;
         return {
             path,
             line,
@@ -46537,12 +46535,11 @@ class JestJunitParser {
         };
     }
     getRelativePath(path) {
-        path = normalizeFilePath(path);
-        const workDir = this.getWorkDir(path);
-        if (workDir !== undefined && path.startsWith(workDir)) {
-            path = path.slice(workDir.length);
-        }
-        return path;
+        const normalized = normalizeFilePath(path);
+        const workDir = this.getWorkDir(normalized);
+        return workDir !== undefined && normalized.startsWith(workDir)
+            ? normalized.slice(workDir.length)
+            : normalized;
     }
     getWorkDir(path) {
         return (this.options.workDir ??
@@ -46550,13 +46547,26 @@ class JestJunitParser {
             (this.assumedWorkDir = getBasePath(path, this.options.trackedFiles)));
     }
     escapeCharacters(s) {
-        return s.replaceAll(/([<>])/g, String.raw `\$1`);
+        return s.replaceAll(/([<>])/gu, String.raw `\$1`);
     }
 }
 
 /**
  * @file Parses the JSON report written by Mocha.
  */
+/**
+ * Tells whether a parsed value has the root structure of a Mocha JSON report.
+ * @param value - The parsed value.
+ * @returns True when the value has the expected root.
+ * @example
+ * const supported = isMochaJson(parsed);
+ */
+function isMochaJson(value) {
+    return (isRecord(value) &&
+        isRecord(value.stats) &&
+        Array.isArray(value.passes) &&
+        Array.isArray(value.failures));
+}
 /**
  * Parser for JSON reports produced by Mocha's built-in JSON reporter.
  */
@@ -46574,47 +46584,52 @@ class MochaJsonParser {
     }
     getMochaJson(path, content) {
         try {
-            return JSON.parse(content);
+            const report = JSON.parse(content);
+            if (!isMochaJson(report)) {
+                throw new TypeError('The content is not a Mocha JSON report');
+            }
+            return report;
         }
         catch (error) {
-            throw new Error(`Invalid JSON at ${path}\n\n${error}`);
+            throw new Error(`Invalid JSON at ${path}\n\n${String(error)}`, {
+                cause: error,
+            });
         }
     }
     getTestRunResult(resultsPath, mocha) {
-        const suitesMap = {};
-        const getSuite = (test) => {
+        const tests = [
+            ...mocha.passes.map((test) => [
+                test,
+                'success',
+            ]),
+            ...mocha.failures.map((test) => [
+                test,
+                'failed',
+            ]),
+            ...mocha.pending.map((test) => [
+                test,
+                'skipped',
+            ]),
+        ];
+        const entries = tests.map(([test, result]) => {
             const path = this.getRelativePath(test.file);
-            return (suitesMap[path] ?? (suitesMap[path] = new TestSuiteResult(path, [])));
-        };
-        for (const test of mocha.passes) {
-            const suite = getSuite(test);
-            this.processTest(suite, test, 'success');
-        }
-        for (const test of mocha.failures) {
-            const suite = getSuite(test);
-            this.processTest(suite, test, 'failed');
-        }
-        for (const test of mocha.pending) {
-            const suite = getSuite(test);
-            this.processTest(suite, test, 'skipped');
-        }
-        const suites = Object.values(suitesMap);
+            return { path, ...this.processTest(test, result) };
+        });
+        const suites = Array.from(new Set(entries.map((entry) => entry.path)), (path) => {
+            const inSuite = entries.filter((entry) => entry.path === path);
+            return new TestSuiteResult(path, Array.from(new Set(inSuite.map((entry) => entry.groupName)), (groupName) => new TestGroupResult(groupName, inSuite.flatMap((entry) => entry.groupName === groupName ? [entry.testCase] : []))));
+        });
         return new TestRunResult(resultsPath, suites, mocha.stats.duration);
     }
-    processTest(suite, test, result) {
+    processTest(test, result) {
         const groupName = test.fullTitle === test.title
             ? null
             : test.fullTitle
                 .slice(0, test.fullTitle.length - test.title.length)
                 .trimEnd();
-        let group = suite.groups.find((grp) => grp.name === groupName);
-        if (group === undefined) {
-            group = new TestGroupResult(groupName, []);
-            suite.groups.push(group);
-        }
         const error = this.getTestCaseError(test);
         const testCase = new TestCaseResult(test.title, result, test.duration ?? 0, error);
-        group.tests.push(testCase);
+        return { groupName, testCase };
     }
     getTestCaseError(test) {
         const details = test.err.stack;
@@ -46622,13 +46637,9 @@ class MochaJsonParser {
         if (details === undefined) {
             return undefined;
         }
-        let path;
-        let line;
         const src = getExceptionSource(details, this.options.trackedFiles, (file) => this.getRelativePath(file));
-        if (src) {
-            path = src.path;
-            line = src.line;
-        }
+        const path = src?.path;
+        const line = src?.line;
         return {
             path,
             line,
@@ -46637,12 +46648,11 @@ class MochaJsonParser {
         };
     }
     getRelativePath(path) {
-        path = normalizeFilePath(path);
-        const workDir = this.getWorkDir(path);
-        if (workDir !== undefined && path.startsWith(workDir)) {
-            path = path.slice(workDir.length);
-        }
-        return path;
+        const normalized = normalizeFilePath(path);
+        const workDir = this.getWorkDir(normalized);
+        return workDir !== undefined && normalized.startsWith(workDir)
+            ? normalized.slice(workDir.length)
+            : normalized;
     }
     getWorkDir(path) {
         return (this.options.workDir ??
@@ -46654,7 +46664,17 @@ class MochaJsonParser {
 /**
  * @file Parses the JSON report written by RSpec.
  */
-const RSPEC_BACKTRACE_LOCATION = /^(.*?):(\d+):/;
+const RSPEC_BACKTRACE_LOCATION = /^(.*?):(\d+):/u;
+/**
+ * Tells whether a parsed value has the root structure of an RSpec JSON report.
+ * @param value - The parsed value.
+ * @returns True when the value has the expected root.
+ * @example
+ * const supported = isRspecJson(parsed);
+ */
+function isRspecJson(value) {
+    return (isRecord(value) && Array.isArray(value.examples) && isRecord(value.summary));
+}
 /**
  * Parser for JSON reports generated by the RSpec JSON formatter.
  */
@@ -46671,53 +46691,47 @@ class RspecJsonParser {
     }
     getRspecJson(path, content) {
         try {
-            return JSON.parse(content);
+            const report = JSON.parse(content);
+            if (!isRspecJson(report)) {
+                throw new TypeError('The content is not an RSpec JSON report');
+            }
+            return report;
         }
         catch (error) {
-            throw new Error(`Invalid JSON at ${path}\n\n${error}`);
+            throw new Error(`Invalid JSON at ${path}\n\n${String(error)}`, {
+                cause: error,
+            });
         }
     }
     getTestRunResult(resultsPath, rspec) {
-        const suitesMap = {};
-        const getSuite = (test) => {
-            const path = test.file_path;
-            return (suitesMap[path] ?? (suitesMap[path] = new TestSuiteResult(path, [])));
-        };
-        for (const test of rspec.examples) {
-            const suite = getSuite(test);
-            switch (test.status) {
-                case 'failed': {
-                    this.processTest(suite, test, 'failed');
-                    break;
-                }
-                case 'passed': {
-                    this.processTest(suite, test, 'success');
-                    break;
-                }
-                case 'pending': {
-                    this.processTest(suite, test, 'skipped');
-                    break;
-                }
-                // No default
-            }
-        }
-        const suites = Object.values(suitesMap);
+        const resultByStatus = new Map([
+            ['failed', 'failed'],
+            ['passed', 'success'],
+            ['pending', 'skipped'],
+        ]);
+        const entries = rspec.examples.flatMap((test) => {
+            const result = resultByStatus.get(test.status);
+            return result === undefined
+                ? []
+                : [{ test, ...this.processTest(test, result) }];
+        });
+        const suites = Array.from(new Set(rspec.examples.map((test) => test.file_path)), (path) => {
+            const inSuite = entries.filter((entry) => entry.test.file_path === path);
+            return new TestSuiteResult(path, Array.from(new Set(inSuite.map((entry) => entry.groupName)), (groupName) => new TestGroupResult(groupName, inSuite
+                .filter((entry) => entry.groupName === groupName)
+                .map((entry) => entry.testCase))));
+        });
         return new TestRunResult(resultsPath, suites, rspec.summary.duration);
     }
-    processTest(suite, test, result) {
+    processTest(test, result) {
         const groupName = test.full_description === test.description
             ? null
             : test.full_description
                 .slice(0, test.full_description.length - test.description.length)
                 .trimEnd();
-        let group = suite.groups.find((grp) => grp.name === groupName);
-        if (group === undefined) {
-            group = new TestGroupResult(groupName, []);
-            suite.groups.push(group);
-        }
         const error = this.getTestCaseError(test);
         const testCase = new TestCaseResult(test.full_description, result, test.run_time ?? 0, error);
-        group.tests.push(testCase);
+        return { groupName, testCase };
     }
     getTestCaseError(test) {
         const backtrace = test.exception?.backtrace;
@@ -46725,14 +46739,10 @@ class RspecJsonParser {
         if (backtrace === undefined) {
             return undefined;
         }
-        let path;
-        let line;
         const details = backtrace.join('\n');
         const src = this.getExceptionSource(backtrace);
-        if (src) {
-            path = src.path;
-            line = src.line;
-        }
+        const path = src?.path;
+        const line = src?.line;
         return {
             path,
             line,
@@ -46742,17 +46752,12 @@ class RspecJsonParser {
     }
     getExceptionSource(backtrace) {
         const re = RSPEC_BACKTRACE_LOCATION;
-        for (const text of backtrace) {
-            const match = re.exec(text);
-            if (match !== null) {
-                const [, path, lineString] = match;
-                if (path.startsWith('./')) {
-                    const line = Number.parseInt(lineString);
-                    return { path, line };
-                }
-            }
-        }
-        return undefined;
+        return backtrace
+            .map((text) => re.exec(text))
+            .flatMap((match) => match?.[1].startsWith('./')
+            ? [{ path: match[1], line: Number.parseInt(match[2], 10) }]
+            : [])
+            .at(0);
     }
 }
 
@@ -46797,6 +46802,7 @@ const orderedParsers = [
  * const { format, result } = await detectTestFormat('results.xml', content, options);
  */
 async function detectTestFormat(path, content, options) {
+    // eslint-disable-next-line functional/no-loop-statements -- the parsers are tried in order and the first one that understands the content wins
     for (const { name, factory } of orderedParsers) {
         try {
             const parser = factory(options);
@@ -46891,8 +46897,8 @@ function slug(name, options) {
     const slugId = name
         .trim()
         .replaceAll('_', '')
-        .replaceAll(/[./\\]/g, '-')
-        .replaceAll(/[^\w-]/g, '');
+        .replaceAll(/[./\\]/gu, '-')
+        .replaceAll(/[^\w-]/gu, '');
     const id = `user-content-${slugId}`;
     const link = options.useActionsSummary ? `#${id}` : `#${slugId}`;
     return { id, link };
@@ -46930,20 +46936,20 @@ let SummaryFormatter$1 = class SummaryFormatter {
  */
 function getReport(results, options = DEFAULT_OPTIONS, shortSummary = '') {
     applySort(results);
-    const opts = { ...options };
-    let view = renderReport(results, opts, shortSummary);
-    let report = view.join('\n');
+    const view = renderReport(results, { ...options }, shortSummary);
+    const report = view.join('\n');
     if (getByteLength(report) <= getMaxReportLength(options)) {
         return report;
     }
-    if (opts.listTests === 'all') {
+    if (options.listTests === 'all') {
         info("Test report summary is too big - setting 'listTests' to 'failed'");
-        opts.listTests = 'failed';
-        view = renderReport(results, opts, shortSummary);
-        report = view.join('\n');
-        if (getByteLength(report) <= getMaxReportLength(options)) {
-            return report;
+        const failedView = renderReport(results, { ...options, listTests: 'failed' }, shortSummary);
+        const failedReport = failedView.join('\n');
+        if (getByteLength(failedReport) <= getMaxReportLength(options)) {
+            return failedReport;
         }
+        warning(`Test report summary exceeded limit of ${getMaxReportLength(options)} bytes and will be trimmed`);
+        return trimReport(failedView, options);
     }
     warning(`Test report summary exceeded limit of ${getMaxReportLength(options)} bytes and will be trimmed`);
     return trimReport(view, options);
@@ -46973,6 +46979,7 @@ function trimReport(lines, options) {
     const errorMsg = `**Report exceeded GitHub limit of ${getMaxReportLength(options)} bytes and has been trimmed**`;
     const maxErrorMsgLength = closingBlock.length + errorMsg.length + 2;
     const maxReportLength = getMaxReportLength(options) - maxErrorMsgLength;
+    /* eslint-disable functional/no-let, functional/no-loop-statements -- a single linear scan with an early exit; recursion would overflow the stack on reports with tens of thousands of lines */
     let reportLength = 0;
     let codeBlock = false;
     let endLineIndex;
@@ -46987,12 +46994,12 @@ function trimReport(lines, options) {
             codeBlock = !codeBlock;
         }
     }
-    const reportLines = lines.slice(0, endLineIndex);
-    if (codeBlock) {
-        reportLines.push('```');
-    }
-    reportLines.push(errorMsg);
-    return reportLines.join('\n');
+    /* eslint-enable functional/no-let, functional/no-loop-statements -- end of the linear scan above */
+    return [
+        ...lines.slice(0, endLineIndex),
+        ...(codeBlock ? ['```'] : []),
+        errorMsg,
+    ].join('\n');
 }
 /**
  * Sorts the test runs and their suites alphabetically by name, in place.
@@ -47001,8 +47008,11 @@ function trimReport(lines, options) {
  * applySort(testRuns);
  */
 function applySort(results) {
+    // eslint-disable-next-line functional/immutable-data -- the function documents that it sorts the caller's runs in place
     results.sort((a, b) => collator$2.compare(a.path, b.path));
+    // eslint-disable-next-line functional/no-loop-statements -- sorts the suites of each run in place, which has no return value to map
     for (const res of results) {
+        // eslint-disable-next-line functional/immutable-data -- the suites are sorted in place, as the function documents
         res.suites.sort((a, b) => collator$2.compare(a.name, b.name));
     }
 }
@@ -47026,19 +47036,15 @@ function getByteLength(text) {
  * const lines = renderReport(results, DEFAULT_OPTIONS, '');
  */
 function renderReport(results, options, shortSummary) {
-    const sections = [];
     const reportTitle = options.reportTitle.trim();
-    if (reportTitle) {
-        sections.push(`# ${reportTitle}`);
-    }
-    if (shortSummary) {
-        sections.push(`## ${shortSummary}`);
-    }
     const badge = getReportBadge(results, options);
-    sections.push(badge, '');
-    const runs = getTestRunsReport(results, options);
-    sections.push(...runs);
-    return sections;
+    return [
+        ...(reportTitle ? [`# ${reportTitle}`] : []),
+        ...(shortSummary ? [`## ${shortSummary}`] : []),
+        badge,
+        '',
+        ...getTestRunsReport(results, options),
+    ];
 }
 /**
  * Creates a single badge that summarises the results of all test runs combined.
@@ -47065,24 +47071,14 @@ function getReportBadge(results, options) {
  * const badge = getBadge(10, 0, 1, DEFAULT_OPTIONS);
  */
 function getBadge(passed, failed, skipped, options) {
-    const text = [];
-    if (passed > 0) {
-        text.push(`${passed} passed`);
-    }
-    if (failed > 0) {
-        text.push(`${failed} failed`);
-    }
-    if (skipped > 0) {
-        text.push(`${skipped} skipped`);
-    }
+    const text = [
+        ...(passed > 0 ? [`${passed} passed`] : []),
+        ...(failed > 0 ? [`${failed} failed`] : []),
+        ...(skipped > 0 ? [`${skipped} skipped`] : []),
+    ];
     const message = text.length > 0 ? text.join(', ') : 'none';
-    let color = 'success';
-    if (passed === 0 && failed === 0) {
-        color = 'yellow';
-    }
-    if (failed > 0) {
-        color = 'critical';
-    }
+    const baseColor = passed === 0 && failed === 0 ? 'yellow' : 'success';
+    const color = failed > 0 ? 'critical' : baseColor;
     const hint = failed > 0 ? 'Tests failed' : 'Tests passed successfully';
     const encodedBadgeTitle = encodeImgShieldsURIComponent(options.badgeTitle);
     const encodedMessage = encodeImgShieldsURIComponent(message);
@@ -47098,29 +47094,26 @@ function getBadge(passed, failed, skipped, options) {
  * const lines = getTestRunsReport(testRuns, DEFAULT_OPTIONS);
  */
 function getTestRunsReport(testRuns, options) {
-    const sections = [];
-    if (testRuns.length > 0 || options.onlySummary) {
-        const tableData = testRuns
-            .map((tr, originalIndex) => ({ tr, originalIndex }))
-            .filter(({ tr }) => tr.passed > 0 || tr.failed > 0 || tr.skipped > 0)
-            .map(({ tr, originalIndex }) => {
-            const time = formatTime(tr.time);
-            const name = tr.path;
-            const addr = options.baseUrl + makeRunSlug(originalIndex, options).link;
-            const nameLink = link(name, addr);
-            const passed = tr.passed > 0 ? `${tr.passed} ${Icon.success}` : '';
-            const failed = tr.failed > 0 ? `${tr.failed} ${Icon.fail}` : '';
-            const skipped = tr.skipped > 0 ? `${tr.skipped} ${Icon.skip}` : '';
-            return [nameLink, passed, failed, skipped, time];
-        });
-        const resultsTable = table(['Report', 'Passed', 'Failed', 'Skipped', 'Time'], [Align.Left, Align.Right, Align.Right, Align.Right, Align.Right], ...tableData);
-        sections.push('', resultsTable);
-    }
-    if (!options.onlySummary) {
-        const suitesReports = testRuns.flatMap((tr, index) => getSuitesReport(tr, index, options));
-        sections.push(...suitesReports);
-    }
-    return sections;
+    const tableData = testRuns.flatMap((tr, originalIndex) => {
+        if (tr.passed === 0 && tr.failed === 0 && tr.skipped === 0) {
+            return [];
+        }
+        const time = formatTime(tr.time);
+        const name = tr.path;
+        const addr = options.baseUrl + makeRunSlug(originalIndex, options).link;
+        const nameLink = link(name, addr);
+        const passed = tr.passed > 0 ? `${tr.passed} ${Icon.success}` : '';
+        const failed = tr.failed > 0 ? `${tr.failed} ${Icon.fail}` : '';
+        const skipped = tr.skipped > 0 ? `${tr.skipped} ${Icon.skip}` : '';
+        return [[nameLink, passed, failed, skipped, time]];
+    });
+    const resultsTable = table(['Report', 'Passed', 'Failed', 'Skipped', 'Time'], [Align.Left, Align.Right, Align.Right, Align.Right, Align.Right], ...tableData);
+    return [
+        ...(testRuns.length > 0 || options.onlySummary ? ['', resultsTable] : []),
+        ...(options.onlySummary
+            ? []
+            : testRuns.flatMap((tr, index) => getSuitesReport(tr, index, options))),
+    ];
 }
 /**
  * Renders the section for each suite of a single test run.
@@ -47132,43 +47125,41 @@ function getTestRunsReport(testRuns, options) {
  * const lines = getSuitesReport(testRun, 0, DEFAULT_OPTIONS);
  */
 function getSuitesReport(tr, runIndex, options) {
-    const sections = [];
     const suites = options.listSuites === 'failed'
         ? tr.suites.filter((suite) => suite.result === 'failed')
         : tr.suites;
-    if (options.listSuites !== 'none') {
-        const trSlug = makeRunSlug(runIndex, options);
-        const nameLink = `<a id="${trSlug.id}" href="${options.baseUrl + trSlug.link}">${tr.path}</a>`;
-        const icon = getResultIcon(tr.result);
-        sections.push(`## ${icon}\u00A0${nameLink}`);
-        const time = formatTime(tr.time);
-        const headingLine2 = tr.tests > 0
-            ? `**${tr.tests}** tests were completed in **${time}** with **${tr.passed}** passed, **${tr.failed}** failed and **${tr.skipped}** skipped.`
-            : 'No tests found';
-        sections.push(headingLine2);
-        if (suites.length > 0) {
-            const suitesTable = table(['Test suite', 'Passed', 'Failed', 'Skipped', 'Time'], [Align.Left, Align.Right, Align.Right, Align.Right, Align.Right], ...suites.map((s, suiteIndex) => {
-                const tsTime = formatTime(s.time);
-                const tsName = s.name;
-                const skipLink = options.listTests === 'none' ||
-                    (options.listTests === 'failed' && s.result !== 'failed');
-                const tsAddr = options.baseUrl + makeSuiteSlug(runIndex, suiteIndex, options).link;
-                const tsNameLink = skipLink ? tsName : link(tsName, tsAddr);
-                const passed = s.passed > 0 ? `${s.passed} ${Icon.success}` : '';
-                const failed = s.failed > 0 ? `${s.failed} ${Icon.fail}` : '';
-                const skipped = s.skipped > 0 ? `${s.skipped} ${Icon.skip}` : '';
-                return [tsNameLink, passed, failed, skipped, tsTime];
-            }));
-            sections.push('', suitesTable);
-        }
-    }
-    if (options.listTests !== 'none') {
-        const tests = suites.flatMap((ts, suiteIndex) => getTestsReport(ts, runIndex, suiteIndex, options));
-        if (tests.length > 1) {
-            sections.push(...tests);
-        }
-    }
-    return sections;
+    const trSlug = makeRunSlug(runIndex, options);
+    const nameLink = `<a id="${trSlug.id}" href="${options.baseUrl + trSlug.link}">${tr.path}</a>`;
+    const icon = getResultIcon(tr.result);
+    const time = formatTime(tr.time);
+    const headingLine2 = tr.tests > 0
+        ? `**${tr.tests}** tests were completed in **${time}** with **${tr.passed}** passed, **${tr.failed}** failed and **${tr.skipped}** skipped.`
+        : 'No tests found';
+    const suitesTable = table(['Test suite', 'Passed', 'Failed', 'Skipped', 'Time'], [Align.Left, Align.Right, Align.Right, Align.Right, Align.Right], ...suites.map((s, suiteIndex) => {
+        const tsTime = formatTime(s.time);
+        const tsName = s.name;
+        const skipLink = options.listTests === 'none' ||
+            (options.listTests === 'failed' && s.result !== 'failed');
+        const tsAddr = options.baseUrl + makeSuiteSlug(runIndex, suiteIndex, options).link;
+        const tsNameLink = skipLink ? tsName : link(tsName, tsAddr);
+        const passed = s.passed > 0 ? `${s.passed} ${Icon.success}` : '';
+        const failed = s.failed > 0 ? `${s.failed} ${Icon.fail}` : '';
+        const skipped = s.skipped > 0 ? `${s.skipped} ${Icon.skip}` : '';
+        return [tsNameLink, passed, failed, skipped, tsTime];
+    }));
+    const tests = options.listTests === 'none'
+        ? []
+        : suites.flatMap((ts, suiteIndex) => getTestsReport(ts, runIndex, suiteIndex, options));
+    return [
+        ...(options.listSuites === 'none'
+            ? []
+            : [
+                `## ${icon}\u00A0${nameLink}`,
+                headingLine2,
+                ...(suites.length > 0 ? ['', suitesTable] : []),
+            ]),
+        ...(tests.length > 1 ? tests : []),
+    ];
 }
 /**
  * Renders the table of tests for a single suite, listing the tests that match the report options.
@@ -47188,30 +47179,23 @@ function getTestsReport(ts, runIndex, suiteIndex, options) {
     if (groups.length === 0) {
         return [];
     }
-    const sections = [];
     const tsName = ts.name;
     const tsSlug = makeSuiteSlug(runIndex, suiteIndex, options);
     const tsNameLink = `<a id="${tsSlug.id}" href="${options.baseUrl + tsSlug.link}">${tsName}</a>`;
     const icon = getResultIcon(ts.result);
-    sections.push(`### ${icon}\u00A0${tsNameLink}`, '```');
-    for (const grp of groups) {
-        if (grp.name) {
-            sections.push(grp.name);
-        }
+    const body = groups.flatMap((grp) => {
         const space = grp.name ? '  ' : '';
-        for (const tc of grp.tests) {
-            if (options.listTests === 'failed' && tc.result !== 'failed') {
-                continue;
-            }
-            const result = getResultIcon(tc.result);
-            sections.push(`${space}${result} ${tc.name}`);
-            if (tc.error) {
-                sections.push(...formatErrorLines(tc.error));
-            }
-        }
-    }
-    sections.push('```');
-    return sections;
+        return [
+            ...(grp.name ? [grp.name] : []),
+            ...grp.tests
+                .filter((tc) => options.listTests !== 'failed' || tc.result === 'failed')
+                .flatMap((tc) => [
+                `${space}${getResultIcon(tc.result)} ${tc.name}`,
+                ...(tc.error ? formatErrorLines(tc.error) : []),
+            ]),
+        ];
+    });
+    return [`### ${icon}\u00A0${tsNameLink}`, '```', ...body, '```'];
 }
 /**
  * Creates the anchor identifier and link for the heading of a test run.
@@ -47245,7 +47229,7 @@ function makeSuiteSlug(runIndex, suiteIndex, options) {
  */
 function formatErrorLines(error) {
     const text = error.message ?? getFirstNonEmptyLine(error.details)?.trim();
-    return (text?.split(/\r?\n/g) ?? []).map((l) => '\t' + l);
+    return (text?.split(/\r?\n/gu) ?? []).map((l) => `\t${l}`);
 }
 /**
  * Returns the icon that represents a test execution result.
@@ -47286,12 +47270,34 @@ function encodeImgShieldsURIComponent(component) {
 /**
  * @file Runs the test result reporter end to end, from reading inputs to writing the summary.
  */
+const LIST_MODES = ['all', 'failed', 'none'];
+const COLLAPSE_MODES = ['auto', 'always', 'never'];
+/**
+ * Reads a list-mode input value.
+ * @param value - The raw input value.
+ * @returns The matching list mode, or undefined when the value is not one.
+ * @example
+ * const mode = toListMode('failed');
+ */
+function toListMode(value) {
+    return LIST_MODES.find((mode) => mode === value);
+}
+/**
+ * Reads a collapse-mode input value.
+ * @param value - The raw input value.
+ * @returns The matching collapse mode, or undefined when the value is not one.
+ * @example
+ * const mode = toCollapseMode('auto');
+ */
+function toCollapseMode(value) {
+    return COLLAPSE_MODES.find((mode) => mode === value);
+}
 class TestReporter {
     name = getInput('name', { required: false }).trim() || 'tests';
     resultsPath = getInput('results-path', { required: true });
-    listSuites = getInput('list-suites', { required: true });
-    listTests = getInput('list-tests', { required: true });
-    maxAnnotations = Number.parseInt(getInput('max-annotations', { required: true }));
+    listSuites = toListMode(getInput('list-suites', { required: true }));
+    listTests = toListMode(getInput('list-tests', { required: true }));
+    maxAnnotations = Number.parseInt(getInput('max-annotations', { required: true }), 10);
     failOnError = getInput('fail-on-error', { required: true }) === 'true';
     failOnEmpty = getInput('fail-on-empty', { required: true }) === 'true';
     workDirInput = getInput('working-directory', {
@@ -47300,23 +47306,17 @@ class TestReporter {
     onlySummary = getInput('only-summary', { required: false }) === 'true';
     badgeTitle = getInput('badge-title', { required: false });
     reportTitle = getInput('report-title', { required: false });
-    collapsed = getInput('collapsed', { required: false });
+    collapsed = toCollapseMode(getInput('collapsed', { required: false }));
     constructor() {
-        if (this.listSuites !== 'all' &&
-            this.listSuites !== 'failed' &&
-            this.listSuites !== 'none') {
+        if (this.listSuites === undefined) {
             setFailed(`Input parameter 'list-suites' has invalid value`);
             return;
         }
-        if (this.listTests !== 'all' &&
-            this.listTests !== 'failed' &&
-            this.listTests !== 'none') {
+        if (this.listTests === undefined) {
             setFailed(`Input parameter 'list-tests' has invalid value`);
             return;
         }
-        if (this.collapsed !== 'auto' &&
-            this.collapsed !== 'always' &&
-            this.collapsed !== 'never') {
+        if (this.collapsed === undefined) {
             setFailed(`Input parameter 'collapsed' has invalid value`);
             return;
         }
@@ -47348,26 +47348,26 @@ class TestReporter {
             trackedFiles,
             parseErrors,
         };
-        const results = [];
-        const summaries = [];
-        const shortSummaries = [];
         const input = await inputProvider.load();
-        for (const [reportName, files] of Object.entries(input)) {
+        // Reports are created one after the other so each one gets its own log group in order.
+        const reportOutputs = await Object.entries(input).reduce(async (previous, [reportName, files]) => {
+            const outputs = await previous;
             try {
                 startGroup(`Creating test report ${reportName}`);
                 const reportOutput = await this.createReport(reportName, files, options, writeSummary);
-                results.push(...reportOutput.results);
-                if (reportOutput.summary) {
-                    summaries.push(reportOutput.summary);
-                }
-                if (reportOutput.shortSummary) {
-                    shortSummaries.push(reportOutput.shortSummary);
-                }
+                return [...outputs, reportOutput];
             }
             finally {
                 endGroup();
             }
-        }
+        }, Promise.resolve([]));
+        const results = reportOutputs.flatMap((output) => output.results);
+        const summaries = reportOutputs
+            .map((output) => output.summary)
+            .filter(Boolean);
+        const shortSummaries = reportOutputs
+            .map((output) => output.shortSummary)
+            .filter(Boolean);
         const isFailed = results.some((tr) => tr.result === 'failed');
         const conclusion = isFailed ? 'failure' : 'success';
         const passed = results.reduce((sum, tr) => sum + tr.passed, 0);
@@ -47379,17 +47379,17 @@ class TestReporter {
         setOutput('failed', failed);
         setOutput('skipped', skipped);
         setOutput('time', time);
-        const summary = summaries.join('\n\n');
+        const combinedSummary = summaries.join('\n\n');
         const shortSummary = shortSummaries.join(' ');
         if (this.failOnError && isFailed) {
             setFailed(`Failed tests were found and 'fail-on-error' option is set to ${this.failOnError}`);
-            return { results, summary, shortSummary };
+            return { results, summary: combinedSummary, shortSummary };
         }
         if (results.length === 0 && this.failOnEmpty) {
             setFailed(`No test report files were found`);
-            return { results, summary, shortSummary };
+            return { results, summary: combinedSummary, shortSummary };
         }
-        return { results, summary, shortSummary };
+        return { results, summary: combinedSummary, shortSummary };
     }
     async createReport(name, files, options, writeSummary) {
         if (files.length === 0) {
@@ -47397,45 +47397,44 @@ class TestReporter {
             return { results: [], summary: '', shortSummary: '' };
         }
         info(`Processing test results for ${name}`);
-        const results = [];
         // Detect format from first file
         const firstFile = files[0];
         const { parser, result: firstResult, format, } = await detectTestFormat(firstFile.file, firstFile.content, options);
         info(`Auto-detected test result format: ${format}`);
-        results.push(firstResult);
         // Parse remaining files with the same parser
-        for (const { file, content } of files.slice(1)) {
+        const remainingResults = await Promise.all(files.slice(1).map(async ({ file, content }) => {
             try {
-                const tr = await parser.parse(file, content);
-                results.push(tr);
+                return await parser.parse(file, content);
+                // eslint-disable-next-line sonarjs/variable-name -- unicorn/catch-error-name requires this name because the catch binding would otherwise shadow the imported core error
             }
-            catch (error) {
+            catch (error_) {
                 error$1(`Processing test results from ${file} failed`);
-                throw error;
+                throw error_;
             }
-        }
+        }));
+        const results = [firstResult, ...remainingResults];
         const { listSuites, listTests, onlySummary, badgeTitle, reportTitle, collapsed, } = this;
         const passed = results.reduce((sum, tr) => sum + tr.passed, 0);
         const failed = results.reduce((sum, tr) => sum + tr.failed, 0);
         const skipped = results.reduce((sum, tr) => sum + tr.skipped, 0);
         const shortSummary = `${passed} passed, ${failed} failed and ${skipped} skipped `;
         const summaryFormatter = new SummaryFormatter$1();
-        const summary$1 = summaryFormatter.format(results, {
-            listSuites,
-            listTests,
+        const reportSummary = summaryFormatter.format(results, {
+            listSuites: listSuites ?? 'all',
+            listTests: listTests ?? 'all',
             baseUrl: '',
             onlySummary,
             useActionsSummary: true,
             badgeTitle,
             reportTitle,
-            collapsed,
+            collapsed: collapsed ?? 'auto',
         }, shortSummary);
         info('Summary content:');
-        info(summary$1);
+        info(reportSummary);
         if (writeSummary) {
-            await summary.addRaw(summary$1).write();
+            await summary.addRaw(reportSummary).write();
         }
-        return { results, summary: summary$1, shortSummary };
+        return { results, summary: reportSummary, shortSummary };
     }
 }
 /**
@@ -47449,13 +47448,14 @@ async function run$2(writeSummary = true) {
     try {
         const testReporter = new TestReporter();
         return await testReporter.run(writeSummary);
+        // eslint-disable-next-line sonarjs/variable-name -- unicorn/catch-error-name requires this name because the catch binding would otherwise shadow the imported core error
     }
-    catch (error) {
-        if (error instanceof Error) {
-            setFailed(error);
+    catch (error_) {
+        if (error_ instanceof Error) {
+            setFailed(error_);
         }
         else {
-            setFailed(JSON.stringify(error));
+            setFailed(JSON.stringify(error_));
         }
     }
     return undefined;
@@ -47483,6 +47483,9 @@ class BaseParser {
      */
     async parse(content) {
         const xml = await xml2jsExports.parseStringPromise(content);
+        if (!this.isReport(xml)) {
+            throw new TypeError('The XML content is not a supported coverage report');
+        }
         return this.process(xml);
     }
 }
@@ -47497,6 +47500,18 @@ class BaseParser {
  */
 class CloverParser extends BaseParser {
     /**
+     * Tells whether the parsed XML has the root element of a Clover report.
+     * @memberof CloverParser
+     * @param xml - The parsed XML data.
+     * @returns True when the data has the root element.
+     * @protected
+     * @example
+     * const supported = this.isReport(xml);
+     */
+    isReport(xml) {
+        return isRecord(xml) && isRecord(xml.coverage);
+    }
+    /**
      * Processes the parsed Clover XML object to extract coverage data.
      * @memberof CloverParser
      * @param xml - The parsed Clover XML report.
@@ -47506,7 +47521,7 @@ class CloverParser extends BaseParser {
      * @example
      * const data = await parser.parse(xml);
      */
-    process(xml) {
+    async process(xml) {
         const project = xml.coverage.project[0];
         const projectMetrics = project.metrics[0].$;
         const overall = {
@@ -47527,8 +47542,8 @@ class CloverParser extends BaseParser {
                 total: Number(projectMetrics.conditionals),
             },
         };
-        const filesFromPackages = project.package?.flatMap((p) => p.file || []) || [];
-        const filesFromProject = project.file || [];
+        const filesFromPackages = project.package?.flatMap((p) => p.file ?? []) ?? [];
+        const filesFromProject = project.file ?? [];
         const allFiles = [...filesFromPackages, ...filesFromProject];
         const details = allFiles.map((f) => {
             const m = f.metrics[0].$;
@@ -47552,10 +47567,10 @@ class CloverParser extends BaseParser {
                 },
                 uncoveredLines: f.line
                     ?.filter((l) => l.$.count === '0')
-                    .map((l) => Number(l.$.num)) || [],
+                    .map((l) => Number(l.$.num)) ?? [],
             };
         });
-        return Promise.resolve({ overall, details });
+        return { overall, details };
     }
 }
 
@@ -47569,6 +47584,18 @@ class CloverParser extends BaseParser {
  */
 class CoberturaParser extends BaseParser {
     /**
+     * Tells whether the parsed XML has the root element of a Cobertura report.
+     * @memberof CoberturaParser
+     * @param xml - The parsed XML data.
+     * @returns True when the data has the root element.
+     * @protected
+     * @example
+     * const supported = this.isReport(xml);
+     */
+    isReport(xml) {
+        return isRecord(xml) && isRecord(xml.coverage);
+    }
+    /**
      * Processes the parsed Cobertura XML object to extract coverage data.
      * @memberof CoberturaParser
      * @param xml - The parsed Cobertura XML report.
@@ -47578,8 +47605,24 @@ class CoberturaParser extends BaseParser {
      * @example
      * const data = await parser.parse(xml);
      */
-    process(xml) {
+    async process(xml) {
         const coverage = xml.coverage;
+        const sourceDir = coverage.sources[0].source[0];
+        const details = this.classesFromPackages(coverage.packages).map((c) => {
+            const lines = this.getLineCoverage(c);
+            const methods = this.getFunctionCoverage(c);
+            const branches = this.getBranchCoverage(c);
+            return {
+                file: path$1.join(sourceDir, c.$.filename),
+                lines,
+                methods,
+                branches,
+                statements: lines,
+                uncoveredLines: c.lines?.[0]?.line
+                    ?.filter((l) => l.$.hits === '0')
+                    .map((l) => Number(l.$.number)) ?? [],
+            };
+        });
         const overall = {
             lines: {
                 total: Number(coverage.$['lines-valid'] ?? 0),
@@ -47589,31 +47632,16 @@ class CoberturaParser extends BaseParser {
                 total: Number(coverage.$['branches-valid'] ?? 0),
                 covered: Number(coverage.$['branches-covered'] ?? 0),
             },
-            methods: { total: 0, covered: 0 },
+            methods: {
+                total: details.reduce((sum, d) => sum + d.methods.total, 0),
+                covered: details.reduce((sum, d) => sum + d.methods.covered, 0),
+            },
             statements: {
                 total: Number(coverage.$['lines-valid'] ?? 0),
                 covered: Number(coverage.$['lines-covered'] ?? 0),
             },
         };
-        const sourceDir = coverage.sources[0].source[0];
-        const details = this.classesFromPackages(coverage.packages).map((c) => {
-            const lines = this.getLineCoverage(c);
-            const methods = this.getFunctionCoverage(c);
-            const branches = this.getBranchCoverage(c);
-            overall.methods.total += methods.total;
-            overall.methods.covered += methods.covered;
-            return {
-                file: path$1.join(sourceDir, c.$.filename),
-                lines,
-                methods,
-                branches,
-                statements: lines,
-                uncoveredLines: c.lines?.[0]?.line
-                    ?.filter((l) => l.$.hits === '0')
-                    .map((l) => Number(l.$.number)) || [],
-            };
-        });
-        return Promise.resolve({ overall, details });
+        return { overall, details };
     }
     /**
      * Extracts all class elements from the package structure.
@@ -47625,7 +47653,7 @@ class CoberturaParser extends BaseParser {
      * const classes = this.classesFromPackages(xml.coverage.packages[0].package);
      */
     classesFromPackages(packages) {
-        return (packages || []).flatMap((p) => (p.package || []).flatMap((pack) => (pack.classes || []).flatMap((c) => c.class)));
+        return (packages ?? []).flatMap((p) => (p.package ?? []).flatMap((pack) => (pack.classes ?? []).flatMap((c) => c.class)));
     }
     /**
      * Extracts line coverage details from a class element.
@@ -47637,7 +47665,7 @@ class CoberturaParser extends BaseParser {
      * const lines = this.getLineCoverage(classElement);
      */
     getLineCoverage(c) {
-        const lines = c.lines?.[0]?.line || [];
+        const lines = c.lines?.[0]?.line ?? [];
         return {
             total: lines.length,
             covered: lines.filter((l) => l.$.hits > '0').length,
@@ -47653,7 +47681,7 @@ class CoberturaParser extends BaseParser {
      * const functions = this.getFunctionCoverage(classElement);
      */
     getFunctionCoverage(c) {
-        const methods = c.methods?.[0]?.method || [];
+        const methods = c.methods?.[0]?.method ?? [];
         return {
             total: methods.length,
             covered: methods.filter((m) => m.lines[0].line[0].$.hits > '0').length,
@@ -47669,15 +47697,17 @@ class CoberturaParser extends BaseParser {
      * const branches = this.getBranchCoverage(classElement);
      */
     getBranchCoverage(c) {
-        if (!c.lines || !c.lines[0].line) {
+        if (!c.lines?.[0].line) {
             return { total: 0, covered: 0 };
         }
         const branchLines = c.lines[0].line.filter((l) => l.$.branch === 'true');
         return branchLines.reduce((acc, l) => {
-            const stats = l.$['condition-coverage']?.match(/\d+/g);
+            const stats = l.$['condition-coverage']?.match(/\d+/gu);
             if (stats && stats.length >= 2) {
-                acc.covered += Number(stats[1]);
-                acc.total += Number(stats[2]);
+                return {
+                    covered: acc.covered + Number(stats[1]),
+                    total: acc.total + Number(stats[2]),
+                };
             }
             return acc;
         }, { total: 0, covered: 0 });
@@ -47687,13 +47717,13 @@ class CoberturaParser extends BaseParser {
 /**
  * @file Parses gcov text output into the shared coverage model.
  */
-const GCOV_FILE_HEADER = /^File\s+'(.+)'$/;
-const GCOV_CREATING_HEADER = /^Creating\s+'(.+)'$/;
-const GCOV_EXTENSION = /\.gcov$/;
-const GCOV_LINES_SUMMARY = /^Lines executed:(\d+\.\d+)% of (\d+)$/;
-const GCOV_BRANCHES_SUMMARY = /^Branches executed:(\d+\.\d+)% of (\d+)$/;
-const GCOV_FUNCTIONS_SUMMARY = /^Functions executed:(\d+\.\d+)% of (\d+)$/;
-const GCOV_SOURCE_LINE = /^\s*([#\d-]+):\s*(\d+):\s*(.*)/;
+const GCOV_FILE_HEADER = /^File\s+'(.+)'$/u;
+const GCOV_CREATING_HEADER = /^Creating\s+'(.+)'$/u;
+const GCOV_EXTENSION = /\.gcov$/u;
+const GCOV_LINES_SUMMARY = /^Lines executed:(\d+\.\d+)% of (\d+)$/u;
+const GCOV_BRANCHES_SUMMARY = /^Branches executed:(\d+\.\d+)% of (\d+)$/u;
+const GCOV_FUNCTIONS_SUMMARY = /^Functions executed:(\d+\.\d+)% of (\d+)$/u;
+const GCOV_SOURCE_LINE = /^\s*([#\d-]+):\s*(\d+):\s*(.*)/u;
 /**
  * A parser for gcov text output files.
  * @class GcovParser
@@ -47724,29 +47754,24 @@ class GcovParser {
      * @private
      */
     parseGcovContent(content) {
-        const lines = content.split('\n');
-        const sections = [];
-        let currentSection = null;
-        for (const rawLine of lines) {
-            const line = rawLine.trim();
-            const filename = parseSectionFilename(line);
-            if (filename !== undefined) {
-                if (currentSection) {
-                    sections.push(currentSection);
-                }
-                currentSection = { filename, lines: [] };
-            }
-            if (currentSection && !applySummaryLine(currentSection, line)) {
-                const sourceLine = parseSourceLine(line);
-                if (sourceLine) {
-                    currentSection.lines.push(sourceLine);
-                }
-            }
-        }
-        if (currentSection) {
-            sections.push(currentSection);
-        }
-        return sections;
+        const lines = content.split('\n').map((rawLine) => rawLine.trim());
+        const starts = lines.flatMap((line, index) => parseSectionFilename(line) === undefined ? [] : [index]);
+        return starts.map((start, position) => {
+            const body = lines.slice(start, starts[position + 1] ?? lines.length);
+            const summaries = body.flatMap((line) => parseSummaryLine(line) ?? []);
+            return {
+                filename: parseSectionFilename(lines[start]),
+                lines: body.flatMap((line) => parseSummaryLine(line) === undefined
+                    ? (parseSourceLine(line) ?? [])
+                    : []),
+                summary: summaries.length > 0
+                    ? {
+                        linesExecuted: { covered: 0, total: 0 },
+                        ...Object.fromEntries(summaries.map(({ key, value }) => [key, value])),
+                    }
+                    : undefined,
+            };
+        });
     }
     /**
      * Converts a gcov file section into standardized coverage details.
@@ -47761,21 +47786,18 @@ class GcovParser {
         const uncoveredLines = executableLines
             .filter((line) => line.executionCount === 0)
             .map((line) => line.lineNumber);
-        let lines;
-        const branches = { total: 0, covered: 0 };
-        const methods = { total: 0, covered: 0 };
-        lines = section.summary?.linesExecuted ?? {
+        const lines = section.summary?.linesExecuted ?? {
             total: executableLines.length,
             covered: coveredLines.length,
         };
-        if (section.summary?.branchesExecuted) {
-            branches.total = section.summary.branchesExecuted.total;
-            branches.covered = section.summary.branchesExecuted.covered;
-        }
-        if (section.summary?.functionsExecuted) {
-            methods.total = section.summary.functionsExecuted.total;
-            methods.covered = section.summary.functionsExecuted.covered;
-        }
+        const branches = {
+            total: section.summary?.branchesExecuted?.total ?? 0,
+            covered: section.summary?.branchesExecuted?.covered ?? 0,
+        };
+        const methods = {
+            total: section.summary?.functionsExecuted?.total ?? 0,
+            covered: section.summary?.functionsExecuted?.covered ?? 0,
+        };
         return {
             file: section.filename,
             lines,
@@ -47793,22 +47815,16 @@ class GcovParser {
      * @private
      */
     aggregateOverallCoverage(details) {
-        return details.reduce((acc, detail) => {
-            acc.lines.total += detail.lines.total;
-            acc.lines.covered += detail.lines.covered;
-            acc.statements.total += detail.statements.total;
-            acc.statements.covered += detail.statements.covered;
-            acc.methods.total += detail.methods.total;
-            acc.methods.covered += detail.methods.covered;
-            acc.branches.total += detail.branches.total;
-            acc.branches.covered += detail.branches.covered;
-            return acc;
-        }, {
-            lines: { total: 0, covered: 0 },
-            statements: { total: 0, covered: 0 },
-            methods: { total: 0, covered: 0 },
-            branches: { total: 0, covered: 0 },
+        const sum = (pick) => ({
+            total: details.reduce((total, d) => total + pick(d).total, 0),
+            covered: details.reduce((total, d) => total + pick(d).covered, 0),
         });
+        return {
+            lines: sum((d) => d.lines),
+            statements: sum((d) => d.statements),
+            methods: sum((d) => d.methods),
+            branches: sum((d) => d.branches),
+        };
     }
 }
 /**
@@ -47830,14 +47846,13 @@ function parseSectionFilename(line) {
     return undefined;
 }
 /**
- * Stores the lines, branches or functions percentage from a gcov summary line in the section.
- * @param section - The section that receives the summary value.
+ * Reads the lines, branches or functions percentage from a gcov summary line.
  * @param line - The trimmed line to inspect.
- * @returns True when the line was a summary line and has been applied.
+ * @returns The summary key and its value, or undefined when the line is not a summary line.
  * @example
- * const applied = applySummaryLine(section, 'Lines executed:50.00% of 4');
+ * const parsed = parseSummaryLine('Lines executed:50.00% of 4');
  */
-function applySummaryLine(section, line) {
+function parseSummaryLine(line) {
     const summaryPatterns = [
         { key: 'linesExecuted', re: GCOV_LINES_SUMMARY },
         { key: 'branchesExecuted', re: GCOV_BRANCHES_SUMMARY },
@@ -47846,18 +47861,20 @@ function applySummaryLine(section, line) {
             re: GCOV_FUNCTIONS_SUMMARY,
         },
     ];
-    for (const { key, re } of summaryPatterns) {
+    return summaryPatterns.flatMap(({ key, re }) => {
         const match = re.exec(line);
-        if (match) {
-            const percentage = Number.parseFloat(match[1]);
-            const total = Number.parseInt(match[2], 10);
-            const covered = Math.round((percentage / 100) * total);
-            section.summary ??= { linesExecuted: { covered: 0, total: 0 } };
-            section.summary[key] = { covered, total };
-            return true;
+        if (!match) {
+            return [];
         }
-    }
-    return false;
+        const percentage = Number.parseFloat(match[1]);
+        const total = Number.parseInt(match[2], 10);
+        return [
+            {
+                key,
+                value: { covered: Math.round((percentage / 100) * total), total },
+            },
+        ];
+    })[0];
 }
 /**
  * Parses a gcov source line that starts with an execution count and a line number.
@@ -47910,12 +47927,12 @@ class GocoverParser {
      * Regular expression to match the mode line at the start of Go coverage files.
      * Valid modes are: set, count, atomic.
      */
-    static MODE_REGEX = /^mode:\s*(set|count|atomic)\s*$/;
+    static MODE_REGEX = /^mode:\s*(set|count|atomic)\s*$/u;
     /**
      * Regular expression to match coverage block lines.
      * Format: file:startLine.startCol,endLine.endCol numStatements count.
      */
-    static BLOCK_REGEX = /^(.+):(\d+)\.(\d+),(\d+)\.(\d+)\s+(\d+)\s+(\d+)$/;
+    static BLOCK_REGEX = /^(.+):(\d+)\.(\d+),(\d+)\.(\d+)\s+(\d+)\s+(\d+)$/u;
     /**
      * Parses Go coverage profile content.
      * @memberof GocoverParser
@@ -47933,14 +47950,11 @@ class GocoverParser {
         if (!GocoverParser.MODE_REGEX.test(modeLine)) {
             throw new Error('Invalid Go coverage format: missing or invalid mode line');
         }
-        const fileDataMap = new Map();
-        for (let index = 1; index < lines.length; index++) {
-            const line = lines[index].trim();
-            if (line === '')
-                continue;
+        const parsedBlocks = lines.slice(1).map((rawLine, offset) => {
+            const line = rawLine.trim();
             const match = GocoverParser.BLOCK_REGEX.exec(line);
             if (!match) {
-                throw new Error(`Invalid Go coverage format at line ${index + 1}: ${line}`);
+                throw new Error(`Invalid Go coverage format at line ${offset + 2}: ${line}`);
             }
             const [, filename, startLine, startCol, endLine, endCol, numberStmts, count,] = match;
             const block = {
@@ -47951,15 +47965,17 @@ class GocoverParser {
                 numStatements: Number.parseInt(numberStmts, 10),
                 count: Number.parseInt(count, 10),
             };
-            if (!fileDataMap.has(filename)) {
-                fileDataMap.set(filename, { filename, blocks: [] });
-            }
-            fileDataMap.get(filename).blocks.push(block);
-        }
-        if (fileDataMap.size === 0) {
+            return { filename, block };
+        });
+        if (parsedBlocks.length === 0) {
             throw new Error('No valid Go coverage data found in content');
         }
-        const details = Array.from(fileDataMap.values(), (fileData) => this.processFileToDetails(fileData));
+        const details = Array.from(new Set(parsedBlocks.map((entry) => entry.filename)), (filename) => this.processFileToDetails({
+            filename,
+            blocks: parsedBlocks
+                .filter((entry) => entry.filename === filename)
+                .map((entry) => entry.block),
+        }));
         const overall = this.aggregateOverallCoverage(details);
         return { overall, details };
     }
@@ -47972,30 +47988,25 @@ class GocoverParser {
      */
     processFileToDetails(fileData) {
         // Track coverage per line: Map<lineNumber, wasCovered>
-        const lineCoverage = new Map();
-        for (const block of fileData.blocks) {
-            // Mark all lines in the block
-            for (let line = block.startLine; line <= block.endLine; line++) {
-                // A line is covered if any block covering it has count > 0
-                const currentCoverage = lineCoverage.get(line) ?? false;
-                lineCoverage.set(line, currentCoverage || block.count > 0);
-            }
-        }
+        const lineCoverage = fileData.blocks
+            .flatMap((block) => Array.from({ length: block.endLine - block.startLine + 1 }, (_unused, offset) => [
+            block.startLine + offset,
+            block.count > 0,
+        ]))
+            .reduce((covered, [line, wasCovered]) => 
+        // A line is covered if any block covering it has count > 0
+        // eslint-disable-next-line functional/immutable-data -- builds the lookup in a single pass; copying the map for every line would be quadratic
+        covered.set(line, (covered.get(line) ?? false) || wasCovered), new Map());
         const totalLines = lineCoverage.size;
         const coveredLines = [...lineCoverage.values()].filter(Boolean).length;
         const uncoveredLines = [...lineCoverage.entries()]
-            .filter(([, covered]) => !covered)
-            .map(([lineNumber]) => lineNumber)
+            .flatMap(([lineNumber, covered]) => (covered ? [] : [lineNumber]))
             .toSorted((a, b) => a - b);
         // Calculate statement coverage from blocks
-        let totalStatements = 0;
-        let coveredStatements = 0;
-        for (const block of fileData.blocks) {
-            totalStatements += block.numStatements;
-            if (block.count > 0) {
-                coveredStatements += block.numStatements;
-            }
-        }
+        const totalStatements = fileData.blocks.reduce((total, block) => total + block.numStatements, 0);
+        const coveredStatements = fileData.blocks
+            .filter((block) => block.count > 0)
+            .reduce((total, block) => total + block.numStatements, 0);
         return {
             file: fileData.filename,
             lines: {
@@ -48025,22 +48036,16 @@ class GocoverParser {
      * @private
      */
     aggregateOverallCoverage(details) {
-        return details.reduce((acc, detail) => {
-            acc.lines.total += detail.lines.total;
-            acc.lines.covered += detail.lines.covered;
-            acc.statements.total += detail.statements.total;
-            acc.statements.covered += detail.statements.covered;
-            acc.methods.total += detail.methods.total;
-            acc.methods.covered += detail.methods.covered;
-            acc.branches.total += detail.branches.total;
-            acc.branches.covered += detail.branches.covered;
-            return acc;
-        }, {
-            lines: { total: 0, covered: 0 },
-            statements: { total: 0, covered: 0 },
-            methods: { total: 0, covered: 0 },
-            branches: { total: 0, covered: 0 },
+        const sum = (pick) => ({
+            total: details.reduce((total, d) => total + pick(d).total, 0),
+            covered: details.reduce((total, d) => total + pick(d).covered, 0),
         });
+        return {
+            lines: sum((d) => d.lines),
+            statements: sum((d) => d.statements),
+            methods: sum((d) => d.methods),
+            branches: sum((d) => d.branches),
+        };
     }
 }
 
@@ -48054,6 +48059,18 @@ class GocoverParser {
  */
 class JacocoParser extends BaseParser {
     /**
+     * Tells whether the parsed XML has the root element of a Jacoco report.
+     * @memberof JacocoParser
+     * @param xml - The parsed XML data.
+     * @returns True when the data has the root element.
+     * @protected
+     * @example
+     * const supported = this.isReport(xml);
+     */
+    isReport(xml) {
+        return isRecord(xml) && isRecord(xml.report);
+    }
+    /**
      * Processes the parsed JaCoCo XML object to extract coverage data.
      * @memberof JacocoParser
      * @param xml - The parsed JaCoCo XML report.
@@ -48063,10 +48080,10 @@ class JacocoParser extends BaseParser {
      * @example
      * const data = await parser.parse(xml);
      */
-    process(xml) {
+    async process(xml) {
         const overall = this.aggregateCounters(xml.report.counter);
-        const details = (xml.report.package || []).flatMap((p) => this.unpackage(p));
-        return Promise.resolve({ overall, details });
+        const details = (xml.report.package ?? []).flatMap((p) => this.unpackage(p));
+        return { overall, details };
     }
     /**
      * Extracts coverage information from a single package element.
@@ -48078,12 +48095,12 @@ class JacocoParser extends BaseParser {
      * const files = this.unpackage(pack);
      */
     unpackage(pack) {
-        return (pack.sourcefile || []).map((s) => {
+        return (pack.sourcefile ?? []).map((s) => {
             const metrics = this.aggregateCounters(s.counter);
             return {
                 file: `${pack.$.name}/${s.$.name}`,
                 ...metrics,
-                uncoveredLines: s.line?.filter((l) => l.$.ci === '0').map((l) => Number(l.$.nr)) ||
+                uncoveredLines: s.line?.filter((l) => l.$.ci === '0').map((l) => Number(l.$.nr)) ??
                     [],
             };
         });
@@ -48099,19 +48116,18 @@ class JacocoParser extends BaseParser {
      * const metrics = this.aggregateCounters(counters);
      */
     aggregateCounters(counters) {
-        const metrics = {};
-        for (const c of counters || []) {
-            const type = c.$.type.toLowerCase();
-            metrics[type] = {
+        const metrics = Object.fromEntries((counters ?? []).map((c) => [
+            c.$.type.toLowerCase(),
+            {
                 covered: Number(c.$.covered),
                 total: Number(c.$.covered) + Number(c.$.missed),
-            };
-        }
+            },
+        ]));
         return {
-            lines: metrics.line || { covered: 0, total: 0 },
-            branches: metrics.branch || { covered: 0, total: 0 },
-            methods: metrics.method || { covered: 0, total: 0 },
-            statements: metrics.instruction || { covered: 0, total: 0 },
+            lines: metrics.line ?? { covered: 0, total: 0 },
+            branches: metrics.branch ?? { covered: 0, total: 0 },
+            methods: metrics.method ?? { covered: 0, total: 0 },
+            statements: metrics.instruction ?? { covered: 0, total: 0 },
         };
     }
 }
@@ -48120,11 +48136,46 @@ class JacocoParser extends BaseParser {
  * @file Parses llvm-cov JSON exports into the shared coverage model.
  */
 /**
+ * Tells whether parsed JSON is an llvm-cov export.
+ * @param value - The parsed JSON.
+ * @returns True when the value is an llvm-cov JSON export.
+ * @internal
+ * @example
+ * isLlvmExport({ type: 'llvm.coverage.json.export', data: [] }); // true
+ */
+function isLlvmExport(value) {
+    return (isRecord(value) &&
+        typeof value.type === 'string' &&
+        value.type.startsWith('llvm.coverage.json.export') &&
+        Array.isArray(value.data));
+}
+/**
+ * Parses the content of an llvm-cov JSON export.
+ * @param content - The JSON content of the coverage report.
+ * @returns The parsed export.
+ * @throws {Error} If the content is not valid JSON or not an llvm-cov export.
+ * @internal
+ * @example
+ * const report = parseLlvmExport(content);
+ */
+function parseLlvmExport(content) {
+    try {
+        const parsed = JSON.parse(content);
+        if (isLlvmExport(parsed)) {
+            return parsed;
+        }
+    }
+    catch (error) {
+        throw new Error('Content is not valid JSON', { cause: error });
+    }
+    throw new Error('Not an llvm-cov JSON export');
+}
+/**
  * Matches paths inside a `.build` directory, where SwiftPM keeps checked-out
  * dependencies and generated sources that are not part of the project.
  * @internal
  */
-const DEPENDENCY_PATH = /(^|[\\/])\.build[\\/]/;
+const DEPENDENCY_PATH = /(^|[\\/])\.build[\\/]/u;
 /**
  * A parser for the JSON produced by `llvm-cov export`, which is also the file
  * SwiftPM writes to `.build/<triple>/debug/codecov/<package>.json` when tests
@@ -48142,40 +48193,29 @@ class LlvmCovParser {
      * structured coverage data.
      * @throws {Error} If the content is not an llvm-cov JSON export.
      */
-    parse(content) {
-        let json;
-        try {
-            json = JSON.parse(content);
-        }
-        catch {
-            return Promise.reject(new Error('Content is not valid JSON'));
-        }
-        if (!json ||
-            typeof json.type !== 'string' ||
-            !json.type.startsWith('llvm.coverage.json.export') ||
-            !Array.isArray(json.data)) {
-            return Promise.reject(new Error('Not an llvm-cov JSON export'));
-        }
+    async parse(content) {
+        const json = parseLlvmExport(content);
         const files = json.data.flatMap((entry) => entry.files ?? []);
         const functions = json.data.flatMap((entry) => entry.functions ?? []);
-        const methodsByFile = new Map();
-        for (const fn of functions) {
+        const methodsByFile = functions.reduce((byFile, fn) => {
             const name = fn.filenames?.[0];
-            if (!name)
-                continue;
-            const metrics = methodsByFile.get(name) ?? { total: 0, covered: 0 };
-            metrics.total += 1;
-            if (fn.count > 0)
-                metrics.covered += 1;
-            methodsByFile.set(name, metrics);
-        }
+            if (!name) {
+                return byFile;
+            }
+            const metrics = byFile.get(name) ?? { total: 0, covered: 0 };
+            // eslint-disable-next-line functional/immutable-data -- builds the lookup in a single pass; copying the map for every function would be quadratic
+            return byFile.set(name, {
+                total: metrics.total + 1,
+                covered: metrics.covered + (fn.count > 0 ? 1 : 0),
+            });
+        }, new Map());
         const details = files
             .filter((file) => !DEPENDENCY_PATH.test(file.filename))
             .map((file) => this.processFile(file, methodsByFile.get(file.filename) ?? { total: 0, covered: 0 }));
-        return Promise.resolve({
+        return {
             overall: this.aggregateOverallCoverage(details),
             details,
-        });
+        };
     }
     /**
      * Derives per-line hit counts from a file's segments, using llvm-cov's
@@ -48189,37 +48229,37 @@ class LlvmCovParser {
      * @private
      */
     lineCounts(segments) {
-        const counts = new Map();
-        let wrapped;
-        let index = 0;
-        while (index < segments.length) {
+        const groups = segments.flatMap((segment, index) => index === 0 || segments[index - 1][0] !== segment[0] ? [index] : []);
+        const entries = groups.flatMap((index, position) => {
             const line = segments[index][0];
-            let end = index;
-            while (end < segments.length && segments[end][0] === line)
-                end++;
+            const end = groups[position + 1] ?? segments.length;
+            const wrapped = position > 0 ? segments[groups[position] - 1] : undefined;
             const starting = segments
                 .slice(index, end)
                 .filter((s) => s[3] && !s[5] && s[4]);
             const startsWithEntry = segments[index][4] && !segments[index][5];
             const wrappedCounts = !startsWithEntry && wrapped && wrapped[3] && !wrapped[5];
-            if (starting.length > 0 || wrappedCounts) {
-                const candidates = starting.map((s) => s[2]);
-                if (wrappedCounts)
-                    candidates.push(wrapped[2]);
-                counts.set(line, Math.max(...candidates));
-            }
+            const ownCount = starting.length > 0 || wrappedCounts
+                ? [
+                    [
+                        line,
+                        Math.max(...starting.map((s) => s[2]), ...(wrappedCounts ? [wrapped[2]] : [])),
+                    ],
+                ]
+                : [];
             // Lines between this one and the next segment are covered by the
             // region that is still open after this line's last segment.
             const last = segments[end - 1];
             const next = end < segments.length ? segments[end][0] : line;
-            if (last[3] && !last[5]) {
-                for (let l = line + 1; l < next; l++)
-                    counts.set(l, last[2]);
-            }
-            wrapped = last;
-            index = end;
-        }
-        return counts;
+            const between = last[3] && !last[5]
+                ? Array.from({ length: Math.max(next - line - 1, 0) }, (_unused, offset) => [
+                    line + 1 + offset,
+                    last[2],
+                ])
+                : [];
+            return [...ownCount, ...between];
+        });
+        return new Map(entries);
     }
     /**
      * Converts a single exported file to the standard file details.
@@ -48231,15 +48271,13 @@ class LlvmCovParser {
      */
     processFile(file, methods) {
         const counts = this.lineCounts(file.segments ?? []);
-        const lines = { total: counts.size, covered: 0 };
-        const uncoveredLines = [];
-        for (const [line, hits] of counts) {
-            if (hits > 0)
-                lines.covered += 1;
-            else
-                uncoveredLines.push(line);
-        }
-        uncoveredLines.sort((a, b) => a - b);
+        const lines = {
+            total: counts.size,
+            covered: [...counts.values()].filter((hits) => hits > 0).length,
+        };
+        const uncoveredLines = [...counts]
+            .flatMap(([line, hits]) => (hits > 0 ? [] : [line]))
+            .toSorted((a, b) => a - b);
         const branches = file.summary?.branches;
         return {
             file: file.filename,
@@ -48261,23 +48299,16 @@ class LlvmCovParser {
      * @private
      */
     aggregateOverallCoverage(details) {
-        return details.reduce((acc, detail) => {
-            for (const key of [
-                'lines',
-                'statements',
-                'methods',
-                'branches',
-            ]) {
-                acc[key].total += detail[key].total;
-                acc[key].covered += detail[key].covered;
-            }
-            return acc;
-        }, {
-            lines: { total: 0, covered: 0 },
-            statements: { total: 0, covered: 0 },
-            methods: { total: 0, covered: 0 },
-            branches: { total: 0, covered: 0 },
+        const sum = (pick) => ({
+            total: details.reduce((total, d) => total + pick(d).total, 0),
+            covered: details.reduce((total, d) => total + pick(d).covered, 0),
         });
+        return {
+            lines: sum((d) => d.lines),
+            statements: sum((d) => d.statements),
+            methods: sum((d) => d.methods),
+            branches: sum((d) => d.branches),
+        };
     }
 }
 
@@ -48297,27 +48328,13 @@ class LcovParser {
      * @returns A promise that resolves to the
      * structured file coverage data.
      */
-    parse(content) {
+    async parse(content) {
         const records = content.split('end_of_record');
         const details = records
             .map((record) => this.parseRecord(record))
             .filter((data) => !!data);
         const overall = this.aggregateOverallCoverage(details);
-        return Promise.resolve({ overall, details });
-    }
-    /**
-     * Creates a new, empty builder object for a file record.
-     * @memberof LcovParser
-     * @returns An empty builder object.
-     * @private
-     */
-    createNewBuilder() {
-        return {
-            file: '',
-            functions: { total: 0, covered: 0 },
-            branches: { total: 0, covered: 0 },
-            lines: { total: 0, covered: 0, details: new Map() },
-        };
+        return { overall, details };
     }
     /**
      * Parses a single "record" block from an LCOV file.
@@ -48331,79 +48348,34 @@ class LcovParser {
         if (record.trim() === '') {
             return null;
         }
-        const builder = this.createNewBuilder();
-        for (const line of record.split('\n')) {
+        const entries = record.split('\n').flatMap((line) => {
             const [type, value] = line.split(':');
-            if (type && value) {
-                this.processLine(type.toUpperCase(), value, builder);
-            }
-        }
-        if (!builder.file) {
+            return type && value ? [[type.toUpperCase(), value]] : [];
+        });
+        const lastValue = (type) => entries.findLast(([entryType]) => entryType === type)?.[1];
+        const lastNumber = (type) => Number(lastValue(type) ?? 0);
+        const file = lastValue('SF');
+        if (!file) {
             return null;
         }
-        builder.lines.total = builder.lines.total || builder.lines.details.size;
-        const uncoveredLines = [...builder.lines.details.entries()]
-            .filter(([, hits]) => hits === 0)
-            .map(([lineNumber]) => lineNumber);
-        return {
-            file: builder.file,
-            lines: {
-                total: builder.lines.total,
-                covered: builder.lines.covered,
-            },
-            methods: builder.functions,
-            branches: builder.branches,
-            statements: {
-                total: builder.lines.total,
-                covered: builder.lines.covered,
-            },
-            uncoveredLines,
+        const lineHits = new Map(entries
+            .filter(([type]) => type === 'DA')
+            .map(([, value]) => {
+            const [line, hit] = value.split(',');
+            return [Number(line), Number(hit)];
+        }));
+        const lines = {
+            total: lastNumber('LF') || lineHits.size,
+            covered: lastNumber('LH'),
         };
-    }
-    /**
-     * Processes a single line of an LCOV record and updates the builder.
-     * @memberof LcovParser
-     * @param type - The LCOV data type (e.g., 'SF', 'DA').
-     * @param value - The value associated with the type.
-     * @param builder - The file builder to populate.
-     * @private
-     */
-    processLine(type, value, builder) {
-        switch (type) {
-            case 'SF': {
-                builder.file = value;
-                break;
-            }
-            case 'DA': {
-                const [line, hit] = value.split(',');
-                builder.lines.details.set(Number(line), Number(hit));
-                break;
-            }
-            case 'LF': {
-                builder.lines.total = Number(value);
-                break;
-            }
-            case 'LH': {
-                builder.lines.covered = Number(value);
-                break;
-            }
-            case 'FNF': {
-                builder.functions.total = Number(value);
-                break;
-            }
-            case 'FNH': {
-                builder.functions.covered = Number(value);
-                break;
-            }
-            case 'BRF': {
-                builder.branches.total = Number(value);
-                break;
-            }
-            case 'BRH': {
-                builder.branches.covered = Number(value);
-                break;
-            }
-        }
+        return {
+            file,
+            lines,
+            methods: { total: lastNumber('FNF'), covered: lastNumber('FNH') },
+            branches: { total: lastNumber('BRF'), covered: lastNumber('BRH') },
+            statements: { ...lines },
+            uncoveredLines: [...lineHits.entries()].flatMap(([lineNumber, hits]) => hits === 0 ? [lineNumber] : []),
+        };
     }
     /**
      * Aggregates the details from all files to create an overall summary.
@@ -48413,22 +48385,16 @@ class LcovParser {
      * @private
      */
     aggregateOverallCoverage(details) {
-        return details.reduce((acc, detail) => {
-            acc.lines.total += detail.lines.total;
-            acc.lines.covered += detail.lines.covered;
-            acc.statements.total += detail.statements.total;
-            acc.statements.covered += detail.statements.covered;
-            acc.methods.total += detail.methods.total;
-            acc.methods.covered += detail.methods.covered;
-            acc.branches.total += detail.branches.total;
-            acc.branches.covered += detail.branches.covered;
-            return acc;
-        }, {
-            lines: { total: 0, covered: 0 },
-            statements: { total: 0, covered: 0 },
-            methods: { total: 0, covered: 0 },
-            branches: { total: 0, covered: 0 },
+        const sum = (pick) => ({
+            total: details.reduce((total, d) => total + pick(d).total, 0),
+            covered: details.reduce((total, d) => total + pick(d).covered, 0),
         });
+        return {
+            lines: sum((d) => d.lines),
+            statements: sum((d) => d.statements),
+            methods: sum((d) => d.methods),
+            branches: sum((d) => d.branches),
+        };
     }
 }
 
@@ -48457,6 +48423,7 @@ const availableParsers = [
  * const { parser, data } = await detectCoverage(lcovText);
  */
 async function detectCoverage(content) {
+    // eslint-disable-next-line functional/no-loop-statements -- the parsers are tried in order and the first one that understands the report wins
     for (const parser of availableParsers) {
         try {
             const data = await parser.parse(content);
@@ -48493,33 +48460,27 @@ function formatUncoveredLines(lines, options) {
     if (lines.length === 0) {
         return '';
     }
-    else {
-        const sortedLines = [...lines].toSorted((a, b) => a - b);
-        const groupedRanges = sortedLines.reduce((acc, current) => {
-            const lastGroup = acc.at(-1);
-            if (acc.length === 0 || current > lastGroup.at(-1) + 1) {
-                acc.push([current]);
-            }
-            else {
-                lastGroup.push(current);
-            }
-            return acc;
-        }, []);
-        const fullRangeString = groupedRanges
-            .map((group) => {
-            return group.length > 1 ? `${group[0]}-${group.at(-1)}` : `${group[0]}`;
-        })
-            .join(',');
-        return options?.maxLength && fullRangeString.length > options.maxLength
-            ? `${sortedLines[0]}-${sortedLines.at(-1)}`
-            : fullRangeString;
-    }
+    const sortedLines = [...lines].toSorted((a, b) => a - b);
+    const groupStarts = sortedLines.flatMap((current, index) => index === 0 || current > sortedLines[index - 1] + 1 ? [index] : []);
+    const groupedRanges = groupStarts.map((start, position) => sortedLines.slice(start, groupStarts[position + 1] ?? sortedLines.length));
+    const fullRangeString = groupedRanges
+        .map((group) => group.length > 1 ? `${group[0]}-${group.at(-1)}` : `${group[0]}`)
+        .join(',');
+    return options?.maxLength && fullRangeString.length > options.maxLength
+        ? `${sortedLines[0]}-${sortedLines.at(-1)}`
+        : fullRangeString;
 }
 
 /**
  * @file Formats coverage results as a Markdown summary for the GitHub Actions job summary.
  */
 const collator$1 = new Intl.Collator();
+/** Formats a coverage percentage with two decimals and no digit grouping. */
+const PERCENT$1 = new Intl.NumberFormat('en', {
+    minimumFractionDigits: 2,
+    maximumFractionDigits: 2,
+    useGrouping: false,
+});
 /**
  * A formatter that generates a rich Markdown summary for GitHub Actions.
  * @class SummaryFormatter
@@ -48535,8 +48496,7 @@ class SummaryFormatter {
      * const markdown = new SummaryFormatter().format(coverageData, { rootDir: process.cwd() });
      */
     format(coverageData, options) {
-        const tree = this.buildTree(coverageData.details, options.rootDir);
-        this.calculateAggregates(tree);
+        const tree = this.calculateAggregates(this.buildTree(coverageData.details, options.rootDir));
         const body = this.renderTree(tree, options);
         const summaryRow = this.buildRow('All Files', coverageData.overall, options, 0, true);
         const header = [
@@ -48561,61 +48521,55 @@ class SummaryFormatter {
      * @private
      */
     buildTree(details, rootDir) {
-        const root = { children: new Map(), _isFile: false };
-        for (const detail of details) {
-            const relativePath = rootDir
-                ? path$1.relative(rootDir, detail.file)
-                : detail.file;
-            let currentNode = root;
-            const pathParts = relativePath.split(path$1.sep);
-            for (const part of pathParts.slice(0, -1)) {
-                if (!currentNode.children.has(part)) {
-                    currentNode.children.set(part, {
-                        children: new Map(),
-                        _isFile: false,
-                    });
-                }
-                currentNode = currentNode.children.get(part);
-            }
-            const [fileName] = pathParts.slice(-1);
-            currentNode.children.set(fileName, {
+        return details.reduce((root, detail) => this.insertFile(root, (rootDir ? path$1.relative(rootDir, detail.file) : detail.file).split(path$1.sep), detail), { children: new Map(), _isFile: false });
+    }
+    /**
+     * Returns a copy of the tree with the file added below the directories named by its path parts.
+     * @param node - The directory node to add the file to.
+     * @param pathParts - The remaining path segments, ending with the file name.
+     * @param detail - The coverage data of the file.
+     * @returns The updated copy of the node.
+     * @private
+     */
+    insertFile(node, [part, ...rest], detail) {
+        const child = rest.length === 0
+            ? {
                 children: new Map(),
                 _coverage: detail,
                 _isFile: true,
-            });
-        }
-        return root;
+            }
+            : this.insertFile(node.children.get(part) ?? {
+                children: new Map(),
+                _isFile: false,
+            }, rest, detail);
+        return { ...node, children: new Map([...node.children, [part, child]]) };
     }
     /**
      * Recursively calculates aggregate coverage for all directories in the tree.
      * @param node - The current node in the tree to process.
-     * @returns A flat list of all descendant file coverages.
+     * @returns A copy of the node whose directories carry their aggregate coverage.
      * @private
      */
     calculateAggregates(node) {
-        const descendantFiles = [];
-        for (const child of node.children.values()) {
-            descendantFiles.push(...(child._isFile
-                ? [child._coverage]
-                : this.calculateAggregates(child)));
-        }
-        node._coverage = descendantFiles.reduce((acc, detail) => {
-            acc.statements.covered += detail.statements.covered;
-            acc.statements.total += detail.statements.total;
-            acc.branches.covered += detail.branches.covered;
-            acc.branches.total += detail.branches.total;
-            acc.methods.covered += detail.methods.covered;
-            acc.methods.total += detail.methods.total;
-            acc.lines.covered += detail.lines.covered;
-            acc.lines.total += detail.lines.total;
-            return acc;
-        }, {
-            statements: { covered: 0, total: 0 },
-            branches: { covered: 0, total: 0 },
-            methods: { covered: 0, total: 0 },
-            lines: { covered: 0, total: 0 },
+        const children = new Map(Array.from(node.children, ([key, child]) => [
+            key,
+            child._isFile ? child : this.calculateAggregates(child),
+        ]));
+        const coverages = Array.from(children.values()).flatMap((child) => child._coverage ? [child._coverage] : []);
+        const sum = (pick) => ({
+            covered: coverages.reduce((total, d) => total + pick(d).covered, 0),
+            total: coverages.reduce((total, d) => total + pick(d).total, 0),
         });
-        return descendantFiles;
+        return {
+            ...node,
+            children,
+            _coverage: {
+                statements: sum((d) => d.statements),
+                branches: sum((d) => d.branches),
+                methods: sum((d) => d.methods),
+                lines: sum((d) => d.lines),
+            },
+        };
     }
     /**
      * Recursively renders the coverage tree into an array of Markdown table rows.
@@ -48627,20 +48581,19 @@ class SummaryFormatter {
      * @private
      */
     renderTree(node, options, indent = 0, prefix = '') {
-        let rows = [];
         const sortedKeys = [...node.children.keys()].toSorted((a, b) => collator$1.compare(a, b));
-        for (const key of sortedKeys) {
+        return sortedKeys.flatMap((key) => {
             const child = node.children.get(key);
             const currentPath = path$1.join(prefix, key);
-            if (child._isFile) {
-                rows.push(this.buildRow(key, child._coverage, options, indent, false, currentPath));
-            }
-            else {
-                const dirName = `**${key}/**`;
-                rows.push(this.buildRow(dirName, child._coverage, options, indent), ...this.renderTree(child, options, indent + 2, currentPath));
-            }
-        }
-        return rows;
+            return child._isFile
+                ? [
+                    this.buildRow(key, child._coverage, options, indent, false, currentPath),
+                ]
+                : [
+                    this.buildRow(`**${key}/**`, child._coverage, options, indent),
+                    ...this.renderTree(child, options, indent + 2, currentPath),
+                ];
+        });
     }
     /**
      * Builds a single formatted Markdown table row.
@@ -48674,7 +48627,7 @@ class SummaryFormatter {
     formatMetric(metric) {
         const pct = metric.total === 0 ? 100 : (metric.covered / metric.total) * 100;
         const progressBar = this.buildProgressBar(pct);
-        return `${progressBar} ${pct.toFixed(2)}%`;
+        return `${progressBar} ${PERCENT$1.format(pct)}%`;
     }
     /**
      * Creates the Markdown for the "Uncovered Lines" cell, including links.
@@ -48687,37 +48640,30 @@ class SummaryFormatter {
             data.uncoveredLines.length === 0) {
             return '';
         }
-        else {
-            const ranges = formatUncoveredLines(data.uncoveredLines, {
-                maxLength: 15,
-            }).split(',');
-            const canLink = Boolean(options.repoUrl && options.sha);
-            const fileUrl = canLink
-                ? `${options.repoUrl}/blob/${options.sha}/${filePath}`
-                : '';
-            return ranges
-                .map((range) => {
-                const [start, end] = range.split('-');
-                if (!fileUrl) {
-                    return `\`${range}\``;
-                }
-                const link = end
-                    ? `${fileUrl}#L${start}-L${end}`
-                    : `${fileUrl}#L${start}`;
-                return `[\`${range}\`](${link})`;
-            })
-                .join(', ');
-        }
+        const ranges = formatUncoveredLines(data.uncoveredLines, {
+            maxLength: 15,
+        }).split(',');
+        const canLink = Boolean(options.repoUrl && options.sha);
+        const fileUrl = canLink
+            ? `${options.repoUrl}/blob/${options.sha}/${filePath}`
+            : '';
+        return ranges
+            .map((range) => {
+            const [start, end] = range.split('-');
+            if (!fileUrl) {
+                return `\`${range}\``;
+            }
+            const link = end
+                ? `${fileUrl}#L${start}-L${end}`
+                : `${fileUrl}#L${start}`;
+            return `[\`${range}\`](${link})`;
+        })
+            .join(', ');
     }
     buildProgressBar(percentage) {
         const pct = Math.round(percentage);
-        let color = 'green';
-        if (pct < 80) {
-            color = 'yellow';
-        }
-        if (pct < 50) {
-            color = 'red';
-        }
+        const baseColor = pct < 80 ? 'yellow' : 'green';
+        const color = pct < 50 ? 'red' : baseColor;
         const padded = String(Math.round(pct / 5) * 5).padStart(3, '0');
         const url = `https://raw.githubusercontent.com/mridang/scratch/refs/heads/master/dist/res/progress-${color}-${padded}.svg`;
         return `![${pct}%](${url})`;
@@ -48728,6 +48674,12 @@ class SummaryFormatter {
  * @file Formats coverage results as a coloured, tree-shaped table for the console.
  */
 const collator = new Intl.Collator();
+/** Formats a coverage percentage with two decimals and no digit grouping. */
+const PERCENT = new Intl.NumberFormat('en', {
+    minimumFractionDigits: 2,
+    maximumFractionDigits: 2,
+    useGrouping: false,
+});
 /**
  * ANSI color codes for console output.
  * @internal
@@ -48756,8 +48708,7 @@ class ConsoleFormatter {
      */
     format(coverageData, options = {}) {
         const { rootDir } = options;
-        const tree = this.buildTree(coverageData.details, rootDir);
-        this.calculateAggregates(tree);
+        const tree = this.calculateAggregates(this.buildTree(coverageData.details, rootDir));
         const fileColWidth = this.calculateFileColumnWidth(tree);
         const { separator, header } = this.buildHeader(fileColWidth);
         const body = this.renderTree(tree, fileColWidth);
@@ -48781,61 +48732,55 @@ class ConsoleFormatter {
      * @private
      */
     buildTree(details, rootDir) {
-        const root = { children: new Map(), _isFile: false };
-        for (const detail of details) {
-            const relativePath = rootDir
-                ? path$1.relative(rootDir, detail.file)
-                : detail.file;
-            let currentNode = root;
-            const pathParts = relativePath.split(path$1.sep);
-            for (const part of pathParts.slice(0, -1)) {
-                if (!currentNode.children.has(part)) {
-                    currentNode.children.set(part, {
-                        children: new Map(),
-                        _isFile: false,
-                    });
-                }
-                currentNode = currentNode.children.get(part);
-            }
-            const fileName = pathParts.at(-1);
-            currentNode.children.set(fileName, {
+        return details.reduce((root, detail) => this.insertFile(root, (rootDir ? path$1.relative(rootDir, detail.file) : detail.file).split(path$1.sep), detail), { children: new Map(), _isFile: false });
+    }
+    /**
+     * Returns a copy of the tree with the file added below the directories named by its path parts.
+     * @param node - The directory node to add the file to.
+     * @param pathParts - The remaining path segments, ending with the file name.
+     * @param detail - The coverage data of the file.
+     * @returns The updated copy of the node.
+     * @private
+     */
+    insertFile(node, [part, ...rest], detail) {
+        const child = rest.length === 0
+            ? {
                 children: new Map(),
                 _coverage: detail,
                 _isFile: true,
-            });
-        }
-        return root;
+            }
+            : this.insertFile(node.children.get(part) ?? {
+                children: new Map(),
+                _isFile: false,
+            }, rest, detail);
+        return { ...node, children: new Map([...node.children, [part, child]]) };
     }
     /**
      * Recursively calculates aggregate coverage for all directories in the tree.
      * @param node - The current node in the tree to process.
-     * @returns A flat list of all descendant file coverages.
+     * @returns A copy of the node whose directories carry their aggregate coverage.
      * @private
      */
     calculateAggregates(node) {
-        const descendantFiles = [];
-        for (const child of node.children.values()) {
-            descendantFiles.push(...(child._isFile
-                ? [child._coverage]
-                : this.calculateAggregates(child)));
-        }
-        node._coverage = descendantFiles.reduce((acc, detail) => {
-            acc.statements.covered += detail.statements.covered;
-            acc.statements.total += detail.statements.total;
-            acc.branches.covered += detail.branches.covered;
-            acc.branches.total += detail.branches.total;
-            acc.methods.covered += detail.methods.covered;
-            acc.methods.total += detail.methods.total;
-            acc.lines.covered += detail.lines.covered;
-            acc.lines.total += detail.lines.total;
-            return acc;
-        }, {
-            statements: { covered: 0, total: 0 },
-            branches: { covered: 0, total: 0 },
-            methods: { covered: 0, total: 0 },
-            lines: { covered: 0, total: 0 },
+        const children = new Map(Array.from(node.children, ([key, child]) => [
+            key,
+            child._isFile ? child : this.calculateAggregates(child),
+        ]));
+        const coverages = Array.from(children.values()).flatMap((child) => child._coverage ? [child._coverage] : []);
+        const sum = (pick) => ({
+            covered: coverages.reduce((total, d) => total + pick(d).covered, 0),
+            total: coverages.reduce((total, d) => total + pick(d).total, 0),
         });
-        return descendantFiles;
+        return {
+            ...node,
+            children,
+            _coverage: {
+                statements: sum((d) => d.statements),
+                branches: sum((d) => d.branches),
+                methods: sum((d) => d.methods),
+                lines: sum((d) => d.lines),
+            },
+        };
     }
     /**
      * Recursively renders the coverage tree into an array of formatted table rows.
@@ -48846,19 +48791,16 @@ class ConsoleFormatter {
      * @private
      */
     renderTree(node, fileWidth, indent = 0) {
-        const rows = [];
         const sortedKeys = [...node.children.keys()].toSorted((a, b) => collator.compare(a, b));
-        for (const key of sortedKeys) {
+        return sortedKeys.flatMap((key) => {
             const child = node.children.get(key);
-            if (child._isFile) {
-                rows.push(this.buildRow(key, child._coverage, fileWidth, indent));
-            }
-            else {
-                const dirName = `${key}${path$1.sep}`;
-                rows.push(this.buildRow(dirName, child._coverage, fileWidth, indent), ...this.renderTree(child, fileWidth, indent + 2));
-            }
-        }
-        return rows;
+            return child._isFile
+                ? [this.buildRow(key, child._coverage, fileWidth, indent)]
+                : [
+                    this.buildRow(`${key}${path$1.sep}`, child._coverage, fileWidth, indent),
+                    ...this.renderTree(child, fileWidth, indent + 2),
+                ];
+        });
     }
     /**
      * Builds a single formatted and colorized table row.
@@ -48872,16 +48814,13 @@ class ConsoleFormatter {
     buildRow(name, data, fileWidth, indent = 0) {
         const { statements, branches, methods, lines } = data;
         const getPct = (m) => m.total === 0 ? 100 : (m.covered / m.total) * 100;
-        const colorize = (p, t) => {
-            let color = colors.green;
-            if (p < 80) {
-                color = colors.yellow;
-            }
+        const colorFor = (p) => {
             if (p < 50) {
-                color = colors.red;
+                return colors.red;
             }
-            return `${color}${t}${colors.reset}`;
+            return p < 80 ? colors.yellow : colors.green;
         };
+        const colorize = (p, t) => `${colorFor(p)}${t}${colors.reset}`;
         const pcts = {
             stmts: getPct(statements),
             branch: getPct(branches),
@@ -48895,10 +48834,10 @@ class ConsoleFormatter {
             : '';
         return [
             nameColor.padEnd(fileWidth + (nameColor.length - nameIndented.length)),
-            colorize(pcts.stmts, pcts.stmts.toFixed(2).padStart(8)),
-            colorize(pcts.branch, pcts.branch.toFixed(2).padStart(9)),
-            colorize(pcts.funcs, pcts.funcs.toFixed(2).padStart(8)),
-            colorize(pcts.lines, pcts.lines.toFixed(2).padStart(8)),
+            colorize(pcts.stmts, PERCENT.format(pcts.stmts).padStart(8)),
+            colorize(pcts.branch, PERCENT.format(pcts.branch).padStart(9)),
+            colorize(pcts.funcs, PERCENT.format(pcts.funcs).padStart(8)),
+            colorize(pcts.lines, PERCENT.format(pcts.lines).padStart(8)),
             ` ${colors.red}${uncovered}${colors.reset}`,
         ].join(' |');
     }
@@ -48929,17 +48868,12 @@ class ConsoleFormatter {
      * @private
      */
     calculateFileColumnWidth(node, indent = 0, currentMax = 0) {
-        let max = currentMax;
-        for (const [key, child] of node.children.entries()) {
-            const currentLength = indent + key.length + (child._isFile ? 0 : 1);
-            if (currentLength > max) {
-                max = currentLength;
-            }
-            if (!child._isFile) {
-                max = this.calculateFileColumnWidth(child, indent + 2, max);
-            }
-        }
-        return max;
+        return [...node.children.entries()].reduce((max, [key, child]) => {
+            const widest = Math.max(max, indent + key.length + (child._isFile ? 0 : 1));
+            return child._isFile
+                ? widest
+                : this.calculateFileColumnWidth(child, indent + 2, widest);
+        }, currentMax);
     }
 }
 
@@ -48955,15 +48889,14 @@ class LocalCoverageProvider {
         this.patterns = patterns;
     }
     async load() {
-        const result = [];
-        for (const pattern of this.patterns) {
+        const perPattern = await Promise.all(this.patterns.map(async (pattern) => {
             const paths = await glob(pattern, { dot: true });
-            for (const file of paths) {
-                const content = await promises.readFile(file, { encoding: 'utf8' });
-                result.push({ file, content });
-            }
-        }
-        return result;
+            return Promise.all(paths.map(async (file) => ({
+                file,
+                content: await promises.readFile(file, { encoding: 'utf8' }),
+            })));
+        }));
+        return perPattern.flat();
     }
 }
 
@@ -48986,22 +48919,23 @@ async function runCoverage(options) {
     }
     const summaryFormatter = new SummaryFormatter();
     const consoleFormatter = new ConsoleFormatter();
-    const summaries = [];
-    const consoleOutputs = [];
-    for (const file of files) {
+    const formatted = await Promise.all(files.map(async (file) => {
         const { data } = await detectCoverage(file.content);
-        const consoleOutput = consoleFormatter.format(data, {
-            rootDir: options.rootDir,
-        });
-        consoleOutputs.push(consoleOutput);
-        const summary = summaryFormatter.format(data, {
-            repoUrl: options.repoUrl ?? '',
-            sha: options.sha ?? '',
-            rootDir: options.rootDir,
-        });
-        summaries.push(summary);
-    }
-    return { summaries, consoleOutputs };
+        return {
+            consoleOutput: consoleFormatter.format(data, {
+                rootDir: options.rootDir,
+            }),
+            summary: summaryFormatter.format(data, {
+                repoUrl: options.repoUrl ?? '',
+                sha: options.sha ?? '',
+                rootDir: options.rootDir,
+            }),
+        };
+    }));
+    return {
+        summaries: formatted.map((entry) => entry.summary),
+        consoleOutputs: formatted.map((entry) => entry.consoleOutput),
+    };
 }
 
 /**
@@ -49043,6 +48977,7 @@ class CoverageReporter {
             if (writeSummary && output.summaries.length > 0) {
                 await summary.addRaw(output.summaries.join('\n\n')).write();
             }
+            // eslint-disable-next-line functional/no-loop-statements -- the loop only writes each console output to the job log
             for (const message of output.consoleOutputs) {
                 info(message);
             }
@@ -49100,15 +49035,12 @@ async function run() {
         return;
     }
     if (hasResults && hasCoverage) {
-        const sections = [];
         const testRun = await run$2(false);
-        if (testRun?.summary) {
-            sections.push(testRun.summary);
-        }
         const coverageRun = await run$1(false);
-        if (coverageRun.summaries.length > 0) {
-            sections.push(...coverageRun.summaries);
-        }
+        const sections = [
+            ...(testRun?.summary ? [testRun.summary] : []),
+            ...coverageRun.summaries,
+        ];
         if (sections.length > 0) {
             const cleared = await summary.clear();
             await cleared.addRaw(sections.join('\n\n')).write();
