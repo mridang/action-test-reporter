@@ -3,12 +3,6 @@
  */
 
 import { info, warning } from '@actions/core';
-import type {
-  TestExecutionResult,
-  TestRunResult,
-  TestSuiteResult,
-  TestCaseError,
-} from '../test-results.js';
 import {
   Align,
   formatTime,
@@ -19,6 +13,12 @@ import {
 import { DEFAULT_LOCALE } from '../utils/node-utilities.js';
 import { getFirstNonEmptyLine } from '../utils/parse-utilities.js';
 import { slug } from '../utils/slugger.js';
+import type {
+  TestExecutionResult,
+  TestRunResult,
+  TestSuiteResult,
+  TestCaseError,
+} from '../test-results.js';
 
 const collator = new Intl.Collator(DEFAULT_LOCALE);
 
@@ -81,22 +81,28 @@ export function getReport(
 ): string {
   applySort(results);
 
-  const opts = { ...options };
-  let view = renderReport(results, opts, shortSummary);
-  let report = view.join('\n');
+  const view = renderReport(results, { ...options }, shortSummary);
+  const report = view.join('\n');
 
   if (getByteLength(report) <= getMaxReportLength(options)) {
     return report;
   }
 
-  if (opts.listTests === 'all') {
+  if (options.listTests === 'all') {
     info("Test report summary is too big - setting 'listTests' to 'failed'");
-    opts.listTests = 'failed';
-    view = renderReport(results, opts, shortSummary);
-    report = view.join('\n');
-    if (getByteLength(report) <= getMaxReportLength(options)) {
-      return report;
+    const failedView = renderReport(
+      results,
+      { ...options, listTests: 'failed' },
+      shortSummary,
+    );
+    const failedReport = failedView.join('\n');
+    if (getByteLength(failedReport) <= getMaxReportLength(options)) {
+      return failedReport;
     }
+    warning(
+      `Test report summary exceeded limit of ${getMaxReportLength(options)} bytes and will be trimmed`,
+    );
+    return trimReport(failedView, options);
   }
 
   warning(
@@ -132,6 +138,7 @@ function trimReport(lines: string[], options: ReportOptions): string {
   const maxErrorMsgLength = closingBlock.length + errorMsg.length + 2;
   const maxReportLength = getMaxReportLength(options) - maxErrorMsgLength;
 
+  /* eslint-disable functional/no-let, functional/no-loop-statements -- a single linear scan with an early exit; recursion would overflow the stack on reports with tens of thousands of lines */
   let reportLength = 0;
   let codeBlock = false;
   let endLineIndex: number;
@@ -148,13 +155,13 @@ function trimReport(lines: string[], options: ReportOptions): string {
       codeBlock = !codeBlock;
     }
   }
+  /* eslint-enable functional/no-let, functional/no-loop-statements -- end of the linear scan above */
 
-  const reportLines = lines.slice(0, endLineIndex);
-  if (codeBlock) {
-    reportLines.push('```');
-  }
-  reportLines.push(errorMsg);
-  return reportLines.join('\n');
+  return [
+    ...lines.slice(0, endLineIndex),
+    ...(codeBlock ? ['```'] : []),
+    errorMsg,
+  ].join('\n');
 }
 
 /**
@@ -164,8 +171,11 @@ function trimReport(lines: string[], options: ReportOptions): string {
  * applySort(testRuns);
  */
 function applySort(results: TestRunResult[]): void {
+  // eslint-disable-next-line functional/immutable-data -- the function documents that it sorts the caller's runs in place
   results.sort((a, b) => collator.compare(a.path, b.path));
+  // eslint-disable-next-line functional/no-loop-statements -- sorts the suites of each run in place, which has no return value to map
   for (const res of results) {
+    // eslint-disable-next-line functional/immutable-data -- the suites are sorted in place, as the function documents
     res.suites.sort((a, b) => collator.compare(a.name, b.name));
   }
 }
@@ -195,24 +205,16 @@ function renderReport(
   options: ReportOptions,
   shortSummary: string,
 ): string[] {
-  const sections: string[] = [];
-
   const reportTitle: string = options.reportTitle.trim();
-  if (reportTitle) {
-    sections.push(`# ${reportTitle}`);
-  }
-
-  if (shortSummary) {
-    sections.push(`## ${shortSummary}`);
-  }
-
   const badge = getReportBadge(results, options);
-  sections.push(badge, '');
 
-  const runs = getTestRunsReport(results, options);
-  sections.push(...runs);
-
-  return sections;
+  return [
+    ...(reportTitle ? [`# ${reportTitle}`] : []),
+    ...(shortSummary ? [`## ${shortSummary}`] : []),
+    badge,
+    '',
+    ...getTestRunsReport(results, options),
+  ];
 }
 
 /**
@@ -249,25 +251,15 @@ export function getBadge(
   skipped: number,
   options: ReportOptions,
 ): string {
-  const text = [];
-  if (passed > 0) {
-    text.push(`${passed} passed`);
-  }
-  if (failed > 0) {
-    text.push(`${failed} failed`);
-  }
-  if (skipped > 0) {
-    text.push(`${skipped} skipped`);
-  }
+  const text = [
+    ...(passed > 0 ? [`${passed} passed`] : []),
+    ...(failed > 0 ? [`${failed} failed`] : []),
+    ...(skipped > 0 ? [`${skipped} skipped`] : []),
+  ];
   const message = text.length > 0 ? text.join(', ') : 'none';
 
-  let color = 'success';
-  if (passed === 0 && failed === 0) {
-    color = 'yellow';
-  }
-  if (failed > 0) {
-    color = 'critical';
-  }
+  const baseColor = passed === 0 && failed === 0 ? 'yellow' : 'success';
+  const color = failed > 0 ? 'critical' : baseColor;
   const hint = failed > 0 ? 'Tests failed' : 'Tests passed successfully';
   const encodedBadgeTitle = encodeImgShieldsURIComponent(options.badgeTitle);
   const encodedMessage = encodeImgShieldsURIComponent(message);
@@ -287,38 +279,32 @@ function getTestRunsReport(
   testRuns: TestRunResult[],
   options: ReportOptions,
 ): string[] {
-  const sections: string[] = [];
+  const tableData = testRuns.flatMap((tr, originalIndex) => {
+    if (tr.passed === 0 && tr.failed === 0 && tr.skipped === 0) {
+      return [];
+    }
+    const time = formatTime(tr.time);
+    const name = tr.path;
+    const addr = options.baseUrl + makeRunSlug(originalIndex, options).link;
+    const nameLink = link(name, addr);
+    const passed = tr.passed > 0 ? `${tr.passed} ${Icon.success}` : '';
+    const failed = tr.failed > 0 ? `${tr.failed} ${Icon.fail}` : '';
+    const skipped = tr.skipped > 0 ? `${tr.skipped} ${Icon.skip}` : '';
+    return [[nameLink, passed, failed, skipped, time]];
+  });
 
-  if (testRuns.length > 0 || options.onlySummary) {
-    const tableData = testRuns
-      .map((tr, originalIndex) => ({ tr, originalIndex }))
-      .filter(({ tr }) => tr.passed > 0 || tr.failed > 0 || tr.skipped > 0)
-      .map(({ tr, originalIndex }) => {
-        const time = formatTime(tr.time);
-        const name = tr.path;
-        const addr = options.baseUrl + makeRunSlug(originalIndex, options).link;
-        const nameLink = link(name, addr);
-        const passed = tr.passed > 0 ? `${tr.passed} ${Icon.success}` : '';
-        const failed = tr.failed > 0 ? `${tr.failed} ${Icon.fail}` : '';
-        const skipped = tr.skipped > 0 ? `${tr.skipped} ${Icon.skip}` : '';
-        return [nameLink, passed, failed, skipped, time];
-      });
+  const resultsTable = table(
+    ['Report', 'Passed', 'Failed', 'Skipped', 'Time'],
+    [Align.Left, Align.Right, Align.Right, Align.Right, Align.Right],
+    ...tableData,
+  );
 
-    const resultsTable = table(
-      ['Report', 'Passed', 'Failed', 'Skipped', 'Time'],
-      [Align.Left, Align.Right, Align.Right, Align.Right, Align.Right],
-      ...tableData,
-    );
-    sections.push('', resultsTable);
-  }
-
-  if (!options.onlySummary) {
-    const suitesReports = testRuns.flatMap((tr, index) =>
-      getSuitesReport(tr, index, options),
-    );
-    sections.push(...suitesReports);
-  }
-  return sections;
+  return [
+    ...(testRuns.length > 0 || options.onlySummary ? ['', resultsTable] : []),
+    ...(options.onlySummary
+      ? []
+      : testRuns.flatMap((tr, index) => getSuitesReport(tr, index, options))),
+  ];
 }
 
 /**
@@ -335,59 +321,56 @@ function getSuitesReport(
   runIndex: number,
   options: ReportOptions,
 ): string[] {
-  const sections: string[] = [];
   const suites =
     options.listSuites === 'failed'
       ? tr.suites.filter((suite) => suite.result === 'failed')
       : tr.suites;
 
-  if (options.listSuites !== 'none') {
-    const trSlug = makeRunSlug(runIndex, options);
-    const nameLink = `<a id="${trSlug.id}" href="${options.baseUrl + trSlug.link}">${tr.path}</a>`;
-    const icon = getResultIcon(tr.result);
-    sections.push(`## ${icon}\u00A0${nameLink}`);
+  const trSlug = makeRunSlug(runIndex, options);
+  const nameLink = `<a id="${trSlug.id}" href="${options.baseUrl + trSlug.link}">${tr.path}</a>`;
+  const icon = getResultIcon(tr.result);
+  const time = formatTime(tr.time);
+  const headingLine2 =
+    tr.tests > 0
+      ? `**${tr.tests}** tests were completed in **${time}** with **${tr.passed}** passed, **${tr.failed}** failed and **${tr.skipped}** skipped.`
+      : 'No tests found';
 
-    const time = formatTime(tr.time);
-    const headingLine2 =
-      tr.tests > 0
-        ? `**${tr.tests}** tests were completed in **${time}** with **${tr.passed}** passed, **${tr.failed}** failed and **${tr.skipped}** skipped.`
-        : 'No tests found';
-    sections.push(headingLine2);
+  const suitesTable = table(
+    ['Test suite', 'Passed', 'Failed', 'Skipped', 'Time'],
+    [Align.Left, Align.Right, Align.Right, Align.Right, Align.Right],
+    ...suites.map((s: TestSuiteResult, suiteIndex: number) => {
+      const tsTime = formatTime(s.time);
+      const tsName = s.name;
+      const skipLink =
+        options.listTests === 'none' ||
+        (options.listTests === 'failed' && s.result !== 'failed');
+      const tsAddr =
+        options.baseUrl + makeSuiteSlug(runIndex, suiteIndex, options).link;
+      const tsNameLink = skipLink ? tsName : link(tsName, tsAddr);
+      const passed = s.passed > 0 ? `${s.passed} ${Icon.success}` : '';
+      const failed = s.failed > 0 ? `${s.failed} ${Icon.fail}` : '';
+      const skipped = s.skipped > 0 ? `${s.skipped} ${Icon.skip}` : '';
+      return [tsNameLink, passed, failed, skipped, tsTime];
+    }),
+  );
 
-    if (suites.length > 0) {
-      const suitesTable = table(
-        ['Test suite', 'Passed', 'Failed', 'Skipped', 'Time'],
-        [Align.Left, Align.Right, Align.Right, Align.Right, Align.Right],
-        ...suites.map((s: TestSuiteResult, suiteIndex: number) => {
-          const tsTime = formatTime(s.time);
-          const tsName = s.name;
-          const skipLink =
-            options.listTests === 'none' ||
-            (options.listTests === 'failed' && s.result !== 'failed');
-          const tsAddr =
-            options.baseUrl + makeSuiteSlug(runIndex, suiteIndex, options).link;
-          const tsNameLink = skipLink ? tsName : link(tsName, tsAddr);
-          const passed = s.passed > 0 ? `${s.passed} ${Icon.success}` : '';
-          const failed = s.failed > 0 ? `${s.failed} ${Icon.fail}` : '';
-          const skipped = s.skipped > 0 ? `${s.skipped} ${Icon.skip}` : '';
-          return [tsNameLink, passed, failed, skipped, tsTime];
-        }),
-      );
-      sections.push('', suitesTable);
-    }
-  }
+  const tests =
+    options.listTests === 'none'
+      ? []
+      : suites.flatMap((ts: TestSuiteResult, suiteIndex: number) =>
+          getTestsReport(ts, runIndex, suiteIndex, options),
+        );
 
-  if (options.listTests !== 'none') {
-    const tests = suites.flatMap((ts: TestSuiteResult, suiteIndex: number) =>
-      getTestsReport(ts, runIndex, suiteIndex, options),
-    );
-
-    if (tests.length > 1) {
-      sections.push(...tests);
-    }
-  }
-
-  return sections;
+  return [
+    ...(options.listSuites === 'none'
+      ? []
+      : [
+          `## ${icon}\u00A0${nameLink}`,
+          headingLine2,
+          ...(suites.length > 0 ? ['', suitesTable] : []),
+        ]),
+    ...(tests.length > 1 ? tests : []),
+  ];
 }
 
 /**
@@ -414,32 +397,26 @@ function getTestsReport(
     return [];
   }
 
-  const sections: string[] = [];
-
   const tsName = ts.name;
   const tsSlug = makeSuiteSlug(runIndex, suiteIndex, options);
   const tsNameLink = `<a id="${tsSlug.id}" href="${options.baseUrl + tsSlug.link}">${tsName}</a>`;
   const icon = getResultIcon(ts.result);
-  sections.push(`### ${icon}\u00A0${tsNameLink}`, '```');
-  for (const grp of groups) {
-    if (grp.name) {
-      sections.push(grp.name);
-    }
+  const body = groups.flatMap((grp) => {
     const space = grp.name ? '  ' : '';
-    for (const tc of grp.tests) {
-      if (options.listTests === 'failed' && tc.result !== 'failed') {
-        continue;
-      }
-      const result = getResultIcon(tc.result);
-      sections.push(`${space}${result} ${tc.name}`);
-      if (tc.error) {
-        sections.push(...formatErrorLines(tc.error));
-      }
-    }
-  }
-  sections.push('```');
+    return [
+      ...(grp.name ? [grp.name] : []),
+      ...grp.tests
+        .filter(
+          (tc) => options.listTests !== 'failed' || tc.result === 'failed',
+        )
+        .flatMap((tc) => [
+          `${space}${getResultIcon(tc.result)} ${tc.name}`,
+          ...(tc.error ? formatErrorLines(tc.error) : []),
+        ]),
+    ];
+  });
 
-  return sections;
+  return [`### ${icon}\u00A0${tsNameLink}`, '```', ...body, '```'];
 }
 
 /**
@@ -483,7 +460,7 @@ function makeSuiteSlug(
  */
 function formatErrorLines(error: TestCaseError): string[] {
   const text = error.message ?? getFirstNonEmptyLine(error.details)?.trim();
-  return (text?.split(/\r?\n/g) ?? []).map((l) => '\t' + l);
+  return (text?.split(/\r?\n/gu) ?? []).map((l) => `\t${l}`);
 }
 
 /**

@@ -2,17 +2,17 @@
  * @file Tests that the local coverage provider finds the coverage files it is pointed at.
  */
 
-import { describe, expect, test } from '@jest/globals';
-import { promises as fs } from 'node:fs';
+import { promises } from 'node:fs';
 import path from 'node:path';
 import { tmpdir } from 'node:os';
+import { describe, expect, test } from '@jest/globals';
 import { LocalCoverageProvider } from '../../../src/coverage/input-providers/local-coverage-provider.js';
 
 describe('LocalCoverageProvider', () => {
   test('loads matching coverage files', async () => {
-    const dir = await fs.mkdtemp(path.join(tmpdir(), 'cov-'));
+    const dir = await promises.mkdtemp(path.join(tmpdir(), 'cov-'));
     const reportPath = path.join(dir, 'coverage.info');
-    await fs.writeFile(reportPath, 'TN:\nend_of_record');
+    await promises.writeFile(reportPath, 'TN:\nend_of_record');
 
     const provider = new LocalCoverageProvider([path.join(dir, '*.info')]);
     const files = await provider.load();

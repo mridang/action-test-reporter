@@ -2,9 +2,9 @@
  * @file Tests the Dart JSON test result parser against its fixtures.
  */
 
-import { describe, expect, test } from '@jest/globals';
 import { mkdir, readFile, writeFile } from 'node:fs/promises';
 import path from 'node:path';
+import { describe, expect, test } from '@jest/globals';
 
 import {
   DartJsonParser,
@@ -13,16 +13,16 @@ import {
   matchFlutterFrame,
 } from '../../../src/testresult/parsers/dart-json/dart-json-parser.js';
 import { randomStrings, referencePattern } from '../helpers/fuzz.js';
-import type { ParseOptions } from '../../../src/testresult/test-parser.js';
 import {
   DEFAULT_OPTIONS,
   getReport,
 } from '../../../src/testresult/formatter/summary-formatter.js';
 import { normalizeFilePath } from '../../../src/testresult/utils/path-utilities.js';
 import { getDirname } from '../helpers/dir.js';
+import type { ParseOptions } from '../../../src/testresult/test-parser.js';
 
-const TESTS_FAILED_BADGE = /^!\[Tests failed]/;
-const CUSTOM_TITLE_HEADING = /^# My Custom Title\n/;
+const TESTS_FAILED_BADGE = /^!\[Tests failed\]/u;
+const CUSTOM_TITLE_HEADING = /^# My Custom Title\n/u;
 
 const testDir = getDirname(import.meta.url);
 
@@ -108,7 +108,7 @@ describe('dart-json tests', () => {
     const rawTrackedFiles = await readFile(trackedFilesPath, {
       encoding: 'utf8',
     });
-    const trackedFiles = rawTrackedFiles.split(/\n\r?/g);
+    const trackedFiles = rawTrackedFiles.split(/\n\r?/gu);
     const opts: ParseOptions = {
       trackedFiles,
       parseErrors: true,

@@ -74,14 +74,15 @@ export class JacocoParser extends BaseParser<JacocoReport> {
   private aggregateCounters(
     counters: JacocoCounter[],
   ): Omit<FileCoverageDetails, 'file' | 'uncoveredLines'> {
-    const metrics: Record<string, CoverageMetrics> = {};
-    for (const c of counters || []) {
-      const type = c.$.type.toLowerCase();
-      metrics[type] = {
-        covered: Number(c.$.covered),
-        total: Number(c.$.covered) + Number(c.$.missed),
-      };
-    }
+    const metrics: Record<string, CoverageMetrics> = Object.fromEntries(
+      (counters || []).map((c) => [
+        c.$.type.toLowerCase(),
+        {
+          covered: Number(c.$.covered),
+          total: Number(c.$.covered) + Number(c.$.missed),
+        },
+      ]),
+    );
 
     return {
       lines: metrics.line || { covered: 0, total: 0 },

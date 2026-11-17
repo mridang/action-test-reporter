@@ -2,17 +2,17 @@
  * @file Tests that the local file provider reads the test result files it matches.
  */
 
-import { describe, expect, test } from '@jest/globals';
-import { promises as fs } from 'node:fs';
+import { promises } from 'node:fs';
 import path from 'node:path';
 import { tmpdir } from 'node:os';
+import { describe, expect, test } from '@jest/globals';
 import { LocalFileProvider } from '../../../src/testresult/input-providers/local-file-provider.js';
 
 describe('LocalFileProvider', () => {
   test('loads matching test result files', async () => {
-    const dir = await fs.mkdtemp(path.join(tmpdir(), 'tr-'));
+    const dir = await promises.mkdtemp(path.join(tmpdir(), 'tr-'));
     const reportPath = path.join(dir, 'report.xml');
-    await fs.writeFile(reportPath, '<testsuites />');
+    await promises.writeFile(reportPath, '<testsuites />');
 
     const provider = new LocalFileProvider('unit', [path.join(dir, '*.xml')]);
     const files = await provider.load();

@@ -2,15 +2,15 @@
  * @file Tests the go test JSON parser against its fixtures.
  */
 
-import { describe, expect, test } from '@jest/globals';
 import { mkdir, readFile, writeFile } from 'node:fs/promises';
 import path from 'node:path';
+import { describe, expect, test } from '@jest/globals';
 
 import { GolangJsonParser } from '../../../src/testresult/parsers/golang-json/golang-json-parser.js';
-import type { ParseOptions } from '../../../src/testresult/test-parser.js';
 import { getReport } from '../../../src/testresult/formatter/summary-formatter.js';
 import { normalizeFilePath } from '../../../src/testresult/utils/path-utilities.js';
 import { getDirname } from '../helpers/dir.js';
+import type { ParseOptions } from '../../../src/testresult/test-parser.js';
 
 const testDir = getDirname(import.meta.url);
 

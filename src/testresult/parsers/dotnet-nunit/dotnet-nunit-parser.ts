@@ -2,20 +2,20 @@
  * @file Parses NUnit XML test results from .NET test runs.
  */
 
-import type { ParseOptions, TestParser } from '../../test-parser.js';
 import { parseStringPromise } from 'xml2js';
 
-import type { NunitReport, TestCase, TestSuite } from './dotnet-nunit-types.js';
 import { getExceptionSource } from '../../utils/node-utilities.js';
 import { getBasePath, normalizeFilePath } from '../../utils/path-utilities.js';
 
-import type { TestExecutionResult, TestCaseError } from '../../test-results.js';
 import {
   TestRunResult,
   TestSuiteResult,
   TestGroupResult,
   TestCaseResult,
 } from '../../test-results.js';
+import type { TestExecutionResult, TestCaseError } from '../../test-results.js';
+import type { NunitReport, TestCase, TestSuite } from './dotnet-nunit-types.js';
+import type { ParseOptions, TestParser } from '../../test-parser.js';
 
 /**
  * Parser for NUnit XML reports produced by .NET test runners.
@@ -37,89 +37,85 @@ export class DotnetNunitParser implements TestParser {
     try {
       return (await parseStringPromise(content)) as NunitReport;
     } catch (error) {
-      throw new Error(`Invalid XML at ${path}\n\n${String(error)}`);
+      throw new Error(`Invalid XML at ${path}\n\n${String(error)}`, {
+        cause: error,
+      });
     }
   }
 
   private getTestRunResult(path: string, nunit: NunitReport): TestRunResult {
-    const suites: TestSuiteResult[] = [];
     const time = Number.parseFloat(nunit['test-run'].$.duration) * 1000;
 
-    this.populateTestCasesRecursive(
-      suites,
+    const entries = this.collectTestCases(
       [],
       nunit['test-run']['test-suite'],
+    ).map(({ suitePath, testCase }) => {
+      const suitesWithoutTheories = suitePath.filter(
+        (suite) => suite.$.type !== 'Theory',
+      );
+      return {
+        suiteName: suitesWithoutTheories
+          .slice(0, -1)
+          .map((suite) => suite.$.name)
+          .join('.'),
+        groupName: suitesWithoutTheories.at(-1)!.$.name,
+        result: new TestCaseResult(
+          testCase.$.name,
+          this.getTestExecutionResult(testCase),
+          Number.parseFloat(testCase.$.duration) * 1000,
+          this.getTestCaseError(testCase),
+        ),
+      };
+    });
+
+    const suites = Array.from(
+      new Set(entries.map((entry) => entry.suiteName)),
+      (suiteName) => {
+        const inSuite = entries.filter(
+          (entry) => entry.suiteName === suiteName,
+        );
+        return new TestSuiteResult(
+          suiteName,
+          Array.from(
+            new Set(inSuite.map((entry) => entry.groupName)),
+            (groupName) =>
+              new TestGroupResult(
+                groupName,
+                inSuite
+                  .filter((entry) => entry.groupName === groupName)
+                  .map((entry) => entry.result),
+              ),
+          ),
+        );
+      },
     );
 
     return new TestRunResult(path, suites, time);
   }
 
-  private populateTestCasesRecursive(
-    result: TestSuiteResult[],
+  private collectTestCases(
     suitePath: TestSuite[],
     testSuites: TestSuite[] | undefined,
-  ): void {
-    if (testSuites === undefined) {
-      return;
-    }
-
-    for (const suite of testSuites) {
-      suitePath.push(suite);
-
-      this.populateTestCasesRecursive(result, suitePath, suite['test-suite']);
-
-      const testcases = suite['test-case'];
-      if (testcases !== undefined) {
-        for (const testcase of testcases) {
-          this.addTestCase(result, suitePath, testcase);
-        }
-      }
-
-      suitePath.pop();
-    }
-  }
-
-  private addTestCase(
-    result: TestSuiteResult[],
-    suitePath: TestSuite[],
-    testCase: TestCase,
-  ): void {
-    const suitesWithoutTheories = suitePath.filter(
-      (suite) => suite.$.type !== 'Theory',
-    );
-    const suiteName = suitesWithoutTheories
-      .slice(0, -1)
-      .map((suite) => suite.$.name)
-      .join('.');
-    const groupName = suitesWithoutTheories.at(-1)!.$.name;
-
-    let existingSuite = result.find((suite) => suite.name === suiteName);
-    if (existingSuite === undefined) {
-      existingSuite = new TestSuiteResult(suiteName, []);
-      result.push(existingSuite);
-    }
-
-    let existingGroup = existingSuite.groups.find(
-      (group) => group.name === groupName,
-    );
-    if (existingGroup === undefined) {
-      existingGroup = new TestGroupResult(groupName, []);
-      existingSuite.groups.push(existingGroup);
-    }
-
-    existingGroup.tests.push(
-      new TestCaseResult(
-        testCase.$.name,
-        this.getTestExecutionResult(testCase),
-        Number.parseFloat(testCase.$.duration) * 1000,
-        this.getTestCaseError(testCase),
-      ),
-    );
+  ): { suitePath: TestSuite[]; testCase: TestCase }[] {
+    return (testSuites ?? []).flatMap((suite) => {
+      const path = [...suitePath, suite];
+      return [
+        ...this.collectTestCases(path, suite['test-suite']),
+        ...(suite['test-case'] ?? []).map((testCase) => ({
+          suitePath: path,
+          testCase,
+        })),
+      ];
+    });
   }
 
   private getTestExecutionResult(test: TestCase): TestExecutionResult {
-    if (test.$.result === 'Failed' || test.failure) return 'failed';
-    if (test.$.result === 'Skipped') return 'skipped';
+    if (test.$.result === 'Failed' || test.failure) {
+      return 'failed';
+    }
+    if (test.$.result === 'Skipped') {
+      return 'skipped';
+    }
     return 'success';
   }
 
@@ -129,23 +125,16 @@ export class DotnetNunitParser implements TestParser {
     }
 
     const details = tc.failure[0];
-    let path;
-    let line;
-
-    if (
-      details['stack-trace'] !== undefined &&
-      details['stack-trace'].length > 0
-    ) {
-      const src = getExceptionSource(
-        details['stack-trace'][0],
-        this.options.trackedFiles,
-        (file) => this.getRelativePath(file),
-      );
-      if (src) {
-        path = src.path;
-        line = src.line;
-      }
-    }
+    const src =
+      details['stack-trace'] !== undefined && details['stack-trace'].length > 0
+        ? getExceptionSource(
+            details['stack-trace'][0],
+            this.options.trackedFiles,
+            (file) => this.getRelativePath(file),
+          )
+        : undefined;
+    const path = src?.path;
+    const line = src?.line;
 
     return {
       path,
@@ -160,12 +149,11 @@ export class DotnetNunitParser implements TestParser {
   }
 
   private getRelativePath(path: string): string {
-    path = normalizeFilePath(path);
-    const workDir = this.getWorkDir(path);
-    if (workDir !== undefined && path.startsWith(workDir)) {
-      path = path.slice(workDir.length);
-    }
-    return path;
+    const normalized = normalizeFilePath(path);
+    const workDir = this.getWorkDir(normalized);
+    return workDir !== undefined && normalized.startsWith(workDir)
+      ? normalized.slice(workDir.length)
+      : normalized;
   }
 
   private getWorkDir(path: string): string | undefined {

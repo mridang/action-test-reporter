@@ -25,30 +25,23 @@ export function formatUncoveredLines(
 ): string {
   if (lines.length === 0) {
     return '';
-  } else {
-    const sortedLines = [...lines].toSorted((a, b) => a - b);
-
-    const groupedRanges = sortedLines.reduce(
-      (acc: number[][], current: number) => {
-        const lastGroup = acc.at(-1)!;
-        if (acc.length === 0 || current > lastGroup.at(-1)! + 1) {
-          acc.push([current]);
-        } else {
-          lastGroup.push(current);
-        }
-        return acc;
-      },
-      [],
-    );
-
-    const fullRangeString = groupedRanges
-      .map((group: number[]) => {
-        return group.length > 1 ? `${group[0]}-${group.at(-1)}` : `${group[0]}`;
-      })
-      .join(',');
-
-    return options?.maxLength && fullRangeString.length > options.maxLength
-      ? `${sortedLines[0]}-${sortedLines.at(-1)}`
-      : fullRangeString;
   }
+  const sortedLines = [...lines].toSorted((a, b) => a - b);
+
+  const groupStarts = sortedLines.flatMap((current, index) =>
+    index === 0 || current > sortedLines[index - 1] + 1 ? [index] : [],
+  );
+  const groupedRanges = groupStarts.map((start, position) =>
+    sortedLines.slice(start, groupStarts[position + 1] ?? sortedLines.length),
+  );
+
+  const fullRangeString = groupedRanges
+    .map((group: number[]) =>
+      group.length > 1 ? `${group[0]}-${group.at(-1)}` : `${group[0]}`,
+    )
+    .join(',');
+
+  return options?.maxLength && fullRangeString.length > options.maxLength
+    ? `${sortedLines[0]}-${sortedLines.at(-1)}`
+    : fullRangeString;
 }

@@ -13,16 +13,13 @@ import { getExecOutput } from '@actions/exec';
  */
 export async function listFiles(): Promise<string[]> {
   startGroup('Listing all files tracked by git');
-  let output = '';
   try {
     const lsFiles = await getExecOutput('git', ['ls-files', '-z']);
-    output = lsFiles.stdout;
+    return lsFiles.stdout.split('\u0000').filter((s) => s.length > 0);
   } finally {
     fixStdOutNullTermination();
     endGroup();
   }
-
-  return output.split('\u0000').filter((s) => s.length > 0);
 }
 
 /**

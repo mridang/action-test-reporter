@@ -11,7 +11,7 @@ export default {
   ],
   project: ['src/**/*.ts', 'test/**/*.ts'],
   ignoreDependencies: [
-    /^@semantic-release\//,
+    /^@semantic-release\//u,
     '@commitlint/config-conventional',
   ],
 };

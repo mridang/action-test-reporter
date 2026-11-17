@@ -4,8 +4,8 @@
 
 import { normalizeFilePath } from './path-utilities.js';
 
-const LINE_BREAK_PATTERN = /\r?\n/;
-const STACK_FRAME_PATTERN = /^[^(]*\((.*):(\d+):\d+\)$/;
+const LINE_BREAK_PATTERN = /\r?\n/u;
+const STACK_FRAME_PATTERN = /^[^(]*\((.*):(\d+):\d+\)$/u;
 
 export const DEFAULT_LOCALE = 'en-US';
 
@@ -25,13 +25,9 @@ export function getExceptionSource(
 ): { path: string; line: number } | undefined {
   const lines = stackTrace.split(LINE_BREAK_PATTERN);
 
-  for (const line of lines) {
-    const frame = getTrackedFrame(line, trackedFiles, getRelativePath);
-    if (frame) {
-      return frame;
-    }
-  }
-  return undefined;
+  return lines
+    .map((line) => getTrackedFrame(line, trackedFiles, getRelativePath))
+    .find((frame) => frame !== undefined);
 }
 
 /**
@@ -77,5 +73,5 @@ function getTrackedFrame(
   if (!path || !trackedFiles.includes(path)) {
     return undefined;
   }
-  return { path, line: Number.parseInt(lineString) };
+  return { path, line: Number.parseInt(lineString, 10) };
 }

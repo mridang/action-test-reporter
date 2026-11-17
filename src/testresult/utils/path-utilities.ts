@@ -18,11 +18,10 @@ export function normalizeDirPath(
     return path;
   }
 
-  path = normalizeFilePath(path);
-  if (addTrailingSlash && !path.endsWith('/')) {
-    path += '/';
-  }
-  return path;
+  const normalized = normalizeFilePath(path);
+  return addTrailingSlash && !normalized.endsWith('/')
+    ? `${normalized}/`
+    : normalized;
 }
 
 /**
@@ -56,12 +55,12 @@ export function getBasePath(
     return '';
   }
 
-  let max = '';
-  for (const file of trackedFiles) {
-    if (path.endsWith(file) && file.length > max.length) {
-      max = file;
-    }
-  }
+  const max = trackedFiles
+    .filter((file) => path.endsWith(file))
+    .reduce(
+      (longest, file) => (file.length > longest.length ? file : longest),
+      '',
+    );
 
   if (max === '') {
     return undefined;

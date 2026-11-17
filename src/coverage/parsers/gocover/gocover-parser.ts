@@ -5,6 +5,7 @@
 import type {
   CoverageParser,
   CoverageData,
+  CoverageMetrics,
   FileCoverageDetails,
 } from '../coverage-parser.js';
 import type { GocoverBlock, GocoverFileData } from './gocover-types.js';
@@ -19,14 +20,14 @@ export class GocoverParser implements CoverageParser {
    * Regular expression to match the mode line at the start of Go coverage files.
    * Valid modes are: set, count, atomic.
    */
-  private static readonly MODE_REGEX = /^mode:\s*(set|count|atomic)\s*$/;
+  private static readonly MODE_REGEX = /^mode:\s*(set|count|atomic)\s*$/u;
 
   /**
    * Regular expression to match coverage block lines.
    * Format: file:startLine.startCol,endLine.endCol numStatements count.
    */
   private static readonly BLOCK_REGEX =
-    /^(.+):(\d+)\.(\d+),(\d+)\.(\d+)\s+(\d+)\s+(\d+)$/;
+    /^(.+):(\d+)\.(\d+),(\d+)\.(\d+)\s+(\d+)\s+(\d+)$/u;
 
   /**
    * Parses Go coverage profile content.
@@ -50,16 +51,12 @@ export class GocoverParser implements CoverageParser {
       );
     }
 
-    const fileDataMap = new Map<string, GocoverFileData>();
-
-    for (let index = 1; index < lines.length; index++) {
-      const line = lines[index].trim();
-      if (line === '') continue;
-
+    const parsedBlocks = lines.slice(1).map((rawLine, offset) => {
+      const line = rawLine.trim();
       const match = GocoverParser.BLOCK_REGEX.exec(line);
       if (!match) {
         throw new Error(
-          `Invalid Go coverage format at line ${index + 1}: ${line}`,
+          `Invalid Go coverage format at line ${offset + 2}: ${line}`,
         );
       }
 
@@ -82,19 +79,22 @@ export class GocoverParser implements CoverageParser {
         numStatements: Number.parseInt(numberStmts, 10),
         count: Number.parseInt(count, 10),
       };
+      return { filename, block };
+    });
 
-      if (!fileDataMap.has(filename)) {
-        fileDataMap.set(filename, { filename, blocks: [] });
-      }
-      fileDataMap.get(filename)!.blocks.push(block);
-    }
-
-    if (fileDataMap.size === 0) {
+    if (parsedBlocks.length === 0) {
       throw new Error('No valid Go coverage data found in content');
     }
 
-    const details = Array.from(fileDataMap.values(), (fileData) =>
-      this.processFileToDetails(fileData),
+    const details = Array.from(
+      new Set(parsedBlocks.map((entry) => entry.filename)),
+      (filename) =>
+        this.processFileToDetails({
+          filename,
+          blocks: parsedBlocks
+            .filter((entry) => entry.filename === filename)
+            .map((entry) => entry.block),
+        }),
     );
     const overall = this.aggregateOverallCoverage(details);
 
@@ -110,33 +110,38 @@ export class GocoverParser implements CoverageParser {
    */
   private processFileToDetails(fileData: GocoverFileData): FileCoverageDetails {
     // Track coverage per line: Map<lineNumber, wasCovered>
-    const lineCoverage = new Map<number, boolean>();
-
-    for (const block of fileData.blocks) {
-      // Mark all lines in the block
-      for (let line = block.startLine; line <= block.endLine; line++) {
-        // A line is covered if any block covering it has count > 0
-        const currentCoverage = lineCoverage.get(line) ?? false;
-        lineCoverage.set(line, currentCoverage || block.count > 0);
-      }
-    }
+    const lineCoverage = fileData.blocks
+      .flatMap((block) =>
+        Array.from(
+          { length: block.endLine - block.startLine + 1 },
+          (_unused, offset): [number, boolean] => [
+            block.startLine + offset,
+            block.count > 0,
+          ],
+        ),
+      )
+      .reduce(
+        (covered, [line, wasCovered]) =>
+          // A line is covered if any block covering it has count > 0
+          // eslint-disable-next-line functional/immutable-data -- builds the lookup in a single pass; copying the map for every line would be quadratic
+          covered.set(line, (covered.get(line) ?? false) || wasCovered),
+        new Map<number, boolean>(),
+      );
 
     const totalLines = lineCoverage.size;
     const coveredLines = [...lineCoverage.values()].filter(Boolean).length;
     const uncoveredLines = [...lineCoverage.entries()]
-      .filter(([, covered]) => !covered)
-      .map(([lineNumber]) => lineNumber)
+      .flatMap(([lineNumber, covered]) => (covered ? [] : [lineNumber]))
       .toSorted((a, b) => a - b);
 
     // Calculate statement coverage from blocks
-    let totalStatements = 0;
-    let coveredStatements = 0;
-    for (const block of fileData.blocks) {
-      totalStatements += block.numStatements;
-      if (block.count > 0) {
-        coveredStatements += block.numStatements;
-      }
-    }
+    const totalStatements = fileData.blocks.reduce(
+      (total, block) => total + block.numStatements,
+      0,
+    );
+    const coveredStatements = fileData.blocks
+      .filter((block) => block.count > 0)
+      .reduce((total, block) => total + block.numStatements, 0);
 
     return {
       file: fileData.filename,
@@ -170,24 +175,17 @@ export class GocoverParser implements CoverageParser {
   private aggregateOverallCoverage(
     details: FileCoverageDetails[],
   ): CoverageData['overall'] {
-    return details.reduce(
-      (acc, detail) => {
-        acc.lines.total += detail.lines.total;
-        acc.lines.covered += detail.lines.covered;
-        acc.statements.total += detail.statements.total;
-        acc.statements.covered += detail.statements.covered;
-        acc.methods.total += detail.methods.total;
-        acc.methods.covered += detail.methods.covered;
-        acc.branches.total += detail.branches.total;
-        acc.branches.covered += detail.branches.covered;
-        return acc;
-      },
-      {
-        lines: { total: 0, covered: 0 },
-        statements: { total: 0, covered: 0 },
-        methods: { total: 0, covered: 0 },
-        branches: { total: 0, covered: 0 },
-      },
-    );
+    const sum = (
+      pick: (detail: FileCoverageDetails) => CoverageMetrics,
+    ): CoverageMetrics => ({
+      total: details.reduce((total, d) => total + pick(d).total, 0),
+      covered: details.reduce((total, d) => total + pick(d).covered, 0),
+    });
+    return {
+      lines: sum((d) => d.lines),
+      statements: sum((d) => d.statements),
+      methods: sum((d) => d.methods),
+      branches: sum((d) => d.branches),
+    };
   }
 }

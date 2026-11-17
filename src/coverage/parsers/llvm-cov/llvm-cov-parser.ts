@@ -51,7 +51,7 @@ type LlvmExport = {
  * dependencies and generated sources that are not part of the project.
  * @internal
  */
-const DEPENDENCY_PATH = /(^|[\\/])\.build[\\/]/;
+const DEPENDENCY_PATH = /(^|[\\/])\.build[\\/]/u;
 
 /**
  * A parser for the JSON produced by `llvm-cov export`, which is also the file
@@ -71,12 +71,13 @@ export class LlvmCovParser implements CoverageParser {
    * @throws {Error} If the content is not an llvm-cov JSON export.
    */
   public async parse(content: string): Promise<CoverageData> {
-    let json: LlvmExport;
-    try {
-      json = JSON.parse(content) as LlvmExport;
-    } catch {
-      throw new Error('Content is not valid JSON');
-    }
+    const json = ((): LlvmExport => {
+      try {
+        return JSON.parse(content) as LlvmExport;
+      } catch (error) {
+        throw new Error('Content is not valid JSON', { cause: error });
+      }
+    })();
 
     if (
       !json ||
@@ -90,15 +91,18 @@ export class LlvmCovParser implements CoverageParser {
     const files = json.data.flatMap((entry) => entry.files ?? []);
     const functions = json.data.flatMap((entry) => entry.functions ?? []);
 
-    const methodsByFile = new Map<string, CoverageMetrics>();
-    for (const fn of functions) {
+    const methodsByFile = functions.reduce((byFile, fn) => {
       const name = fn.filenames?.[0];
-      if (!name) continue;
-      const metrics = methodsByFile.get(name) ?? { total: 0, covered: 0 };
-      metrics.total += 1;
-      if (fn.count > 0) metrics.covered += 1;
-      methodsByFile.set(name, metrics);
-    }
+      if (!name) {
+        return byFile;
+      }
+      const metrics = byFile.get(name) ?? { total: 0, covered: 0 };
+      // eslint-disable-next-line functional/immutable-data -- builds the lookup in a single pass; copying the map for every function would be quadratic
+      return byFile.set(name, {
+        total: metrics.total + 1,
+        covered: metrics.covered + (fn.count > 0 ? 1 : 0),
+      });
+    }, new Map<string, CoverageMetrics>());
 
     const details = files
       .filter((file) => !DEPENDENCY_PATH.test(file.filename))
@@ -127,14 +131,14 @@ export class LlvmCovParser implements CoverageParser {
    * @private
    */
   private lineCounts(segments: LlvmSegment[]): Map<number, number> {
-    const counts = new Map<number, number>();
-    let wrapped: LlvmSegment | undefined;
-    let index = 0;
+    const groups = segments.flatMap((segment, index) =>
+      index === 0 || segments[index - 1][0] !== segment[0] ? [index] : [],
+    );
 
-    while (index < segments.length) {
+    const entries = groups.flatMap((index, position): [number, number][] => {
       const line = segments[index][0];
-      let end = index;
-      while (end < segments.length && segments[end][0] === line) end++;
+      const end = groups[position + 1] ?? segments.length;
+      const wrapped = position > 0 ? segments[groups[position] - 1] : undefined;
 
       const starting = segments
         .slice(index, end)
@@ -143,24 +147,38 @@ export class LlvmCovParser implements CoverageParser {
       const wrappedCounts =
         !startsWithEntry && wrapped && wrapped[3] && !wrapped[5];
 
-      if (starting.length > 0 || wrappedCounts) {
-        const candidates = starting.map((s) => s[2]);
-        if (wrappedCounts) candidates.push(wrapped![2]);
-        counts.set(line, Math.max(...candidates));
-      }
+      const ownCount: [number, number][] =
+        starting.length > 0 || wrappedCounts
+          ? [
+              [
+                line,
+                Math.max(
+                  ...starting.map((s) => s[2]),
+                  ...(wrappedCounts ? [wrapped[2]] : []),
+                ),
+              ],
+            ]
+          : [];
 
       // Lines between this one and the next segment are covered by the
       // region that is still open after this line's last segment.
       const last = segments[end - 1];
       const next = end < segments.length ? segments[end][0] : line;
-      if (last[3] && !last[5]) {
-        for (let l = line + 1; l < next; l++) counts.set(l, last[2]);
-      }
-      wrapped = last;
-      index = end;
-    }
+      const between: [number, number][] =
+        last[3] && !last[5]
+          ? Array.from(
+              { length: Math.max(next - line - 1, 0) },
+              (_unused, offset): [number, number] => [
+                line + 1 + offset,
+                last[2],
+              ],
+            )
+          : [];
 
-    return counts;
+      return [...ownCount, ...between];
+    });
+
+    return new Map(entries);
   }
 
   /**
@@ -176,14 +194,13 @@ export class LlvmCovParser implements CoverageParser {
     methods: CoverageMetrics,
   ): FileCoverageDetails {
     const counts = this.lineCounts(file.segments ?? []);
-    const lines = { total: counts.size, covered: 0 };
-    const uncoveredLines: number[] = [];
-
-    for (const [line, hits] of counts) {
-      if (hits > 0) lines.covered += 1;
-      else uncoveredLines.push(line);
-    }
-    uncoveredLines.sort((a, b) => a - b);
+    const lines = {
+      total: counts.size,
+      covered: [...counts.values()].filter((hits) => hits > 0).length,
+    };
+    const uncoveredLines = [...counts]
+      .flatMap(([line, hits]) => (hits > 0 ? [] : [line]))
+      .toSorted((a, b) => a - b);
 
     const branches = file.summary?.branches;
 
@@ -210,25 +227,17 @@ export class LlvmCovParser implements CoverageParser {
   private aggregateOverallCoverage(
     details: FileCoverageDetails[],
   ): CoverageData['overall'] {
-    return details.reduce(
-      (acc, detail) => {
-        for (const key of [
-          'lines',
-          'statements',
-          'methods',
-          'branches',
-        ] as const) {
-          acc[key].total += detail[key].total;
-          acc[key].covered += detail[key].covered;
-        }
-        return acc;
-      },
-      {
-        lines: { total: 0, covered: 0 },
-        statements: { total: 0, covered: 0 },
-        methods: { total: 0, covered: 0 },
-        branches: { total: 0, covered: 0 },
-      },
-    );
+    const sum = (
+      pick: (detail: FileCoverageDetails) => CoverageMetrics,
+    ): CoverageMetrics => ({
+      total: details.reduce((total, d) => total + pick(d).total, 0),
+      covered: details.reduce((total, d) => total + pick(d).covered, 0),
+    });
+    return {
+      lines: sum((d) => d.lines),
+      statements: sum((d) => d.statements),
+      methods: sum((d) => d.methods),
+      branches: sum((d) => d.branches),
+    };
   }
 }

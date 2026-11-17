@@ -2,9 +2,9 @@
  * @file Tests the llvm-cov coverage parser against its JSON export.
  */
 
-import { describe, expect, it } from '@jest/globals';
-import { promises as fs } from 'node:fs';
+import { promises } from 'node:fs';
 import path from 'node:path';
+import { describe, expect, it } from '@jest/globals';
 import { LlvmCovParser } from '../../../src/coverage/parsers/llvm-cov/llvm-cov-parser.js';
 
 describe('LlvmCovParser', () => {
@@ -16,7 +16,7 @@ describe('LlvmCovParser', () => {
       '__fixtures__',
       'llvm-cov.json',
     );
-    const content = await fs.readFile(filePath, 'utf8');
+    const content = await promises.readFile(filePath, 'utf8');
     const result = await new LlvmCovParser().parse(content);
 
     expect(result).toEqual({

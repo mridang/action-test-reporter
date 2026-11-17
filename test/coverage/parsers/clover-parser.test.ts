@@ -2,9 +2,9 @@
  * @file Tests the Clover coverage parser and its summary output.
  */
 
-import { describe, expect, test } from '@jest/globals';
 import { mkdir, readFile, writeFile } from 'node:fs/promises';
 import path from 'node:path';
+import { describe, expect, test } from '@jest/globals';
 
 import { SummaryFormatter } from '../../../src/coverage/formatter/summary-formatter.js';
 import { CloverParser } from '../../../src/coverage/parsers/clover/clover-parser.js';

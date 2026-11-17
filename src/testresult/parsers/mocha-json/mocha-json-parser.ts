@@ -2,8 +2,6 @@
  * @file Parses the JSON report written by Mocha.
  */
 
-import type { ParseOptions, TestParser } from '../../test-parser.js';
-import type { TestCaseError, TestExecutionResult } from '../../test-results.js';
 import {
   TestCaseResult,
   TestGroupResult,
@@ -12,6 +10,8 @@ import {
 } from '../../test-results.js';
 import { getExceptionSource } from '../../utils/node-utilities.js';
 import { getBasePath, normalizeFilePath } from '../../utils/path-utilities.js';
+import type { TestCaseError, TestExecutionResult } from '../../test-results.js';
+import type { ParseOptions, TestParser } from '../../test-parser.js';
 import type { MochaJson, MochaJsonTest } from './mocha-json-types.js';
 
 /**
@@ -33,7 +33,9 @@ export class MochaJsonParser implements TestParser {
     try {
       return JSON.parse(content) as MochaJson;
     } catch (error) {
-      throw new Error(`Invalid JSON at ${path}\n\n${String(error)}`);
+      throw new Error(`Invalid JSON at ${path}\n\n${String(error)}`, {
+        cause: error,
+      });
     }
   }
 
@@ -41,51 +43,55 @@ export class MochaJsonParser implements TestParser {
     resultsPath: string,
     mocha: MochaJson,
   ): TestRunResult {
-    const suitesMap: { [path: string]: TestSuiteResult } = {};
+    const tests: [MochaJsonTest, TestExecutionResult][] = [
+      ...mocha.passes.map((test): [MochaJsonTest, TestExecutionResult] => [
+        test,
+        'success',
+      ]),
+      ...mocha.failures.map((test): [MochaJsonTest, TestExecutionResult] => [
+        test,
+        'failed',
+      ]),
+      ...mocha.pending.map((test): [MochaJsonTest, TestExecutionResult] => [
+        test,
+        'skipped',
+      ]),
+    ];
 
-    const getSuite = (test: MochaJsonTest): TestSuiteResult => {
+    const entries = tests.map(([test, result]) => {
       const path = this.getRelativePath(test.file);
-      return (
-        suitesMap[path] ?? (suitesMap[path] = new TestSuiteResult(path, []))
-      );
-    };
+      return { path, ...this.processTest(test, result) };
+    });
 
-    for (const test of mocha.passes) {
-      const suite = getSuite(test);
-      this.processTest(suite, test, 'success');
-    }
-
-    for (const test of mocha.failures) {
-      const suite = getSuite(test);
-      this.processTest(suite, test, 'failed');
-    }
-
-    for (const test of mocha.pending) {
-      const suite = getSuite(test);
-      this.processTest(suite, test, 'skipped');
-    }
-
-    const suites = Object.values(suitesMap);
+    const suites = Array.from(
+      new Set(entries.map((entry) => entry.path)),
+      (path) => {
+        const inSuite = entries.filter((entry) => entry.path === path);
+        return new TestSuiteResult(
+          path,
+          Array.from(
+            new Set(inSuite.map((entry) => entry.groupName)),
+            (groupName) =>
+              new TestGroupResult(
+                groupName,
+                inSuite.flatMap((entry) =>
+                  entry.groupName === groupName ? [entry.testCase] : [],
+                ),
+              ),
+          ),
+        );
+      },
+    );
     return new TestRunResult(resultsPath, suites, mocha.stats.duration);
   }
 
-  private processTest(
-    suite: TestSuiteResult,
-    test: MochaJsonTest,
-    result: TestExecutionResult,
-  ): void {
+  private processTest(test: MochaJsonTest, result: TestExecutionResult) {
     const groupName =
       test.fullTitle === test.title
         ? null
         : test.fullTitle
             .slice(0, test.fullTitle.length - test.title.length)
             .trimEnd();
-
-    let group = suite.groups.find((grp) => grp.name === groupName);
-    if (group === undefined) {
-      group = new TestGroupResult(groupName, []);
-      suite.groups.push(group);
-    }
 
     const error = this.getTestCaseError(test);
     const testCase = new TestCaseResult(
@@ -94,7 +100,7 @@ export class MochaJsonParser implements TestParser {
       test.duration ?? 0,
       error,
     );
-    group.tests.push(testCase);
+    return { groupName, testCase };
   }
 
   private getTestCaseError(test: MochaJsonTest): TestCaseError | undefined {
@@ -104,16 +110,11 @@ export class MochaJsonParser implements TestParser {
       return undefined;
     }
 
-    let path;
-    let line;
-
     const src = getExceptionSource(details, this.options.trackedFiles, (file) =>
       this.getRelativePath(file),
     );
-    if (src) {
-      path = src.path;
-      line = src.line;
-    }
+    const path = src?.path;
+    const line = src?.line;
 
     return {
       path,
@@ -124,12 +125,11 @@ export class MochaJsonParser implements TestParser {
   }
 
   private getRelativePath(path: string): string {
-    path = normalizeFilePath(path);
-    const workDir = this.getWorkDir(path);
-    if (workDir !== undefined && path.startsWith(workDir)) {
-      path = path.slice(workDir.length);
-    }
-    return path;
+    const normalized = normalizeFilePath(path);
+    const workDir = this.getWorkDir(normalized);
+    return workDir !== undefined && normalized.startsWith(workDir)
+      ? normalized.slice(workDir.length)
+      : normalized;
   }
 
   private getWorkDir(path: string): string | undefined {

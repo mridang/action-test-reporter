@@ -1,4 +1,4 @@
-const LEADING_NON_WHITESPACE = /^\S*/;
+const LEADING_NON_WHITESPACE = /^\S*/u;
 /**
  * @file Parses Java stack trace lines into their class, method and location parts.
  */
@@ -11,7 +11,7 @@ interface StackTraceElement {
   lineStr: string;
 }
 
-const re = /^\s*at (.*)\(([^(]*):(\d+)\)$/;
+const re = /^\s*at (.*)\(([^(]*):(\d+)\)$/u;
 
 /**
  * Splits the text between the word at and the location into the optional class loader and module prefix and the
@@ -51,9 +51,11 @@ export function parseStackTraceElement(
     const [, beforeLocation, fileName, lineString] = match;
     const [maybeClassLoaderAndModuleNameAndVersion, tracePath] =
       splitClassLoaderPrefix(beforeLocation);
-    const { loader, moduleNameAndVersion } = parseClassLoaderAndModule(
-      maybeClassLoaderAndModuleNameAndVersion,
-    );
+    const loaderAndModule = maybeClassLoaderAndModuleNameAndVersion
+      ? maybeClassLoaderAndModuleNameAndVersion.split('/')
+      : [];
+    const loader = loaderAndModule[0] as string | undefined;
+    const moduleNameAndVersion = loaderAndModule[1] || undefined;
     return {
       loader,
       moduleNameAndVersion,
@@ -63,26 +65,4 @@ export function parseStackTraceElement(
     };
   }
   return undefined;
-}
-
-/**
- * Splits the class loader and the module name and version from a stack trace element.
- * @param maybeClassLoaderAndModuleNameAndVersion - The text before the trace path, which may be empty.
- * @returns The class loader and module with its version, each undefined when absent.
- * @example
- * const { loader, moduleNameAndVersion } = parseClassLoaderAndModule('app/module@1.0');
- */
-function parseClassLoaderAndModule(
-  maybeClassLoaderAndModuleNameAndVersion?: string,
-): {
-  loader?: string;
-  moduleNameAndVersion?: string;
-} {
-  if (maybeClassLoaderAndModuleNameAndVersion) {
-    const res = maybeClassLoaderAndModuleNameAndVersion.split('/');
-    const loader = res[0];
-    const moduleNameAndVersion = res[1] || undefined;
-    return { loader, moduleNameAndVersion };
-  }
-  return {};
 }

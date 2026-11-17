@@ -5,9 +5,9 @@
 import type {
   CoverageParser,
   CoverageData,
+  CoverageMetrics,
   FileCoverageDetails,
 } from '../coverage-parser.js';
-import type { LcovFileBuilder } from './lcov-types.js';
 
 /**
  * A parser for LCOV string-based coverage reports.
@@ -34,21 +34,6 @@ export class LcovParser implements CoverageParser {
   }
 
   /**
-   * Creates a new, empty builder object for a file record.
-   * @memberof LcovParser
-   * @returns An empty builder object.
-   * @private
-   */
-  private createNewBuilder(): LcovFileBuilder {
-    return {
-      file: '',
-      functions: { total: 0, covered: 0 },
-      branches: { total: 0, covered: 0 },
-      lines: { total: 0, covered: 0, details: new Map() },
-    };
-  }
-
-  /**
    * Parses a single "record" block from an LCOV file.
    * @memberof LcovParser
    * @param record - A block of LCOV data for a single file.
@@ -61,89 +46,42 @@ export class LcovParser implements CoverageParser {
       return null;
     }
 
-    const builder = this.createNewBuilder();
-
-    for (const line of record.split('\n')) {
+    const entries = record.split('\n').flatMap((line): [string, string][] => {
       const [type, value] = line.split(':') as [string, string | undefined];
-      if (type && value) {
-        this.processLine(type.toUpperCase(), value, builder);
-      }
-    }
+      return type && value ? [[type.toUpperCase(), value]] : [];
+    });
+    const lastValue = (type: string): string | undefined =>
+      entries.findLast(([entryType]) => entryType === type)?.[1];
+    const lastNumber = (type: string): number => Number(lastValue(type) ?? 0);
 
-    if (!builder.file) {
+    const file = lastValue('SF');
+    if (!file) {
       return null;
     }
 
-    builder.lines.total = builder.lines.total || builder.lines.details.size;
-
-    const uncoveredLines = [...builder.lines.details.entries()]
-      .filter(([, hits]) => hits === 0)
-      .map(([lineNumber]) => lineNumber);
+    const lineHits = new Map<number, number>(
+      entries
+        .filter(([type]) => type === 'DA')
+        .map(([, value]): [number, number] => {
+          const [line, hit] = value.split(',');
+          return [Number(line), Number(hit)];
+        }),
+    );
+    const lines: CoverageMetrics = {
+      total: lastNumber('LF') || lineHits.size,
+      covered: lastNumber('LH'),
+    };
 
     return {
-      file: builder.file,
-      lines: {
-        total: builder.lines.total,
-        covered: builder.lines.covered,
-      },
-      methods: builder.functions,
-      branches: builder.branches,
-      statements: {
-        total: builder.lines.total,
-        covered: builder.lines.covered,
-      },
-      uncoveredLines,
+      file,
+      lines,
+      methods: { total: lastNumber('FNF'), covered: lastNumber('FNH') },
+      branches: { total: lastNumber('BRF'), covered: lastNumber('BRH') },
+      statements: { ...lines },
+      uncoveredLines: [...lineHits.entries()].flatMap(([lineNumber, hits]) =>
+        hits === 0 ? [lineNumber] : [],
+      ),
     };
-  }
-
-  /**
-   * Processes a single line of an LCOV record and updates the builder.
-   * @memberof LcovParser
-   * @param type - The LCOV data type (e.g., 'SF', 'DA').
-   * @param value - The value associated with the type.
-   * @param builder - The file builder to populate.
-   * @private
-   */
-  private processLine(
-    type: string,
-    value: string,
-    builder: LcovFileBuilder,
-  ): void {
-    switch (type) {
-      case 'SF': {
-        builder.file = value;
-        break;
-      }
-      case 'DA': {
-        const [line, hit] = value.split(',');
-        builder.lines.details.set(Number(line), Number(hit));
-        break;
-      }
-      case 'LF': {
-        builder.lines.total = Number(value);
-        break;
-      }
-      case 'LH': {
-        builder.lines.covered = Number(value);
-        break;
-      }
-      case 'FNF': {
-        builder.functions.total = Number(value);
-        break;
-      }
-      case 'FNH': {
-        builder.functions.covered = Number(value);
-        break;
-      }
-      case 'BRF': {
-        builder.branches.total = Number(value);
-        break;
-      }
-      case 'BRH': {
-        builder.branches.covered = Number(value);
-        break;
-      }
-    }
   }
 
   /**
@@ -156,24 +94,17 @@ export class LcovParser implements CoverageParser {
   private aggregateOverallCoverage(
     details: FileCoverageDetails[],
   ): CoverageData['overall'] {
-    return details.reduce(
-      (acc, detail) => {
-        acc.lines.total += detail.lines.total;
-        acc.lines.covered += detail.lines.covered;
-        acc.statements.total += detail.statements.total;
-        acc.statements.covered += detail.statements.covered;
-        acc.methods.total += detail.methods.total;
-        acc.methods.covered += detail.methods.covered;
-        acc.branches.total += detail.branches.total;
-        acc.branches.covered += detail.branches.covered;
-        return acc;
-      },
-      {
-        lines: { total: 0, covered: 0 },
-        statements: { total: 0, covered: 0 },
-        methods: { total: 0, covered: 0 },
-        branches: { total: 0, covered: 0 },
-      },
-    );
+    const sum = (
+      pick: (detail: FileCoverageDetails) => CoverageMetrics,
+    ): CoverageMetrics => ({
+      total: details.reduce((total, d) => total + pick(d).total, 0),
+      covered: details.reduce((total, d) => total + pick(d).covered, 0),
+    });
+    return {
+      lines: sum((d) => d.lines),
+      statements: sum((d) => d.statements),
+      methods: sum((d) => d.methods),
+      branches: sum((d) => d.branches),
+    };
   }
 }

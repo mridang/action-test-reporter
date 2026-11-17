@@ -36,22 +36,6 @@ export class CoberturaParser extends BaseParser<CoberturaXml> {
    */
   protected async process(xml: CoberturaXml): Promise<CoverageData> {
     const coverage = xml.coverage;
-    const overall: CoverageData['overall'] = {
-      lines: {
-        total: Number(coverage.$['lines-valid'] ?? 0),
-        covered: Number(coverage.$['lines-covered'] ?? 0),
-      },
-      branches: {
-        total: Number(coverage.$['branches-valid'] ?? 0),
-        covered: Number(coverage.$['branches-covered'] ?? 0),
-      },
-      methods: { total: 0, covered: 0 },
-      statements: {
-        total: Number(coverage.$['lines-valid'] ?? 0),
-        covered: Number(coverage.$['lines-covered'] ?? 0),
-      },
-    };
-
     const sourceDir = coverage.sources[0].source[0];
     const details: FileCoverageDetails[] = this.classesFromPackages(
       coverage.packages,
@@ -59,9 +43,6 @@ export class CoberturaParser extends BaseParser<CoberturaXml> {
       const lines = this.getLineCoverage(c);
       const methods = this.getFunctionCoverage(c);
       const branches = this.getBranchCoverage(c);
-
-      overall.methods.total += methods.total;
-      overall.methods.covered += methods.covered;
 
       return {
         file: path.join(sourceDir, c.$.filename),
@@ -75,6 +56,25 @@ export class CoberturaParser extends BaseParser<CoberturaXml> {
             .map((l: CoberturaLine) => Number(l.$.number)) || [],
       };
     });
+
+    const overall: CoverageData['overall'] = {
+      lines: {
+        total: Number(coverage.$['lines-valid'] ?? 0),
+        covered: Number(coverage.$['lines-covered'] ?? 0),
+      },
+      branches: {
+        total: Number(coverage.$['branches-valid'] ?? 0),
+        covered: Number(coverage.$['branches-covered'] ?? 0),
+      },
+      methods: {
+        total: details.reduce((sum, d) => sum + d.methods.total, 0),
+        covered: details.reduce((sum, d) => sum + d.methods.covered, 0),
+      },
+      statements: {
+        total: Number(coverage.$['lines-valid'] ?? 0),
+        covered: Number(coverage.$['lines-covered'] ?? 0),
+      },
+    };
 
     return { overall, details };
   }
@@ -152,10 +152,12 @@ export class CoberturaParser extends BaseParser<CoberturaXml> {
 
     return branchLines.reduce(
       (acc: CoverageMetrics, l: CoberturaLine) => {
-        const stats = l.$['condition-coverage']?.match(/\d+/g);
+        const stats = l.$['condition-coverage']?.match(/\d+/gu);
         if (stats && stats.length >= 2) {
-          acc.covered += Number(stats[1]);
-          acc.total += Number(stats[2]);
+          return {
+            covered: acc.covered + Number(stats[1]),
+            total: acc.total + Number(stats[2]),
+          };
         }
         return acc;
       },

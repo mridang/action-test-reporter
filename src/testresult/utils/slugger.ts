@@ -13,15 +13,12 @@ import type { ReportOptions } from '../formatter/summary-formatter.js';
  * @example
  * const { id, link } = slug('My Suite', DEFAULT_OPTIONS);
  */
-export function slug(
-  name: string,
-  options: ReportOptions,
-): { id: string; link: string } {
+export function slug(name: string, options: ReportOptions) {
   const slugId = name
     .trim()
     .replaceAll('_', '')
-    .replaceAll(/[./\\]/g, '-')
-    .replaceAll(/[^\w-]/g, '');
+    .replaceAll(/[./\\]/gu, '-')
+    .replaceAll(/[^\w-]/gu, '');
 
   const id = `user-content-${slugId}`;
   const link = options.useActionsSummary ? `#${id}` : `#${slugId}`;

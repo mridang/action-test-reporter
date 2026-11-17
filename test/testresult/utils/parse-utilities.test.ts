@@ -5,7 +5,7 @@
 import { describe, expect, test } from '@jest/globals';
 import { parseNetDuration } from '../../../src/testresult/utils/parse-utilities.js';
 
-const INVALID_FORMAT_MESSAGE = /^Invalid format/;
+const INVALID_FORMAT_MESSAGE = /^Invalid format/u;
 
 describe('parseNetDuration', () => {
   test('returns 0 for 00:00:00', () => {

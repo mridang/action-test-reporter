@@ -5,12 +5,12 @@
 import { readFile } from 'node:fs/promises';
 // eslint-disable-next-line e18e/ban-dependencies -- tinyglobby is not a drop-in replacement for fast-glob, so the swap is deferred to keep file matching identical
 import glob from 'fast-glob';
+import { listFiles } from '../utils/git.js';
 import type {
   FileContent,
   InputProvider,
   ReportInput,
 } from './input-provider.js';
-import { listFiles } from '../utils/git.js';
 
 export class LocalFileProvider implements InputProvider {
   constructor(
@@ -19,16 +19,19 @@ export class LocalFileProvider implements InputProvider {
   ) {}
 
   async load(): Promise<ReportInput> {
-    const result: FileContent[] = [];
-    for (const pat of this.pattern) {
-      const paths = await glob(pat, { dot: true });
-      for (const file of paths) {
-        const content = await readFile(file, { encoding: 'utf8' });
-        result.push({ file, content });
-      }
-    }
+    const perPattern = await Promise.all(
+      this.pattern.map(async (pat) => {
+        const paths = await glob(pat, { dot: true });
+        return Promise.all(
+          paths.map(async (file): Promise<FileContent> => ({
+            file,
+            content: await readFile(file, { encoding: 'utf8' }),
+          })),
+        );
+      }),
+    );
 
-    return { [this.name]: result };
+    return { [this.name]: perPattern.flat() };
   }
 
   async listTrackedFiles(): Promise<string[]> {

@@ -2,8 +2,7 @@
  * @file Detects the coverage format of a report and dispatches it to the matching parser.
  */
 
-import { promises as fs } from 'node:fs';
-import type { CoverageData, CoverageParser } from './coverage-parser.js';
+import { promises } from 'node:fs';
 import { CloverParser } from './clover/clover-parser.js';
 import { CoberturaParser } from './cobertura/cobertura-parser.js';
 import { GcovParser } from './gcov/gcov-parser.js';
@@ -11,6 +10,7 @@ import { GocoverParser } from './gocover/gocover-parser.js';
 import { JacocoParser } from './jacoco/jacoco-parser.js';
 import { LlvmCovParser } from './llvm-cov/llvm-cov-parser.js';
 import { LcovParser } from './lcov/lcov-parser.js';
+import type { CoverageData, CoverageParser } from './coverage-parser.js';
 
 /**
  * An array of all available parser instances to be tried in order.
@@ -39,6 +39,7 @@ type DetectedCoverage = { parser: CoverageParser; data: CoverageData };
 export async function detectCoverage(
   content: string,
 ): Promise<DetectedCoverage> {
+  // eslint-disable-next-line functional/no-loop-statements -- the parsers are tried in order and the first one that understands the report wins
   for (const parser of availableParsers) {
     try {
       const data = await parser.parse(content);
@@ -63,7 +64,7 @@ export async function detectCoverage(
 export async function parseCoverageFile(
   filePath: string,
 ): Promise<DetectedCoverage> {
-  const content = await fs.readFile(filePath, 'utf8');
+  const content = await promises.readFile(filePath, 'utf8');
 
   return detectCoverage(content);
 }

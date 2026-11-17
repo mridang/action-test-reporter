@@ -41,23 +41,26 @@ export async function runCoverage(
 
   const summaryFormatter = new SummaryFormatter();
   const consoleFormatter = new ConsoleFormatter();
-  const summaries: string[] = [];
-  const consoleOutputs: string[] = [];
 
-  for (const file of files) {
-    const { data } = await detectCoverage(file.content);
+  const formatted = await Promise.all(
+    files.map(async (file) => {
+      const { data } = await detectCoverage(file.content);
 
-    const consoleOutput = consoleFormatter.format(data, {
-      rootDir: options.rootDir,
-    });
-    consoleOutputs.push(consoleOutput);
-    const summary = summaryFormatter.format(data, {
-      repoUrl: options.repoUrl ?? '',
-      sha: options.sha ?? '',
-      rootDir: options.rootDir,
-    });
-    summaries.push(summary);
-  }
+      return {
+        consoleOutput: consoleFormatter.format(data, {
+          rootDir: options.rootDir,
+        }),
+        summary: summaryFormatter.format(data, {
+          repoUrl: options.repoUrl ?? '',
+          sha: options.sha ?? '',
+          rootDir: options.rootDir,
+        }),
+      };
+    }),
+  );
 
-  return { summaries, consoleOutputs };
+  return {
+    summaries: formatted.map((entry) => entry.summary),
+    consoleOutputs: formatted.map((entry) => entry.consoleOutput),
+  };
 }

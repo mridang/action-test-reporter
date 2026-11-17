@@ -2,23 +2,23 @@
  * @file Parses JUnit XML test results produced by Jest.
  */
 
-import type { ParseOptions, TestParser } from '../../test-parser.js';
 import { parseStringPromise } from 'xml2js';
 
-import type { JunitReport, TestCase, TestSuite } from './jest-junit-types.js';
 import { getExceptionSource } from '../../utils/node-utilities.js';
 import { getBasePath, normalizeFilePath } from '../../utils/path-utilities.js';
 
-import type { TestCaseError, TestExecutionResult } from '../../test-results.js';
 import {
   TestCaseResult,
   TestGroupResult,
   TestRunResult,
   TestSuiteResult,
 } from '../../test-results.js';
+import type { TestCaseError, TestExecutionResult } from '../../test-results.js';
+import type { JunitReport, TestCase, TestSuite } from './jest-junit-types.js';
+import type { ParseOptions, TestParser } from '../../test-parser.js';
 
-const JEST_SUITE_NAME_PATTERN = /jest|__tests__|\.test|\.spec/i;
-const JEST_CLASS_NAME_PATTERN = /›|__tests__|\.test|\.spec|\/|\\/i;
+const JEST_SUITE_NAME_PATTERN = /jest|__tests__|\.test|\.spec/iu;
+const JEST_CLASS_NAME_PATTERN = /›|__tests__|\.test|\.spec|\/|\\/iu;
 
 /**
  * Parser for JUnit XML reports emitted by Jest with the jest-junit reporter.
@@ -45,7 +45,9 @@ export class JestJunitParser implements TestParser {
     try {
       return (await parseStringPromise(content)) as JunitReport;
     } catch (error) {
-      throw new Error(`Invalid XML at ${path}\n\n${String(error)}`);
+      throw new Error(`Invalid XML at ${path}\n\n${String(error)}`, {
+        cause: error,
+      });
     }
   }
 
@@ -66,30 +68,19 @@ export class JestJunitParser implements TestParser {
 
   private isProbablyJestReport(junit: JunitReport): boolean {
     const suites = junit.testsuites.testsuite ?? [];
-    const queue = [...suites];
-    const suiteNames: string[] = [];
-    const testcaseClassNames: string[] = [];
-    let hasNestedSuites = false;
-
-    while (queue.length > 0) {
-      const suite = queue.shift();
-      if (!suite) break;
-      if (suite.$?.name) {
-        suiteNames.push(suite.$.name);
-      }
-      if (suite.testsuite && suite.testsuite.length > 0) {
-        hasNestedSuites = true;
-        queue.push(...suite.testsuite);
-      }
-      if (suite.testcase) {
-        const names = suite.testcase.map(
-          (tc) => tc.$?.classname as string | undefined,
-        );
-        testcaseClassNames.push(
-          ...names.filter((name): name is string => name !== undefined),
-        );
-      }
-    }
+    const flatten = (nested: TestSuite[]): TestSuite[] =>
+      nested.flatMap((suite) => [suite, ...flatten(suite.testsuite ?? [])]);
+    const allSuites = flatten(suites);
+    const suiteNames = allSuites.flatMap((suite) =>
+      suite.$?.name ? [suite.$.name] : [],
+    );
+    const testcaseClassNames = allSuites
+      .flatMap((suite) => suite.testcase ?? [])
+      .map((tc) => tc.$?.classname as string | undefined)
+      .filter((name): name is string => name !== undefined);
+    const hasNestedSuites = allSuites.some(
+      (suite) => suite.testsuite && suite.testsuite.length > 0,
+    );
 
     if (hasNestedSuites) {
       return false;
@@ -113,31 +104,31 @@ export class JestJunitParser implements TestParser {
       return [];
     }
 
-    const groups: { describe: string; tests: TestCase[] }[] = [];
-    for (const tc of suite.testcase) {
-      let grp = groups.find((g) => g.describe === tc.$.classname);
-      if (grp === undefined) {
-        grp = { describe: tc.$.classname, tests: [] };
-        groups.push(grp);
-      }
-      grp.tests.push(tc);
-    }
-
-    return groups.map((grp) => {
-      const tests = grp.tests.map((tc) => {
-        const name = tc.$.name.trim();
-        const result = this.getTestCaseResult(tc);
-        const time = Number.parseFloat(tc.$.time) * 1000;
-        const error = this.getTestCaseError(tc);
-        return new TestCaseResult(name, result, time, error);
-      });
-      return new TestGroupResult(grp.describe, tests);
-    });
+    const testcases = suite.testcase;
+    return Array.from(
+      new Set(testcases.map((tc) => tc.$.classname)),
+      (describe) => {
+        const tests = testcases
+          .filter((tc) => tc.$.classname === describe)
+          .map((tc) => {
+            const name = tc.$.name.trim();
+            const result = this.getTestCaseResult(tc);
+            const time = Number.parseFloat(tc.$.time) * 1000;
+            const error = this.getTestCaseError(tc);
+            return new TestCaseResult(name, result, time, error);
+          });
+        return new TestGroupResult(describe, tests);
+      },
+    );
   }
 
   private getTestCaseResult(test: TestCase): TestExecutionResult {
-    if (test.failure) return 'failed';
-    if (test.skipped) return 'skipped';
+    if (test.failure) {
+      return 'failed';
+    }
+    if (test.skipped) {
+      return 'skipped';
+    }
     return 'success';
   }
 
@@ -148,16 +139,11 @@ export class JestJunitParser implements TestParser {
 
     const details =
       typeof tc.failure[0] === 'string' ? tc.failure[0] : tc.failure[0]._;
-    let path;
-    let line;
-
     const src = getExceptionSource(details, this.options.trackedFiles, (file) =>
       this.getRelativePath(file),
     );
-    if (src) {
-      path = src.path;
-      line = src.line;
-    }
+    const path = src?.path;
+    const line = src?.line;
 
     return {
       path,
@@ -167,12 +153,11 @@ export class JestJunitParser implements TestParser {
   }
 
   private getRelativePath(path: string): string {
-    path = normalizeFilePath(path);
-    const workDir = this.getWorkDir(path);
-    if (workDir !== undefined && path.startsWith(workDir)) {
-      path = path.slice(workDir.length);
-    }
-    return path;
+    const normalized = normalizeFilePath(path);
+    const workDir = this.getWorkDir(normalized);
+    return workDir !== undefined && normalized.startsWith(workDir)
+      ? normalized.slice(workDir.length)
+      : normalized;
   }
 
   private getWorkDir(path: string): string | undefined {
@@ -184,6 +169,6 @@ export class JestJunitParser implements TestParser {
   }
 
   private escapeCharacters(s: string): string {
-    return s.replaceAll(/([<>])/g, String.raw`\$1`);
+    return s.replaceAll(/([<>])/gu, String.raw`\$1`);
   }
 }
